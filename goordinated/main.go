@@ -18,6 +18,7 @@ import "strings"
 
 import "github.com/dmaze/goordinate/backend"
 import "github.com/dmaze/goordinate/cborrpc"
+import "github.com/dmaze/goordinate/coordinate"
 import "github.com/dmaze/goordinate/jobserver"
 import "github.com/ugorji/go/codec"
 
@@ -151,6 +152,17 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 		msg := returns[len(returns) - 1].String()
 		if msg == "" {
 			returns[len(returns) - 1] = reflect.ValueOf(nil)
+		}
+
+		// If we got back a NoSuchWorkSpec error, report that
+		// as a string (most RPC calls that take a work spec
+		// parameter can produce this and return it as a string
+		// error, not an exception)
+		if err != nil {
+			if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+				err = nil
+				returns[len(returns) - 1] = reflect.ValueOf(nsws.Error())
+			}
 		}
 	}
 

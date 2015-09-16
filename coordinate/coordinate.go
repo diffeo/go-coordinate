@@ -52,8 +52,8 @@ type Namespace interface {
 	SetWorkSpec(workSpec map[string]interface{}) (WorkSpec, error)
 
 	// WorkSpec retrieves a work spec by its name.  If no work
-	// spec exists with that name, GetWorkSpec will return a nil
-	// WorkSpec and a nil error.
+	// spec exists with that name, returns an instance of
+	// ErrNoSuchWorkSpec as an error.
 	WorkSpec(name string) (WorkSpec, error)
 
 	// DestroyWorkSpec irretreviably destroys a work spec, all

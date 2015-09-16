@@ -60,10 +60,9 @@ func (ns *memNamespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
-	// Remember: missing work spec is not an error, just return nil
-	workSpec := ns.workSpecs[name]
-	if workSpec == nil {
-		return nil, nil
+	workSpec, present := ns.workSpecs[name]
+	if !present {
+		return nil, coordinate.ErrNoSuchWorkSpec{Name: name}
 	}
 	return workSpec, nil
 }

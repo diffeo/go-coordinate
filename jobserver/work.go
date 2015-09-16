@@ -172,9 +172,6 @@ func (jobs *JobServer) UpdateWorkUnit(
 		workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
 	}
 	if err == nil {
-		if workSpec == nil {
-			return false, fmt.Sprintf("no such work_spec %v", workSpecName), nil
-		}
 		workUnit, err = workSpec.WorkUnit(workUnitKey)
 	}
 	if err == nil {

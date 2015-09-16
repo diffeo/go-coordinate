@@ -1,7 +1,6 @@
 package jobserver
 
 import "errors"
-import "fmt"
 import "github.com/dmaze/goordinate/cborrpc"
 import "github.com/dmaze/goordinate/coordinate"
 import "github.com/mitchellh/mapstructure"
@@ -104,18 +103,13 @@ func (jobs *JobServer) Clear() (count int, err error) {
 
 // GetWorkSpec retrieves the definition of a work spec.  If the named
 // work spec does not exist, returns nil (not an error).
-func (jobs *JobServer) GetWorkSpec(workSpecName string) (map[string]interface{}, error) {
-	spec, err := jobs.Namespace.WorkSpec(workSpecName)
-	if err != nil {
-		return nil, err
-	} else if spec == nil {
-		return nil, nil
+func (jobs *JobServer) GetWorkSpec(workSpecName string) (data map[string]interface{}, err error) {
+	var spec coordinate.WorkSpec
+	spec, err = jobs.Namespace.WorkSpec(workSpecName)
+	if err == nil {
+		data, err = spec.Data()
 	}
-	data, err := spec.Data()
-	if err != nil {
-		return nil, err
-	}
-	return data, nil
+	return
 }
 
 type addWorkUnitItem struct {
@@ -133,8 +127,6 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 	spec, err := jobs.Namespace.WorkSpec(workSpecName)
 	if err != nil {
 		return false, "", err
-	} else if spec == nil {
-		return false, fmt.Sprintf("no such work_spec %v", workSpecName), nil
 	}
 
 	// Unmarshal the work unit list into a []addWorkUnitItem This
@@ -248,18 +240,14 @@ type GetWorkUnitsOptions struct {
 // data dictionary.
 func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]interface{}) ([]interface{}, string, error) {
 	var workUnits map[string]coordinate.WorkUnit
-
-	spec, err := jobs.Namespace.WorkSpec(workSpecName)
-	if err != nil {
-		return nil, "", err
-	} else if spec == nil {
-		return nil, fmt.Sprintf("no such work_spec %v", workSpecName), nil
-	}
-
 	gwuOptions := GetWorkUnitsOptions{
 		Limit: 1000,
 	}
-	err = decode(&gwuOptions, options)
+
+	spec, err := jobs.Namespace.WorkSpec(workSpecName)
+	if err == nil {
+		err = decode(&gwuOptions, options)
+	}
 	if err == nil && gwuOptions.WorkUnitKeys != nil {
 		// Fetch these specific keys, ignore all other options
 		workUnits, err = spec.WorkUnits(gwuOptions.WorkUnitKeys)
@@ -304,8 +292,6 @@ func (jobs *JobServer) GetWorkUnitStatus(workSpecName string, workUnitKeys []str
 	spec, err := jobs.Namespace.WorkSpec(workSpecName)
 	if err != nil {
 		return nil, "", err
-	} else if spec == nil {
-		return nil, fmt.Sprintf("no such work_spec %v", workSpecName), nil
 	}
 
 	result := make([]map[string]interface{}, len(workUnitKeys))
@@ -353,8 +339,6 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
 	if err != nil {
 		return nil, "", err
-	} else if workSpec == nil {
-		return nil, fmt.Sprintf("no such work_spec %v", workSpecName), nil
 	}
 
 	// TODO(dmaze): This is a bad way to do this; it should be
@@ -465,23 +449,25 @@ type ControlWorkSpecOptions struct {
 // be paused or to stop generating new continuous jobs.
 // ControlWorkSpecOptions has a complete listing of what can be done.
 func (jobs *JobServer) ControlWorkSpec(workSpecName string, options map[string]interface{}) (bool, string, error) {
-	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
-	if err != nil {
-		return false, "", err
-	} else if workSpec == nil {
-		return false, fmt.Sprintf("no such work_spec %v", workSpecName), nil
-	}
+	var (
+		cwsOptions ControlWorkSpecOptions
+		decoder    *mapstructure.Decoder
+		err        error
+		metadata   mapstructure.Metadata
+		workSpec   coordinate.WorkSpec
+		wsMeta     coordinate.WorkSpecMeta
+	)
 
-	// We care a lot about "false" vs. not present for these things.
-	// Manually create the decoder.
-	var cwsOptions ControlWorkSpecOptions
-	var metadata mapstructure.Metadata
-	var wsMeta coordinate.WorkSpecMeta
-	config := mapstructure.DecoderConfig{
-		Result: &cwsOptions,
-		Metadata: &metadata,
+	workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
+	if err == nil {
+		// We care a lot about "false" vs. not present for
+		// these things.  Manually create the decoder.
+		config := mapstructure.DecoderConfig{
+			Result:   &cwsOptions,
+			Metadata: &metadata,
+		}
+		decoder, err = mapstructure.NewDecoder(&config)
 	}
-	decoder, err := mapstructure.NewDecoder(&config)
 	if err == nil {
 		err = decoder.Decode(options)
 	}
@@ -493,7 +479,7 @@ func (jobs *JobServer) ControlWorkSpec(workSpecName string, options map[string]i
 	}
 	if err == nil {
 		for _, key := range metadata.Keys {
-			switch(key) {
+			switch key {
 			case "Continuous":
 				wsMeta.Continuous = cwsOptions.Continuous
 			case "Status":
@@ -516,28 +502,27 @@ func (jobs *JobServer) ControlWorkSpec(workSpecName string, options map[string]i
 // GetWorkSpecMeta returns a set of control options for a given work
 // spec.  The returned map has the full set of keys that
 // ControlWorkSpec() will accept.
-func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (map[string]interface{}, string, error) {
-	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
-	if err != nil {
-		return nil, "", err
-	} else if workSpec == nil {
-		return nil, fmt.Sprintf("no such work_spec %v", workSpecName), nil
+func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (result map[string]interface{}, _ string, err error) {
+	var (
+		workSpec coordinate.WorkSpec
+		meta coordinate.WorkSpecMeta
+	)
+	
+	workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
+	if err == nil {
+		meta, err = workSpec.Meta(false)
 	}
-
-	meta, err := workSpec.Meta(false)
-	if err != nil {
-		return nil, "", err
+	if err == nil {
+		result = make(map[string]interface{})
+		if meta.Paused {
+			result["status"] = Paused
+		} else {
+			result["status"] = Runnable
+		}
+		result["continuous"] = meta.Continuous
+		result["interval"] = meta.Interval.Seconds()
+		result["max_running"] = meta.MaxRunning
+		result["weight"] = meta.Weight
 	}
-
-	result := make(map[string]interface{})
-	if meta.Paused {
-		result["status"] = Paused
-	} else {
-		result["status"] = Runnable
-	}
-	result["continuous"] = meta.Continuous
-	result["interval"] = meta.Interval.Seconds()
-	result["max_running"] = meta.MaxRunning
-	result["weight"] = meta.Weight
-	return result, "", nil
+	return
 }
