@@ -56,6 +56,15 @@ type Namespace interface {
 	// WorkSpec and a nil error.
 	WorkSpec(name string) (WorkSpec, error)
 
+	// DestroyWorkSpec irretreviably destroys a work spec, all
+	// work units associated with it, and all attempts to perform
+	// those work units.  If workers are currently working on any
+	// of these work units, the attempts will also be removed from
+	// their active lists, and calls to complete or update those
+	// attempts will result in errors.  If the named work spec
+	// does not exist, returns an instance of ErrNoSuchWorkSpec.
+	DestroyWorkSpec(name string) error
+
 	// WorkSpecNames returns the names of all of the work specs in
 	// this namespace.  This may be an empty slice if there are no
 	// work specs.  Unless one of the work specs is destroyed,
@@ -68,6 +77,112 @@ type Namespace interface {
 	// client-provided name.  If no Worker exists yet with the
 	// requested name, returns a new one with no parent.
 	Worker(name string) (Worker, error)
+}
+
+// WorkSpecMeta defines control data for a work spec.  This information
+// is used to influence the work spec scheduler.
+type WorkSpecMeta struct {
+	// Priority specifies the absolute priority of this work spec:
+	// if this work spec has higher priority than another then this
+	// work spec will always run before that other one.  Default
+	// priority is the "priority" field in the work spec data, or 0.
+	Priority int
+	
+	// Weight specifies the relative weight of this work spec: if
+	// this work spec's priority is twice another one's, then the
+	// scheduler will try to arrange for twice as many work units
+	// of this work spec to be pending as the other.  Default
+	// weight is the "weight" field in the work spec data, or 20
+	// minus the "nice" field in the work spec data, or else 1.
+	Weight int
+
+	// Paused indicates whether this work unit can generate more
+	// work units.  Default is the value of the work spec
+	// "disabled" flag, if set, otherwise false.
+	Paused bool
+
+	// Continuous indicates whether the system can generate new
+	// artificial work units for this work spec if there is no
+	// other work to do.  If the work spec data does not set the
+	// "continuous" flag to true, setting this field has no effect.
+	// Defaults to the value of CanBeContinuous.
+	Continuous bool
+
+	// CanBeContinuous indicates whether the work spec allows
+	// continuous work unit generation.  This is directly set from
+	// the "continuous" flag in the work spec data, and
+	// WorkSpec.SetMeta() will not change this.
+	CanBeContinuous bool
+
+	// Interval specifies the minimum time duration before
+	// generating another continuous work unit.  Setting this in
+	// isolation will affect the second continuous work unit
+	// generated; the next one will be not before NextContinuous.
+	// Defaults to the value of the "interval" field in the data
+	// in seconds, or 0 (i.e., generate more continuous work units
+	// immediately) if absent.
+	Interval time.Duration
+
+	// NextContinuous specifies the earliest time a new continuous
+	// work unit could be generated.  This is updated every time
+	// a new continuous work unit is produced.  Defaults to a zero
+	// time, which should always mean continuous work units could be
+	// immediately generated on startup.
+	NextContinuous time.Time
+
+	// MaxRunning specifies the maximum number of concurrent work
+	// units of this work spec that are allowed to execute across
+	// the entire system.  If MaxRunning is greater than or equal
+	// to PendingCount, no new work units will be allowed.
+	// Defaults to the value of the "max_running" field in the
+	// work spec data, or 0.  A zero value is interpreted as
+	// "unlimited".
+	MaxRunning int
+
+	// MaxAttemptsReturned specifies the maximum number of
+	// attempts that can be produced by Worker.RequestAttempts().
+	// In any case, that function will never return more than
+	// MaxRunning work units.  Defaults to the value of the
+	// "max_getwork" field in the work spec data, or 0.  A zero
+	// value is interpreted as "unlimited".
+	MaxAttemptsReturned int
+
+	// NextWorkSpecName gives the name of a work spec that runs
+	// after this one.  If this is a non-empty string, then when
+	// an attempt completes successfully, if the updated work unit
+	// data contains a key "outputs", creates work units in this
+	// work spec.  WorkSpec.SetMeta() ignores this field.
+	// Defaults to the value of the "then" field in the work spec
+	// data, or empty string.
+	NextWorkSpecName string
+
+	// NextWorkSpecPreempts specifies whether the scheduler should
+	// give NextWorkSpecName priority over this one.  If this is
+	// true and the work spec in NextWorkSpecName has at least one
+	// work unit then this work spec is ignored.  The net effect
+	// of this is to set up a pipeline of work units where the job
+	// scheduler will prioritize getting work all the way through
+	// the pipeline over starting new work at the front of the
+	// pipeline.
+	//
+	// A similar effect can be obtained with the Priority and
+	// Weight settings: if downstream stages have higher weight
+	// then the scheduler will prioritize those downstream work
+	// specs without actually starving out the earlier ones.
+	// Future versions of the scheduler may ignore this flag.
+	//
+	// WorkSpec.SetMeta() ignores this field.  Defaults to the
+	// value of the "then_preempts" flag in the work spec data, or
+	// true.
+	NextWorkSpecPreempts bool
+	
+	// PendingCount indicates the number of work units in this
+	// work spec that are currently have an active attempt that is
+	// in "pending" state, meaning there is a worker performing
+	// this work unit.  WorkSpec.Meta() only returns this field
+	// if its "withCounts" parameter is true.  WorkSpec.SetMeta()
+	// ignores this field.
+	PendingCount int
 }
 
 // A WorkSpec defines a collection of related jobs.  For instance, a
@@ -83,6 +198,34 @@ type WorkSpec interface {
 	// Data returns the definition of this work spec.
 	Data() (map[string]interface{}, error)
 
+	// SetData changes the definition of this work spec.  It is an
+	// error to change "name".  This will also reset fields in the
+	// work spec metadata that are derived from the data
+	// dictionary: any field in WorkSpecMeta that is specified to
+	// default to a field from the data dictionary is reset to
+	// that value if present and its specified default otherwise.
+	// This in turn means every field in WorkSpecMeta will be
+	// reset, except if the NextContinuous time is set the next
+	// continuous work unit will still not be generated until that
+	// time.
+	//
+	// Returns ErrNoWorkSpecName if "name" is not in data,
+	// ErrBadWorkSpecName if it is not a string, and
+	// ErrChangedName if it is different from the existing name.
+	// Type errors in other fields (for instance, "weight" is a
+	// string) are ignored.
+	SetData(data map[string]interface{}) error
+
+	// Meta returns the WorkSpecMeta options for this work spec.
+	// If withCounts is true, the WorkSpecMeta.PendingCount field
+	// will be filled in; this may be more expensive than other
+	// operations.
+	Meta(withCounts bool) (WorkSpecMeta, error)
+
+	// SetMeta sets the WorkSpecMeta options for this work spec.
+	// The WorkSpecMeta.PendingCount field is ignored.
+	SetMeta(WorkSpecMeta) error
+	
 	// AddWorkUnit adds a single work unit to this work spec.  If
 	// a work unit already exists with the specified name, it is
 	// overridden.

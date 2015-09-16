@@ -49,7 +49,10 @@ func (ns *memNamespace) SetWorkSpec(workSpec map[string]interface{}) (coordinate
 		spec = newWorkSpec(ns, name)
 		ns.workSpecs[name] = spec
 	}
-	spec.metadata = workSpec
+	err := spec.setData(workSpec)
+	if err != nil {
+		return nil, err
+	}
 	return spec, nil
 }
 
@@ -63,6 +66,18 @@ func (ns *memNamespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 		return nil, nil
 	}
 	return workSpec, nil
+}
+
+func (ns *memNamespace) DestroyWorkSpec(name string) error {
+	globalLock(ns)
+	defer globalUnlock(ns)
+
+	_, present := ns.workSpecs[name]
+	if present {
+		delete(ns.workSpecs, name)
+		return nil
+	}
+	return coordinate.ErrNoSuchWorkSpec{Name: name}
 }
 
 func (ns *memNamespace) WorkSpecNames() ([]string, error) {

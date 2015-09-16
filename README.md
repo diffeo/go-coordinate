@@ -61,10 +61,15 @@ To run the Python tests against this daemon, edit
 `task_master` fixture, and add instead
 
 ```python
-@pytest.fixture
+@pytest.yield_fixture
 def task_master():
-  return TaskMaster({'address': '127.0.0.1:5932'})
+    tm = TaskMaster({'address': '127.0.0.1:5932'})
+    yield tm
+    tm.clear()
 ```
+
+`test_job_client.py`, `test_job_flow.py`, and `test_task_master.py`
+all use this fixture and will run against the `goordinated` server.
 
 Packages
 --------

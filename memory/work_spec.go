@@ -5,15 +5,16 @@ import "github.com/dmaze/goordinate/coordinate"
 type memWorkSpec struct {
 	name      string
 	namespace *memNamespace
-	metadata  map[string]interface{}
+	data      map[string]interface{}
+	meta      coordinate.WorkSpecMeta
 	workUnits map[string]*memWorkUnit
 }
 
 func newWorkSpec(namespace *memNamespace, name string) *memWorkSpec {
 	return &memWorkSpec{
-		name: name,
+		name:      name,
 		namespace: namespace,
-		metadata: make(map[string]interface{}),
+		data:      make(map[string]interface{}),
 		workUnits: make(map[string]*memWorkUnit),
 	}
 }
@@ -23,7 +24,54 @@ func (spec *memWorkSpec) Name() string {
 }
 
 func (spec *memWorkSpec) Data() (map[string]interface{}, error) {
-	return spec.metadata, nil
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	return spec.data, nil
+}
+
+func (spec *memWorkSpec) SetData(data map[string]interface{}) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	return spec.setData(data)
+}
+
+// setData is an internal version of SetData() with the same constraints,
+// guarantees, and checking.  It assumes the global lock.
+func (spec *memWorkSpec) setData(data map[string]interface{}) error {
+	name, meta, err := coordinate.ExtractWorkSpecMeta(data)
+	if err == nil {
+		if name != spec.name {
+			err = coordinate.ErrChangedName
+		}
+	}
+	if err == nil {
+		spec.data = data
+		spec.meta = meta
+	}
+	return err
+}
+
+func (spec *memWorkSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	// TODO(dmaze): fill in meta.PendingCount
+	return spec.meta, nil
+}
+
+func (spec *memWorkSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	// Preserve immutable fields (taking advantage of meta pass-by-value)
+	meta.CanBeContinuous = spec.meta.CanBeContinuous
+	meta.NextWorkSpecName = spec.meta.NextWorkSpecName
+	meta.NextWorkSpecPreempts = spec.meta.NextWorkSpecPreempts
+
+	spec.meta = meta
+	return nil
 }
 
 func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, priority int) (coordinate.WorkUnit, error) {

@@ -23,7 +23,7 @@ import "github.com/ugorji/go/codec"
 
 func main() {
 	bind := flag.String("bind", ":5932", "[ip]:port to listen on")
-	backend := backend.Backend{"memory", ""}
+	backend := backend.Backend{Implementation: "memory", Address: ""}
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
 	flag.Parse()
 
@@ -32,7 +32,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	jobd := &jobserver.JobServer{namespace}
+	jobd := &jobserver.JobServer{Namespace: namespace}
 
 	ln, err := net.Listen("tcp", *bind)
 	if err != nil {
@@ -104,11 +104,23 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 	method := snakeToCamel(request.Method)
 	var err error
 	var params, returns []reflect.Value
+	var returnsString, returnsError bool
 	funcv := jobdv.MethodByName(method)
 	if !funcv.IsValid() {
 		err = fmt.Errorf("no such method %v", method)
 	}
 	if err == nil {
+		funct := funcv.Type()
+		numOut := funct.NumOut()
+		if numOut > 0 {
+			lastt := funct.Out(numOut - 1)
+			returnsError = lastt.PkgPath() == "" && lastt.Name() == "error"
+		}
+		if numOut > 1 {
+			secondt := funct.Out(numOut - 2)
+			returnsString = secondt.PkgPath() == "" && secondt.Name() == "string"
+		}
+		
 		// In theory, the wire format could have a map
 		// of kwargs instead
 		params, err = cborrpc.CreateParamList(funcv, request.Params)
@@ -124,12 +136,21 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 		returns = funcv.Call(params)
 		if len(returns) == 0 {
 			err = errors.New("empty return from method")
-		} else {
+		} else if returnsError {
 			errV := returns[len(returns)-1].Interface()
 			if errV != nil {
 				err = errV.(error)
 			}
 			returns = returns[0 : len(returns)-1]
+		}
+	}
+
+	// If we are expecting to return a string message, and there
+	// is no error, remap an empty string to nil
+	if returnsString {
+		msg := returns[len(returns) - 1].String()
+		if msg == "" {
+			returns[len(returns) - 1] = reflect.ValueOf(nil)
 		}
 	}
 
@@ -139,8 +160,10 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 		response.Result = returns[0].Interface()
 	} else {
 		results := make([]interface{}, len(returns))
-		for i := range returns {
-			results[i] = returns[i].Interface()
+		for i, retval := range returns {
+			if retval.IsValid() {
+				results[i] = retval.Interface()
+			}
 		}
 		response.Result = results
 	}

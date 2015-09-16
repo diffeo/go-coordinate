@@ -4,6 +4,8 @@ import "errors"
 import "fmt"
 import "github.com/dmaze/goordinate/cborrpc"
 import "github.com/dmaze/goordinate/coordinate"
+import "github.com/mitchellh/mapstructure"
+import "time"
 
 // ListWorkSpecsOptions contains options to the ListWorkSpecs call.
 type ListWorkSpecsOptions struct {
@@ -70,6 +72,34 @@ func (jobs *JobServer) SetWorkSpec(specMap map[string]interface{}) (bool, string
 	}
 	spec, err := jobs.Namespace.SetWorkSpec(specMap)
 	return (spec != nil), "", err
+}
+
+// DelWorkSpec deletes a single work spec.
+func (jobs *JobServer) DelWorkSpec(workSpecName string) (bool, string, error) {
+	err := jobs.Namespace.DestroyWorkSpec(workSpecName)
+	return err == nil, "", err
+}
+
+// Clear deletes every work spec.  Call this with caution.  Returns
+// the number of work specs deleted.
+func (jobs *JobServer) Clear() (count int, err error) {
+	// NB: it is tempting to DestroyNamespace() to much the same effect
+	var names []string
+	names, err = jobs.Namespace.WorkSpecNames()
+	if err != nil {
+		return
+	}
+	for _, name := range names {
+		err = jobs.Namespace.DestroyWorkSpec(name)
+		if err != nil {
+			// Ignore concurrent deletes
+			if _, missing := err.(coordinate.ErrNoSuchWorkSpec); !missing {
+				return
+			}
+		}
+	}
+	count = len(names)
+	return
 }
 
 // GetWorkSpec retrieves the definition of a work spec.  If the named
@@ -386,4 +416,128 @@ func workUnitStatus(workUnit coordinate.WorkUnit) (status WorkUnitStatus, attemp
 		}
 	}
 	return
+}
+
+// WorkSpecStatus is a value passed as a "status" option to
+// ControlWorkSpec().
+type WorkSpecStatus int
+
+const (
+	// Runnable indicates a work spec is not paused.
+	Runnable WorkSpecStatus = 1
+
+	// Paused indicates a work spec is paused.
+	Paused WorkSpecStatus = 2
+)
+
+// ControlWorkSpecOptions defines the list of actions ControlWorkSpec
+// can take.
+type ControlWorkSpecOptions struct {
+	// Continuous can change the "continuous" flag on a work spec.
+	// If a work spec declares itself as "continuous", the
+	// scheduler can generate empty work units for it if there is
+	// no other work to do.  This flag can pause and resume the
+	// generation of these artificial work units for work specs
+	// that declare themselves continuous.  Trying to set this
+	// flag for a work spec that does not declare itself
+	// continuous is an error.
+	Continuous bool
+
+	// Status indicates whether or not the work spec is paused.
+	Status WorkSpecStatus
+
+	// Weight controls the relative scheduling weight of this work
+	// spec.
+	Weight int
+
+	// Interval specifies the minimum time, in seconds, between
+	// generating continuous work units.
+	Interval float64
+
+	// MaxRunning specifies the maximum number of work units that
+	// can concurrently run for this work spec, across the entire
+	// system.
+	MaxRunning int
+}
+
+// ControlWorkSpec makes changes to a work spec that are not directly
+// reflected in the work spec definition.  This allows work specs to
+// be paused or to stop generating new continuous jobs.
+// ControlWorkSpecOptions has a complete listing of what can be done.
+func (jobs *JobServer) ControlWorkSpec(workSpecName string, options map[string]interface{}) (bool, string, error) {
+	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
+	if err != nil {
+		return false, "", err
+	} else if workSpec == nil {
+		return false, fmt.Sprintf("no such work_spec %v", workSpecName), nil
+	}
+
+	// We care a lot about "false" vs. not present for these things.
+	// Manually create the decoder.
+	var cwsOptions ControlWorkSpecOptions
+	var metadata mapstructure.Metadata
+	var wsMeta coordinate.WorkSpecMeta
+	config := mapstructure.DecoderConfig{
+		Result: &cwsOptions,
+		Metadata: &metadata,
+	}
+	decoder, err := mapstructure.NewDecoder(&config)
+	if err == nil {
+		err = decoder.Decode(options)
+	}
+
+	// Get the existing metadata, then change it based on what
+	// we got provided
+	if err == nil {
+		wsMeta, err = workSpec.Meta(false)
+	}
+	if err == nil {
+		for _, key := range metadata.Keys {
+			switch(key) {
+			case "Continuous":
+				wsMeta.Continuous = cwsOptions.Continuous
+			case "Status":
+				wsMeta.Paused = cwsOptions.Status == Paused
+			case "Weight":
+				wsMeta.Weight = cwsOptions.Weight
+			case "Interval":
+				wsMeta.Interval = time.Duration(cwsOptions.Interval) * time.Second
+			case "MaxRunning":
+				wsMeta.MaxRunning = cwsOptions.MaxRunning
+			}
+		}
+	}
+	if err == nil {
+		err = workSpec.SetMeta(wsMeta)
+	}
+	return err == nil, "", err
+}
+
+// GetWorkSpecMeta returns a set of control options for a given work
+// spec.  The returned map has the full set of keys that
+// ControlWorkSpec() will accept.
+func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (map[string]interface{}, string, error) {
+	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
+	if err != nil {
+		return nil, "", err
+	} else if workSpec == nil {
+		return nil, fmt.Sprintf("no such work_spec %v", workSpecName), nil
+	}
+
+	meta, err := workSpec.Meta(false)
+	if err != nil {
+		return nil, "", err
+	}
+
+	result := make(map[string]interface{})
+	if meta.Paused {
+		result["status"] = Paused
+	} else {
+		result["status"] = Runnable
+	}
+	result["continuous"] = meta.Continuous
+	result["interval"] = meta.Interval.Seconds()
+	result["max_running"] = meta.MaxRunning
+	result["weight"] = meta.Weight
+	return result, "", nil
 }
