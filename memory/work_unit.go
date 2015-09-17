@@ -25,6 +25,32 @@ func (unit *memWorkUnit) WorkSpec() coordinate.WorkSpec {
 	return unit.workSpec
 }
 
+func (unit *memWorkUnit) Status() (coordinate.WorkUnitStatus, error) {
+	globalLock(unit)
+	defer globalUnlock(unit)
+	return unit.status(), nil
+}
+
+func (unit *memWorkUnit) status() coordinate.WorkUnitStatus {
+	if unit.activeAttempt == nil {
+		return coordinate.AvailableUnit
+	}
+	switch unit.activeAttempt.status {
+	case coordinate.Pending:
+		return coordinate.PendingUnit
+	case coordinate.Expired:
+		return coordinate.AvailableUnit
+	case coordinate.Finished:
+		return coordinate.FinishedUnit
+	case coordinate.Failed:
+		return coordinate.FailedUnit
+	case coordinate.Retryable:
+		return coordinate.AvailableUnit
+	default:
+		panic("invalid attempt status")
+	}
+}
+
 func (unit *memWorkUnit) ActiveAttempt() (coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)

@@ -110,13 +110,14 @@ func (spec *memWorkSpec) WorkUnits(names []string) (map[string]coordinate.WorkUn
 	return result, nil
 }
 
-func (spec *memWorkSpec) AllWorkUnits(start uint, limit uint) (map[string]coordinate.WorkUnit, error) {
+func (spec *memWorkSpec) WorkUnitsInStatus(status coordinate.WorkUnitStatus, start uint, limit uint) (map[string]coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
 	result := make(map[string]coordinate.WorkUnit)
 	for _, unit := range spec.workUnits {
-		if start > 0 {
+		if status != coordinate.AnyStatus && unit.status() != status {
+		} else if start > 0 {
 			start--
 		} else if limit > 0 {
 			result[unit.Name()] = unit
@@ -124,6 +125,50 @@ func (spec *memWorkSpec) AllWorkUnits(start uint, limit uint) (map[string]coordi
 		}
 	}
 	return result, nil
+}
+
+// deleteWorkUnit does the heavy lifting to delete a work unit.  In
+// particular, it deletes the work unit's attempts from the
+// corresponding worker objects.  It assumes the global lock.
+func (spec *memWorkSpec) deleteWorkUnit(workUnit *memWorkUnit) {
+	for _, attempt := range workUnit.attempts {
+		attempt.worker.completeAttempt(attempt)
+		attempt.worker.removeAttempt(attempt)
+	}
+	delete(spec.workUnits, workUnit.name)
+}
+
+func (spec *memWorkSpec) DeleteWorkUnits(names []string, status coordinate.WorkUnitStatus) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	for _, name := range names {
+		unit, ok := spec.workUnits[name]
+		if !ok {
+			continue
+		}
+		if status != coordinate.AnyStatus && unit.status() != status {
+			continue
+		}
+		spec.deleteWorkUnit(unit)
+	}
+	return nil
+}
+
+func (spec *memWorkSpec) DeleteWorkUnitsInStatus(status coordinate.WorkUnitStatus) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	// I think Go's semantics on "range" specifically allow this
+	// construction; otherwise we are changing a map's keys while
+	// iterating over it which causes problems in other languages
+	for _, unit := range spec.workUnits {
+		if status != coordinate.AnyStatus && unit.status() != status {
+			continue
+		}
+		spec.deleteWorkUnit(unit)
+	}
+	return nil
 }
 
 func (spec *memWorkSpec) Coordinate() *memCoordinate {

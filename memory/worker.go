@@ -157,12 +157,13 @@ func (worker *memWorker) addAttempt(attempt *memAttempt) {
 	worker.activeAttempts = append(worker.activeAttempts, attempt)
 }
 
-// completeAttempt removes an attempt from the active attempts list,
-// if it is there.  Assumes the global lock.  Never fails.
-func (worker *memWorker) completeAttempt(attempt *memAttempt) {
+// removeAttemptFromList removes an attempt from a list of attempts,
+// and returns a new attempt slice without that (or, if it is not there,
+// the same attempt slice).
+func removeAttemptFromList(attempt *memAttempt, list []*memAttempt) []*memAttempt {
 	// Find the attempt in the active attempts list
 	attemptI := -1
-	for i, active := range worker.activeAttempts {
+	for i, active := range list {
 		if active == attempt {
 			attemptI = i
 			break
@@ -170,13 +171,25 @@ func (worker *memWorker) completeAttempt(attempt *memAttempt) {
 	}
 	if attemptI == -1 {
 		// not there; just stop
-		return
+		return list
 	}
-	// Now make a new active attempts list without that
-	activeAttempts := make([]*memAttempt, len(worker.activeAttempts)-1)
-	copy(activeAttempts[:attemptI], worker.activeAttempts[:attemptI])
-	copy(activeAttempts[attemptI:], worker.activeAttempts[attemptI+1:])
-	worker.activeAttempts = activeAttempts
+	// Now make a new attempts list without that
+	newList := make([]*memAttempt, len(list)-1)
+	copy(newList[:attemptI], list[:attemptI])
+	copy(newList[attemptI:], list[attemptI+1:])
+	return newList
+}
+
+// completeAttempt removes an attempt from the active attempts list,
+// if it is there.  Assumes the global lock.  Never fails.
+func (worker *memWorker) completeAttempt(attempt *memAttempt) {
+	worker.activeAttempts = removeAttemptFromList(attempt, worker.activeAttempts)
+}
+
+// removeAttempt removes an attempt from the history attempts list,
+// if it is there.  Assumes the global lock.  Never fails.
+func (worker memWorker) removeAttempt(attempt *memAttempt) {
+	worker.attempts = removeAttemptFromList(attempt, worker.attempts)
 }
 
 // memory.coordinable interface:

@@ -185,6 +185,36 @@ type WorkSpecMeta struct {
 	PendingCount int
 }
 
+// WorkUnitStatus defines a high-level status of a work unit.
+type WorkUnitStatus int
+
+const (
+	// AnyStatus is not a real work unit status, but in queries
+	// specifies that any status is acceptable.
+	AnyStatus WorkUnitStatus = iota
+
+	// AvailableUnit corresponds to work units that do not have
+	// active attempts, or if they do have active attempts, they are
+	// either Expired or Retryable.  These are work units that
+	// Worker.RequestAttempts can return.
+	AvailableUnit
+
+	// PendingUnit corresponds to work units that have an active
+	// attempt, where that attempt is Pending.  A worker is
+	// currently working on these work units.
+	PendingUnit
+
+	// FinishedUnit corresponds to work units that have an active
+	// attempt, where that attempt is Finished.  The work units
+	// have completed successfully.
+	FinishedUnit
+
+	// FailedUnit corresponds to work units that have an active
+	// attempt, where that attempt is Failed.  The work units have
+	// completed unsuccessfully.
+	FailedUnit
+)
+
 // A WorkSpec defines a collection of related jobs.  For instance, a
 // work spec could define a specific function to call, and its work units
 // give parameters to that function.  A work spec has a string-keyed
@@ -240,15 +270,30 @@ type WorkSpec interface {
 	// result.
 	WorkUnits(names []string) (map[string]WorkUnit, error)
 
-	// TODO: define what "status" means
+	// WorkUnitsInStatus retrieves any number of work units that
+	// are in some specific status (or, if status is AnyStatus,
+	// some subset of all of the work units).  If no work units
+	// are added or destroyed, then consecutive calls incrementing
+	// the "start" parameter will eventually retrieve all of the
+	// eligible work units.  The exact ordering of the work units
+	// is unspecified.
+	WorkUnitsInStatus(status WorkUnitStatus, start, limit uint) (map[string]WorkUnit, error)
 
-	// AllWorkUnits retrieves some number of the work units
-	// associated with this work spec.  If no work units are added
-	// or destroyed, then consecutive calls incrementing the
-	// "start" parameter will eventually retrieve all of the work
-	// units.  The exact ordering of the work units is
-	// unspecified.
-	AllWorkUnits(start uint, limit uint) (map[string]WorkUnit, error)
+	// DeleteWorkUnits deletes specific work units by name.  If
+	// status is not AnyStatus, then the work units must
+	// additionally be in this status.  Deleting a work unit also
+	// deletes all attempts associated with it, which in turn
+	// causes those attempts to not be reported by Worker object
+	// queries.  Deleting a PendingUnit work unit will not
+	// proactively terminate its worker, but the corresponding
+	// attempt will no longer appear in either the worker's
+	// attempt list or its active attempt list.
+	DeleteWorkUnits(names []string, status WorkUnitStatus) error
+
+	// DeleteWorkUnitsItStatus deletes all work units in a given
+	// status.  The semantics of deletion are the same as in
+	// DeleteWorkUnits().
+	DeleteWorkUnitsInStatus(WorkUnitStatus) error
 }
 
 // A WorkUnit is a single job to perform.  It is associated with a
@@ -264,6 +309,10 @@ type WorkUnit interface {
 	// WorkSpec returns the associated work spec.
 	WorkSpec() WorkSpec
 
+	// Status gets a high-level status of this work unit.
+	// This information is derived from ActiveAttempt().
+	Status() (WorkUnitStatus, error)
+	
 	// ActiveAttempt returns the current Attempt for this work
 	// unit, if any.  If the work unit is completed, either
 	// successfully or unsuccessfully, this is the Attempt that

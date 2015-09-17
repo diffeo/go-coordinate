@@ -256,9 +256,12 @@ func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]inte
 		// Fetch all units in specific states, or all units in
 		// general
 		if gwuOptions.States != nil {
+			// TODO(dmaze): The way to do this will be to
+			// call WorkUnitsInStatus for each State and
+			// concatenate the results
 			return nil, "", errors.New("GetWorkUnits by state not implemented yet")
 		}
-		workUnits, err = spec.AllWorkUnits(gwuOptions.Start, gwuOptions.Limit)
+		workUnits, err = spec.WorkUnitsInStatus(coordinate.AnyStatus, gwuOptions.Start, gwuOptions.Limit)
 	}
 	if err != nil {
 		return nil, "", err
@@ -348,7 +351,7 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 	var workUnits map[string]coordinate.WorkUnit
 	var start uint
 	for {
-		workUnits, err = workSpec.AllWorkUnits(start, 1000)
+		workUnits, err = workSpec.WorkUnitsInStatus(coordinate.AnyStatus, start, 1000)
 		if err != nil {
 			return nil, "", err
 		}
@@ -525,4 +528,69 @@ func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (result map[string]i
 		result["weight"] = meta.Weight
 	}
 	return
+}
+
+// DelWorkUnitsOptions specifies the options for DelWorkUnits.  The
+// first of All, WorkUnitKeys, or State given defines the operation to
+// perform.  If none of these are given, the zero value for this
+// structure tells DelWorkUnits to do nothing.
+type DelWorkUnitsOptions struct {
+	// All, if set to true, directs DelWorkUnits to delete
+	// all of the work units in its work spec.  If this is
+	// provided, all other options are ignored.
+	All bool
+
+	// WorkUnitKeys, if provided, is a list of specific work unit
+	// keys to delete.  If this is given and All is false, then
+	// these specific work units are deleted; if State is also
+	// given, then each work unit must be in that state to be
+	// deleted.
+	WorkUnitKeys []string
+
+	// State, if provided, is one of the external Coordinate work
+	// unit statuses, and all work units in this state are deleted.
+	// If WorkUnitKeys is also provided then only those work units
+	// will be deleted, and then only if in this state.
+	State WorkUnitStatus
+}
+
+// DelWorkUnits deletes work units from an existing work spec.  If
+// options is empty, this does nothing.  On success, returns the
+// number of work units deleted.
+func (jobs *JobServer) DelWorkUnits(workSpecName string, options map[string]interface{}) (int, string, error) {
+	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
+	var dwuOptions DelWorkUnitsOptions
+	var status coordinate.WorkUnitStatus
+	if err == nil {
+		err = decode(&dwuOptions, options)
+	}
+	if err == nil && !dwuOptions.All {
+		status, err = translateWorkUnitStatus(dwuOptions.State)
+	}
+	if err == nil {
+		if dwuOptions.All {
+			err = workSpec.DeleteWorkUnitsInStatus(coordinate.AnyStatus)
+		} else if dwuOptions.WorkUnitKeys != nil {
+			
+			err = workSpec.DeleteWorkUnits(dwuOptions.WorkUnitKeys, status)
+		} else {
+			err = workSpec.DeleteWorkUnitsInStatus(status)
+		}
+	}
+	return 0, "", err
+}
+
+// Archive causes the system to clean up completed work units.  The
+// system will keep up to a pre-specified limit of work units that
+// have completed successfully, and will also remove work units that
+// have completed successfully but are beyond a pre-specified age.
+// The work units are deleted as in DelWorkUnits().  The return value
+// is always nil.
+//
+// TODO(dmaze): Actually implement this.  This probably involves
+// triggering a background task the system would need to do on its own
+// in any case.  The observable effects of this are minimal, especially
+// in a default/test configuration.
+func (jobs *JobServer) Archive(options map[string]interface{}) (interface{}, error) {
+	return nil, nil
 }
