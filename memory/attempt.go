@@ -72,7 +72,9 @@ func (attempt *memAttempt) finish(status coordinate.AttemptStatus, data map[stri
 		attempt.data = data
 	}
 	attempt.worker.completeAttempt(attempt)
-	// attempt.workUnit.completeAttempt(attempt)
+	if status == coordinate.Expired || status == coordinate.Retryable {
+		attempt.workUnit.resetAttempt()
+	}
 }
 
 func (attempt *memAttempt) Renew(extendDuration time.Duration, data map[string]interface{}) error {

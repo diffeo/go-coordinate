@@ -3,12 +3,13 @@ package memory
 import "github.com/dmaze/goordinate/coordinate"
 
 type memWorkUnit struct {
-	name          string
-	data          map[string]interface{}
-	priority      int
-	activeAttempt *memAttempt
-	attempts      []*memAttempt
-	workSpec      *memWorkSpec
+	name           string
+	data           map[string]interface{}
+	priority       float64
+	activeAttempt  *memAttempt
+	attempts       []*memAttempt
+	workSpec       *memWorkSpec
+	availableIndex int
 }
 
 // coordinate.WorkUnit interface:
@@ -51,6 +52,20 @@ func (unit *memWorkUnit) status() coordinate.WorkUnitStatus {
 	}
 }
 
+func (unit *memWorkUnit) Priority() (float64, error) {
+	globalLock(unit)
+	defer globalUnlock(unit)
+	return unit.priority, nil
+}
+
+func (unit *memWorkUnit) SetPriority(priority float64) error {
+	globalLock(unit)
+	defer globalUnlock(unit)
+	unit.priority = priority
+	unit.workSpec.available.Reprioritize(unit)
+	return nil
+}
+
 func (unit *memWorkUnit) ActiveAttempt() (coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
@@ -62,6 +77,15 @@ func (unit *memWorkUnit) ActiveAttempt() (coordinate.Attempt, error) {
 		return nil, nil
 	}
 	return unit.activeAttempt, nil
+}
+
+// resetAttempt clears the active attempt for a unit and returns it
+// to its work spec's available list.  Assumes the global lock.
+func (unit *memWorkUnit) resetAttempt() {
+	if unit.activeAttempt != nil {
+		unit.activeAttempt = nil
+		unit.workSpec.available.Add(unit)
+	}
 }
 
 func (unit *memWorkUnit) Attempts() ([]coordinate.Attempt, error) {

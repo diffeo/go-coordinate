@@ -81,36 +81,24 @@ func (worker *memWorker) RequestAttempts(req coordinate.AttemptRequest) ([]coord
 	defer globalUnlock(worker)
 
 	for _, workSpec := range worker.namespace.workSpecs {
-		var bestWorkUnit *memWorkUnit
-		for _, workUnit := range workSpec.workUnits {
-			// We can do this work unit if it does not have
-			// an active attempt, or if the active attempt is
-			// expired or a retryable failure
-			if workUnit.activeAttempt == nil ||
-				(workUnit.activeAttempt.status != coordinate.Expired &&
-					workUnit.activeAttempt.status != coordinate.Retryable) {
-				// This is "better" than the best work unit
-				// if its priority is higher (...TODO...)
-				// or its name is alphabetically sooner
-				if bestWorkUnit == nil || workUnit.name < bestWorkUnit.name {
-					bestWorkUnit = workUnit
-				}
-			}
+		if len(workSpec.available) == 0 {
+			continue
 		}
-		if bestWorkUnit != nil {
-			attempt := &memAttempt{
-				workUnit:  bestWorkUnit,
-				worker:    worker,
-				status:    coordinate.Pending,
-				data:      bestWorkUnit.data,
-				startTime: time.Now(),
-			}
-			attempt.expirationTime = attempt.startTime.Add(time.Duration(15) * time.Minute)
-			bestWorkUnit.activeAttempt = attempt
-			bestWorkUnit.attempts = append(bestWorkUnit.attempts, attempt)
-			worker.addAttempt(attempt)
-			return []coordinate.Attempt{attempt}, nil
+		workUnit := workSpec.available.Next()
+		start := time.Now()
+		duration := time.Duration(15) * time.Minute
+		attempt := &memAttempt{
+			workUnit:  workUnit,
+			worker:    worker,
+			status:    coordinate.Pending,
+			data:      workUnit.data,
+			startTime: start,
+			expirationTime: start.Add(duration),
 		}
+		workUnit.activeAttempt = attempt
+		workUnit.attempts = append(workUnit.attempts, attempt)
+		worker.addAttempt(attempt)
+		return []coordinate.Attempt{attempt}, nil
 	}
 	return []coordinate.Attempt{}, nil
 }

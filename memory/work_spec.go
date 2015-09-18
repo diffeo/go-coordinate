@@ -9,6 +9,7 @@ type memWorkSpec struct {
 	data      map[string]interface{}
 	meta      coordinate.WorkSpecMeta
 	workUnits map[string]*memWorkUnit
+	available availableUnits
 }
 
 func newWorkSpec(namespace *memNamespace, name string) *memWorkSpec {
@@ -75,7 +76,7 @@ func (spec *memWorkSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	return nil
 }
 
-func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, priority int) (coordinate.WorkUnit, error) {
+func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
@@ -85,6 +86,7 @@ func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, p
 	unit.priority = priority
 	unit.workSpec = spec
 	spec.workUnits[name] = unit
+	spec.available.Add(unit)
 	return unit, nil
 }
 
@@ -176,6 +178,24 @@ func (spec *memWorkSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[s
 	return
 }
 
+func (spec *memWorkSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+	spec.query(query, func(unit *memWorkUnit) {
+		unit.priority = priority
+	})
+	return nil
+}
+
+func (spec *memWorkSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, adjustment float64) error {
+	globalLock(spec)
+	defer globalUnlock(spec)
+	spec.query(query, func(unit *memWorkUnit) {
+		unit.priority += adjustment
+	})
+	return nil
+}
+
 // deleteWorkUnit does the heavy lifting to delete a work unit.  In
 // particular, it deletes the work unit's attempts from the
 // corresponding worker objects.  It assumes the global lock.
@@ -185,6 +205,7 @@ func (spec *memWorkSpec) deleteWorkUnit(workUnit *memWorkUnit) {
 		attempt.worker.removeAttempt(attempt)
 	}
 	delete(spec.workUnits, workUnit.name)
+	spec.available.Remove(workUnit)
 }
 
 func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) error {

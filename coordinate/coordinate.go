@@ -286,7 +286,7 @@ type WorkSpec interface {
 	// AddWorkUnit adds a single work unit to this work spec.  If
 	// a work unit already exists with the specified name, it is
 	// overridden.
-	AddWorkUnit(name string, data map[string]interface{}, priority int) (WorkUnit, error)
+	AddWorkUnit(name string, data map[string]interface{}, priority float64) (WorkUnit, error)
 
 	// WorkUnit retrieves a single work unit by name.  If it does
 	// not exist, return nil (not an error).
@@ -298,6 +298,14 @@ type WorkSpec interface {
 	// will be selected.
 	WorkUnits(WorkUnitQuery) (map[string]WorkUnit, error)
 
+	// SetWorkUnitPriorities updates the priorities of multiple
+	// work units to all have the same value.
+	SetWorkUnitPriorities(WorkUnitQuery, float64) error
+
+	// AdjustWorkUnitPriorities adds a given amount to the
+	// priorities of multiple work units.
+	AdjustWorkUnitPriorities(WorkUnitQuery, float64) error
+	
 	// DeleteWorkUnits deletes work units selected by a query.  If
 	// a zero WorkUnitQuery is passed, this deletes all work units
 	// in this work spec.  Deleting a work unit also deletes all
@@ -326,6 +334,14 @@ type WorkUnit interface {
 	// Status gets a high-level status of this work unit.
 	// This information is derived from ActiveAttempt().
 	Status() (WorkUnitStatus, error)
+
+	// Priority gets a priority score for this work unit.  Higher
+	// priority executes sooner.
+	Priority() (float64, error)
+
+	// SetPriority changes the priority score for this work unit.
+	// Higher priority executes sooner.
+	SetPriority(float64) error
 	
 	// ActiveAttempt returns the current Attempt for this work
 	// unit, if any.  If the work unit is completed, either

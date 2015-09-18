@@ -5,12 +5,13 @@ import "errors"
 import "reflect"
 import "github.com/dmaze/goordinate/coordinate"
 import "github.com/mitchellh/mapstructure"
+import "math"
 
 type addWorkUnitItem struct {
 	key      string
 	data     map[string]interface{}
 	metadata map[string]interface{}
-	priority *int
+	priority *float64
 }
 
 // AddWorkUnits adds any number of work units to a work spec.  Each oy
@@ -61,11 +62,11 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 				return false, "", errors.New("work unit metadata must be a map")
 			}
 		}
-		var priority *int
+		var priority *float64
 		if len(kvpL) > 3 {
-			pri, ok := kvpL[3].(int)
+			pri, ok := kvpL[3].(float64)
 			if !ok {
-				return false, "", errors.New("work unit priority must be an int")
+				return false, "", errors.New("work unit priority must be a number")
 			}
 			priority = &pri
 		}
@@ -77,11 +78,11 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 	// parameters into items.
 	for _, item := range items {
 		priority := item.priority
-		var priValue int
+		var priValue float64
 		if priority == nil {
 			priItem := item.metadata["priority"]
 			if priItem != nil {
-				priValue, ok := priItem.(int)
+				priValue, ok := priItem.(float64)
 				if ok {
 					priority = &priValue
 				}
@@ -260,6 +261,53 @@ func (jobs *JobServer) GetWorkUnitStatus(workSpecName string, workUnitKeys []str
 		}
 	}
 	return result, "", nil
+}
+
+// PrioritizeWorkUnitsOptions specifies which work units PrioritizeWorkUnits
+// should adjust and how.
+type PrioritizeWorkUnitsOptions struct {
+	// WorkUnitKeys gives the names of the work units to reprioritize.
+	// If not present, does nothing.
+	WorkUnitKeys []string
+
+	// Priority sets an absolute priority.  If a NaN value, make a
+	// change specified by Adjustment instead.
+	Priority float64
+
+	// Adjustment is added to the priorities of each of the work
+	// units, if Priority is NaN.  If also a NaN value, do nothing.
+	Adjustment float64
+}
+
+// PrioritizeWorkUnits changes the priorities of some number of work
+// units.  The actual work units are in options["work_unit_keys"].  A
+// higher priority results in the work units being scheduled sooner.
+func (jobs *JobServer) PrioritizeWorkUnits(workSpecName string, options map[string]interface{}) (bool, string, error) {
+	var (
+		err error
+		query coordinate.WorkUnitQuery
+		workSpec coordinate.WorkSpec
+	)
+	pwuOptions := PrioritizeWorkUnitsOptions{
+		Priority: math.NaN(),
+		Adjustment: math.NaN(),
+	}
+	workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
+	if err == nil {
+		err = decode(&pwuOptions, options)
+	}
+	if err == nil && pwuOptions.WorkUnitKeys == nil {
+		return false, "missing work_unit_keys", err
+	}
+	if err == nil {
+		query.Names = pwuOptions.WorkUnitKeys
+		if !math.IsNaN(pwuOptions.Priority) {
+			err = workSpec.SetWorkUnitPriorities(query, pwuOptions.Priority)
+		} else if !math.IsNaN(pwuOptions.Adjustment) {
+			err = workSpec.AdjustWorkUnitPriorities(query, pwuOptions.Adjustment)
+		}
+	}
+	return err == nil, "", err
 }
 
 // CountWorkUnits returns the number of work units in each status for
