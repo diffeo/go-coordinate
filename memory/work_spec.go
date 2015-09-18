@@ -1,6 +1,7 @@
 package memory
 
 import "github.com/dmaze/goordinate/coordinate"
+import "sort"
 
 type memWorkSpec struct {
 	name      string
@@ -97,34 +98,82 @@ func (spec *memWorkSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	return workUnit, nil
 }
 
-func (spec *memWorkSpec) WorkUnits(names []string) (map[string]coordinate.WorkUnit, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	result := make(map[string]coordinate.WorkUnit)
-	for _, name := range names {
-		if unit, present := spec.workUnits[name]; present {
-			result[name] = unit
+// queryWithoutLimit calls a callback function for every work unit that
+// a coordinate.WorkUnitQuery selects, ignoring the limit field (which
+// requires sorting).
+func (spec *memWorkSpec) queryWithoutLimit(query coordinate.WorkUnitQuery, f func(*memWorkUnit)) {
+	// Clarity over efficiency: iterate through *all* of the work
+	// units and keep the ones that match the query.  If Limit is
+	// specified then sort the result after the fact.
+	for name, unit := range spec.workUnits {
+		if name <= query.PreviousName {
+			continue
 		}
+		if query.Names != nil {
+			ok := false
+			for _, candidate := range query.Names {
+				if name == candidate {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+		}
+		if query.Statuses != nil {
+			ok := false
+			status := unit.status()
+			for _, candidate := range query.Statuses {
+				if status == candidate {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				continue
+			}
+		}
+		// If we are here we have passed all filters
+		f(unit)
 	}
-	return result, nil
+
 }
 
-func (spec *memWorkSpec) WorkUnitsInStatus(status coordinate.WorkUnitStatus, start uint, limit uint) (map[string]coordinate.WorkUnit, error) {
+// query calls a callback function for every work unit that a
+// coordinate.WorkUnitQuery selects, in sorted order if limit is specified.
+func (spec *memWorkSpec) query(query coordinate.WorkUnitQuery, f func(*memWorkUnit)) {
+	// No limit?  We know how to do that
+	if query.Limit <= 0 {
+		spec.queryWithoutLimit(query, f)
+		return
+	}
+	// Otherwise there *is* a limit.  Collect the interesting keys:
+	var names []string
+	spec.queryWithoutLimit(query, func(unit *memWorkUnit) {
+		names = append(names, unit.name)
+	})
+	// Sort them:
+	sort.Strings(names)
+	// Apply the limit:
+	if len(names) > query.Limit {
+		names = names[:query.Limit]
+	}
+	// Call the callback
+	for _, name := range names {
+		f(spec.workUnits[name])
+	}
+}
+
+func (spec *memWorkSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[string]coordinate.WorkUnit, err error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
-	result := make(map[string]coordinate.WorkUnit)
-	for _, unit := range spec.workUnits {
-		if status != coordinate.AnyStatus && unit.status() != status {
-		} else if start > 0 {
-			start--
-		} else if limit > 0 {
-			result[unit.Name()] = unit
-			limit--
-		}
-	}
-	return result, nil
+	result = make(map[string]coordinate.WorkUnit)
+	spec.query(query, func(unit *memWorkUnit) {
+		result[unit.name] = unit
+	})
+	return
 }
 
 // deleteWorkUnit does the heavy lifting to delete a work unit.  In
@@ -138,36 +187,13 @@ func (spec *memWorkSpec) deleteWorkUnit(workUnit *memWorkUnit) {
 	delete(spec.workUnits, workUnit.name)
 }
 
-func (spec *memWorkSpec) DeleteWorkUnits(names []string, status coordinate.WorkUnitStatus) error {
+func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
-
-	for _, name := range names {
-		unit, ok := spec.workUnits[name]
-		if !ok {
-			continue
-		}
-		if status != coordinate.AnyStatus && unit.status() != status {
-			continue
-		}
-		spec.deleteWorkUnit(unit)
-	}
-	return nil
-}
-
-func (spec *memWorkSpec) DeleteWorkUnitsInStatus(status coordinate.WorkUnitStatus) error {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	// I think Go's semantics on "range" specifically allow this
-	// construction; otherwise we are changing a map's keys while
-	// iterating over it which causes problems in other languages
-	for _, unit := range spec.workUnits {
-		if status != coordinate.AnyStatus && unit.status() != status {
-			continue
-		}
-		spec.deleteWorkUnit(unit)
-	}
+	// NB: This depends somewhat on Go having good behavior if we
+	// modify the keys of the map of work units while iterating
+	// through it.
+	spec.query(query, spec.deleteWorkUnit)
 	return nil
 }
 

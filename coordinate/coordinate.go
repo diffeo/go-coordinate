@@ -215,6 +215,33 @@ const (
 	FailedUnit
 )
 
+// WorkUnitQuery defines terms to select some subset of the work units
+// in a single work spec.  Its zero value selects all work units.
+type WorkUnitQuery struct {
+	// Names specifies the names of specific work units.  If
+	// non-nil, only these work units will be retrieved, provided
+	// they meet other criteria.  Specifying the name of a work
+	// unit that does not exist is not an error, that work unit
+	// will just not be returned.
+	Names []string
+
+	// Status specifies high-level status(es).  If non-nil, any
+	// status is acceptable.  No work unit whose status is not
+	// in this list will be retrieved.
+	Statuses []WorkUnitStatus
+
+	// PreviousName specifies the name of the last work unit in a
+	// previous query.  This name is lexicographically less than
+	// the names of all selected work units.  If empty string,
+	// there is no constraint.
+	PreviousName string
+
+	// Limit specifies the maximum number of work units to select.
+	// If the possible work unit keys are sorted
+	// lexicographically, the first Limit keys will be returned.
+	Limit int
+}
+
 // A WorkSpec defines a collection of related jobs.  For instance, a
 // work spec could define a specific function to call, and its work units
 // give parameters to that function.  A work spec has a string-keyed
@@ -265,35 +292,22 @@ type WorkSpec interface {
 	// not exist, return nil (not an error).
 	WorkUnit(name string) (WorkUnit, error)
 
-	// WorkUnits retrieves any number of work units by name.  Work
-	// unit keys that do not exist are silently omitted from the
-	// result.
-	WorkUnits(names []string) (map[string]WorkUnit, error)
+	// WorkUnits retrieves any number of work units by a query.
+	// See the definition of WorkUnitQuery to see what will be
+	// retrieved.  This could return an empty map if nothing
+	// will be selected.
+	WorkUnits(WorkUnitQuery) (map[string]WorkUnit, error)
 
-	// WorkUnitsInStatus retrieves any number of work units that
-	// are in some specific status (or, if status is AnyStatus,
-	// some subset of all of the work units).  If no work units
-	// are added or destroyed, then consecutive calls incrementing
-	// the "start" parameter will eventually retrieve all of the
-	// eligible work units.  The exact ordering of the work units
-	// is unspecified.
-	WorkUnitsInStatus(status WorkUnitStatus, start, limit uint) (map[string]WorkUnit, error)
-
-	// DeleteWorkUnits deletes specific work units by name.  If
-	// status is not AnyStatus, then the work units must
-	// additionally be in this status.  Deleting a work unit also
-	// deletes all attempts associated with it, which in turn
-	// causes those attempts to not be reported by Worker object
-	// queries.  Deleting a PendingUnit work unit will not
-	// proactively terminate its worker, but the corresponding
-	// attempt will no longer appear in either the worker's
-	// attempt list or its active attempt list.
-	DeleteWorkUnits(names []string, status WorkUnitStatus) error
-
-	// DeleteWorkUnitsItStatus deletes all work units in a given
-	// status.  The semantics of deletion are the same as in
-	// DeleteWorkUnits().
-	DeleteWorkUnitsInStatus(WorkUnitStatus) error
+	// DeleteWorkUnits deletes work units selected by a query.  If
+	// a zero WorkUnitQuery is passed, this deletes all work units
+	// in this work spec.  Deleting a work unit also deletes all
+	// attempts associated with it, which in turn causes those
+	// attempts to not be reported by Worker object queries.
+	// Deleting a PendingUnit work unit will not proactively
+	// terminate its worker, but the corresponding attempt will no
+	// longer appear in either the worker's attempt list or its
+	// active attempt list.
+	DeleteWorkUnits(WorkUnitQuery) error
 }
 
 // A WorkUnit is a single job to perform.  It is associated with a

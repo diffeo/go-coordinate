@@ -5,6 +5,7 @@ import "github.com/dmaze/goordinate/cborrpc"
 import "github.com/dmaze/goordinate/coordinate"
 import "github.com/mitchellh/mapstructure"
 import "time"
+import "reflect"
 
 // ListWorkSpecsOptions contains options to the ListWorkSpecs call.
 type ListWorkSpecsOptions struct {
@@ -213,21 +214,39 @@ type GetWorkUnitsOptions struct {
 	// If this option is supplied, all other options are ignored.
 	WorkUnitKeys []string
 
-	// States provides a list of states to query on.  If this is
+	// State provides a list of states to query on.  If this is
 	// provided then only work units in one of the specified states
 	// will be returned.
-	//
-	// TODO(dmaze): Python also allows single (int) status or tuple
-	States []WorkUnitStatus
+	State []WorkUnitStatus
 
 	// Start gives a starting point to iterate through the list of
-	// work units.  If zero, return results starting at the first
-	// work unit; otherwise skip this many.
-	Start uint
+	// work units.  It is the name of the last work unit returned
+	// in the previous call to GetWorkUnits().  No work unit whose
+	// name is lexicographically less than this will be returned.
+	Start string
 
 	// Limit specifies the maximum number of work units to return.
 	// Defaults to 1000.
-	Limit uint
+	Limit int
+}
+
+// gwuStateHook is a mapstructure decode hook that expands a single int
+// or a PythonTuple into a slice of int (WorkUnitStatus).
+func gwuStateHook(from reflect.Type, to reflect.Type, data interface{}) (interface{}, error) {
+	// to must be []WorkUnitStatus
+	if to.Kind() != reflect.Slice || to.Elem().Name() != "WorkUnitStatus" {
+		return data, nil
+	}
+	// If from is a tuple, return its contents
+	if tuple, ok := data.(cborrpc.PythonTuple); ok {
+		return tuple.Items, nil
+	}
+	// If from is an int, box it
+	if single, ok := data.(int); ok {
+		return []WorkUnitStatus{WorkUnitStatus(single)}, nil
+	}
+	// Otherwise, hope we can deal normally
+	return data, nil
 }
 
 // GetWorkUnits retrieves the keys and data dictionaries for some number
@@ -245,23 +264,37 @@ func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]inte
 	}
 
 	spec, err := jobs.Namespace.WorkSpec(workSpecName)
+	var decoder *mapstructure.Decoder
 	if err == nil {
-		err = decode(&gwuOptions, options)
-	}
-	if err == nil && gwuOptions.WorkUnitKeys != nil {
-		// Fetch these specific keys, ignore all other options
-		workUnits, err = spec.WorkUnits(gwuOptions.WorkUnitKeys)
-	}
-	if err == nil && gwuOptions.WorkUnitKeys == nil {
-		// Fetch all units in specific states, or all units in
-		// general
-		if gwuOptions.States != nil {
-			// TODO(dmaze): The way to do this will be to
-			// call WorkUnitsInStatus for each State and
-			// concatenate the results
-			return nil, "", errors.New("GetWorkUnits by state not implemented yet")
+		config := mapstructure.DecoderConfig{
+			DecodeHook: gwuStateHook,
+			Result:     &gwuOptions,
 		}
-		workUnits, err = spec.WorkUnitsInStatus(coordinate.AnyStatus, gwuOptions.Start, gwuOptions.Limit)
+		decoder, err = mapstructure.NewDecoder(&config)
+	}
+	if err == nil {
+		err = decoder.Decode(options)
+	}
+	if err == nil {
+		query := coordinate.WorkUnitQuery{
+			Names: gwuOptions.WorkUnitKeys,
+		}
+		if gwuOptions.WorkUnitKeys == nil {
+			query.PreviousName = gwuOptions.Start
+			query.Limit = gwuOptions.Limit
+		}
+		if gwuOptions.WorkUnitKeys == nil && gwuOptions.State != nil {
+			query.Statuses = make([]coordinate.WorkUnitStatus, len(gwuOptions.State))
+			for i, state := range gwuOptions.State {
+				query.Statuses[i], err = translateWorkUnitStatus(state)
+				if err != nil {
+					break
+				}
+			}
+		}
+		if err == nil {
+			workUnits, err = spec.WorkUnits(query)
+		}
 	}
 	if err != nil {
 		return nil, "", err
@@ -349,23 +382,25 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 
 	result := make(map[WorkUnitStatus]int)
 	var workUnits map[string]coordinate.WorkUnit
-	var start uint
+	var prev string
 	for {
-		workUnits, err = workSpec.WorkUnitsInStatus(coordinate.AnyStatus, start, 1000)
+		workUnits, err = workSpec.WorkUnits(coordinate.WorkUnitQuery{
+			PreviousName: prev,
+			Limit: 1000,
+		})
 		if err != nil {
 			return nil, "", err
 		}
-		for _, workUnit := range workUnits {
+		for name, workUnit := range workUnits {
 			status, _, err := workUnitStatus(workUnit)
 			if err != nil {
 				return nil, "", err
 			}
 			result[status]++
+			prev = name
 		}
 		if len(workUnits) == 0 {
 			break
-		} else {
-			start += uint(len(workUnits))
 		}
 	}
 	return result, "", nil
@@ -508,9 +543,9 @@ func (jobs *JobServer) ControlWorkSpec(workSpecName string, options map[string]i
 func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (result map[string]interface{}, _ string, err error) {
 	var (
 		workSpec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
+		meta     coordinate.WorkSpecMeta
 	)
-	
+
 	workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
 	if err == nil {
 		meta, err = workSpec.Meta(false)
@@ -568,14 +603,15 @@ func (jobs *JobServer) DelWorkUnits(workSpecName string, options map[string]inte
 		status, err = translateWorkUnitStatus(dwuOptions.State)
 	}
 	if err == nil {
-		if dwuOptions.All {
-			err = workSpec.DeleteWorkUnitsInStatus(coordinate.AnyStatus)
-		} else if dwuOptions.WorkUnitKeys != nil {
-			
-			err = workSpec.DeleteWorkUnits(dwuOptions.WorkUnitKeys, status)
-		} else {
-			err = workSpec.DeleteWorkUnitsInStatus(status)
+		var query coordinate.WorkUnitQuery
+		if !dwuOptions.All {
+			if dwuOptions.WorkUnitKeys != nil {
+				query.Names = dwuOptions.WorkUnitKeys
+			} else if status != coordinate.AnyStatus {
+				query.Statuses = []coordinate.WorkUnitStatus{status}
+			}
 		}
+		err = workSpec.DeleteWorkUnits(query)
 	}
 	return 0, "", err
 }
