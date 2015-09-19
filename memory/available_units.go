@@ -16,12 +16,16 @@ func (q *availableUnits) Next() *memWorkUnit {
 
 // Remove a specific work unit.
 func (q *availableUnits) Remove(unit *memWorkUnit) {
-	heap.Remove(q, unit.availableIndex)
+	if unit.availableIndex > 0 {
+		heap.Remove(q, unit.availableIndex-1)
+	}
 }
 
 // Reprioritize a specific work unit (when its priority changes).
 func (q *availableUnits) Reprioritize(unit *memWorkUnit) {
-	heap.Fix(q, unit.availableIndex)
+	if unit.availableIndex > 0 {
+		heap.Fix(q, unit.availableIndex-1)
+	}
 }
 
 // sort.Interface
@@ -52,15 +56,15 @@ func (q availableUnits) Less(i, j int) bool {
 
 func (q availableUnits) Swap(i, j int) {
 	q[i], q[j] = q[j], q[i]
-	q[i].availableIndex = i
-	q[j].availableIndex = j
+	q[i].availableIndex = i+1
+	q[j].availableIndex = j+1
 }
 
 // collections/heap.Interface
 
 func (q *availableUnits) Push(x interface{}) {
 	unit := x.(*memWorkUnit)
-	unit.availableIndex = len(*q)
+	unit.availableIndex = len(*q)+1
 	*q = append(*q, unit)
 }
 
@@ -70,6 +74,6 @@ func (q *availableUnits) Pop() interface{} {
 	}
 	unit := (*q)[len(*q)-1]
 	*q = (*q)[:len(*q)-1]
-	unit.availableIndex = -1
+	unit.availableIndex = 0
 	return unit
 }

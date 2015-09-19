@@ -96,6 +96,15 @@ func TestDeleteFirstOfThree(t *testing.T) {
 	rig.popAll(second, third)
 }
 
+func TestDeleteOther(t *testing.T) {
+	rig := rig{t: t, name: "TestDeleteOther"}
+	first := &memWorkUnit{name: "a"}
+	second := &memWorkUnit{name: "b"}
+	rig.push(first)
+	rig.q.Remove(second)
+	rig.popAll(first)
+}
+
 func TestReprioritizeFirst(t *testing.T) {
 	rig := rig{t: t, name: "TestReprioritizeFirst"}
 	first := &memWorkUnit{name: "a"}
