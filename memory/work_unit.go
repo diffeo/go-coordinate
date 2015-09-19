@@ -88,6 +88,13 @@ func (unit *memWorkUnit) resetAttempt() {
 	}
 }
 
+func (unit *memWorkUnit) ClearActiveAttempt() error {
+	globalLock(unit)
+	defer globalUnlock(unit)
+	unit.resetAttempt()
+	return nil
+}
+
 func (unit *memWorkUnit) Attempts() ([]coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)

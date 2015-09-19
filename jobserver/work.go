@@ -226,7 +226,10 @@ func (jobs *JobServer) UpdateWorkUnit(
 			switch uwuOptions.Status {
 			case 0, Finished:
 				changed = false // no-op
-				// case Available: err = workUnit.ClearActiveAttempt()
+			case Available:
+				err = workUnit.ClearActiveAttempt()
+			case Failed:
+				changed = false // see below
 			default:
 				err = errors.New("update_work_unit cannot change finished unit")
 			}
@@ -234,7 +237,17 @@ func (jobs *JobServer) UpdateWorkUnit(
 			switch uwuOptions.Status {
 			case 0, Failed:
 				changed = false // no-op
-				// case Available: err = workUnit.ClearActiveAttempt()
+			case Available: // "retry"
+				err = workUnit.ClearActiveAttempt()
+			case Finished:
+				// The Python worker, with two separate
+				// processes, has a race wherein there
+				// could be 15 seconds to go, the parent
+				// kills off the child, and the child
+				// finishes successfully, all at the same
+				// time.  In that case the successful
+				// finish should win.
+				attempt.Finish(nil)
 			default:
 				err = errors.New("update_work_unit cannot change failed unit")
 			}

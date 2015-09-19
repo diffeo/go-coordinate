@@ -353,6 +353,12 @@ type WorkUnit interface {
 	// working on this work unit, returns nil.
 	ActiveAttempt() (Attempt, error)
 
+	// ClearActiveAttempt removes the current active attempt.
+	// If there is an active attempt and it is Pending, this does
+	// not attempt to proactively kill the attempt and does not
+	// remove the attempt from the worker's active attempts list.
+	ClearActiveAttempt() error
+
 	// Attempts returns all current and past Attempts for this
 	// work unit, if any.  This includes the attempt reported by
 	// ActiveAttempt().
