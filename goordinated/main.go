@@ -6,21 +6,23 @@
 // implementation.
 package main
 
-import "bufio"
-import "errors"
-import "flag"
-import "fmt"
-import "io"
-import "net"
-import "reflect"
-import "runtime"
-import "strings"
+import (
+	"bufio"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"net"
+	"reflect"
+	"runtime"
+	"strings"
 
-import "github.com/dmaze/goordinate/backend"
-import "github.com/dmaze/goordinate/cborrpc"
-import "github.com/dmaze/goordinate/coordinate"
-import "github.com/dmaze/goordinate/jobserver"
-import "github.com/ugorji/go/codec"
+	"github.com/dmaze/goordinate/backend"
+	"github.com/dmaze/goordinate/cborrpc"
+	"github.com/dmaze/goordinate/coordinate"
+	"github.com/dmaze/goordinate/jobserver"
+	"github.com/ugorji/go/codec"
+)
 
 func main() {
 	bind := flag.String("bind", ":5932", "[ip]:port to listen on")
@@ -131,7 +133,7 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 			secondt := funct.Out(numOut - 2)
 			returnsString = secondt.PkgPath() == "" && secondt.Name() == "string"
 		}
-		
+
 		// In theory, the wire format could have a map
 		// of kwargs instead
 		params, err = cborrpc.CreateParamList(funcv, request.Params)
@@ -159,9 +161,9 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 	// If we are expecting to return a string message, and there
 	// is no error, remap an empty string to nil
 	if returnsString {
-		msg := returns[len(returns) - 1].String()
+		msg := returns[len(returns)-1].String()
 		if msg == "" {
-			returns[len(returns) - 1] = reflect.ValueOf(nil)
+			returns[len(returns)-1] = reflect.ValueOf(nil)
 		}
 
 		// If we got back a NoSuchWorkSpec error, report that
@@ -171,7 +173,7 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 		if err != nil {
 			if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
 				err = nil
-				returns[len(returns) - 1] = reflect.ValueOf(nsws.Error())
+				returns[len(returns)-1] = reflect.ValueOf(nsws.Error())
 			}
 		}
 	}
