@@ -1,114 +1,42 @@
 package cborrpc
 
-import "errors"
-import "fmt"
-import "reflect"
+import (
+	"errors"
+	"github.com/mitchellh/mapstructure"
+	"reflect"
+)
 
 // CreateParamList tries to match a CBOR-RPC parameter list to a specific
 // callable's parameter list.  funcv is the reflected method to eventually
 // call, and params is the list of parameters from the CBOR-RPC request.
 // On success, the return value is a list of parameter values that can be
 // passed to funcv.Call().
-//
-// Parameters are fixed up with FixUpType().
 func CreateParamList(funcv reflect.Value, params []interface{}) ([]reflect.Value, error) {
 	funct := funcv.Type()
 	numParams := funct.NumIn()
 	if len(params) != numParams {
 		return nil, errors.New("wrong number of parameters")
 	}
-	results := make([]reflect.Value, 0, numParams)
+	results := make([]reflect.Value, numParams)
 	for i := 0; i < numParams; i++ {
-		param := reflect.ValueOf(params[i])
-		param, err := FixUpType(funct.In(i), param)
+		paramType := funct.In(i)
+		paramValue := reflect.New(paramType)
+		param := paramValue.Interface()
+		config := mapstructure.DecoderConfig{
+			DecodeHook: DecodeBytesAsString,
+			Result:     param,
+		}
+		decoder, err := mapstructure.NewDecoder(&config)
 		if err != nil {
 			return nil, err
 		}
-		results = append(results, param)
+		err = decoder.Decode(params[i])
+		if err != nil {
+			return nil, err
+		}
+		results[i] = paramValue.Elem()
 	}
 	return results, nil
-}
-
-// FixUpType tries to convert a value into an expected type.  This
-// conversion works as follows:
-//
-// * If a parameter is an interface{}, it is passed on as-is.
-// * If a parameter is a string, a []byte value is cast to string.
-// * If a parameter is a map[string]interface{}, and the value is a
-//   map, then all keys in the map are checked to be string or []byte or
-//   not, and converted to string if possible.
-func FixUpType(expected reflect.Type, actual reflect.Value) (reflect.Value, error) {
-	if !actual.IsValid() {
-		return actual, nil
-	}
-	actualT := actual.Type()
-	// In practice we are probably getting passed an interface{},
-	// deal with the concrete value underneath it
-	if actualT.Kind() == reflect.Interface {
-		actual = actual.Elem()
-		if !actual.IsValid() {
-			return actual, nil
-		}
-		actualT = actual.Type()
-	}
-	if actualT == expected {
-		return actual, nil
-	} else if expected.Kind() == reflect.Interface {
-		// Anything goes, if acceptable
-		if actualT.Implements(expected) {
-			return actual, nil
-		}
-	} else if expected.Kind() == reflect.String {
-		// Can convert []byte to string, but nothing else
-		if actualT.Kind() == reflect.Slice &&
-			actualT.Elem().Kind() == reflect.Uint8 {
-			bytes := actual.Bytes()
-			str := string(bytes)
-			return reflect.ValueOf(str), nil
-		}
-	} else if expected.Kind() == reflect.Map {
-		// Can convert map to map, must convert all keys and
-		// values too
-		if actualT.Kind() == reflect.Map {
-			result := reflect.MakeMap(expected)
-			var err error
-			var key2, value2 reflect.Value
-			for _, keyV := range actual.MapKeys() {
-				valueV := actual.MapIndex(keyV)
-				if err == nil {
-					key2, err = FixUpType(expected.Key(), keyV)
-				}
-				if err == nil {
-					value2, err = FixUpType(expected.Elem(), valueV)
-				}
-				if err == nil {
-					result.SetMapIndex(key2, value2)
-				}
-			}
-			if err == nil {
-				return result, nil
-			}
-		}
-	} else if expected.Kind() == reflect.Slice {
-		// Can convert slice to slice, must convert all elements too
-		if actualT.Kind() == reflect.Slice {
-			elemT := expected.Elem()
-			length := actual.Len()
-			result := reflect.MakeSlice(expected, length, length)
-			var err error
-			for i := 0; i < length && err == nil; i++ {
-				item := actual.Index(i)
-				newItem, err := FixUpType(elemT, item)
-				if err == nil {
-					result.Index(i).Set(newItem)
-				}
-			}
-			if err == nil {
-				return result, nil
-			}
-		}
-	}
-	return reflect.ValueOf(nil), fmt.Errorf("cannot convert %v (%v) to %v", actual, actualT, expected)
 }
 
 // SloppyString converts a string or []byte to a string, or returns nil.
@@ -162,9 +90,12 @@ func StringList(obj interface{}) []string {
 	// First get a list of thingies
 	var listI []interface{}
 	switch listO := obj.(type) {
-	case PythonTuple: listI = listO.Items
-	case []interface{}: listI = listO
-	default: return nil
+	case PythonTuple:
+		listI = listO.Items
+	case []interface{}:
+		listI = listO
+	default:
+		return nil
 	}
 
 	// Now go through the list and cast each to string
