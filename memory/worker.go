@@ -2,6 +2,7 @@ package memory
 
 import "github.com/dmaze/goordinate/coordinate"
 import "time"
+import "fmt"
 
 type memWorker struct {
 	name           string
@@ -80,30 +81,71 @@ func (worker *memWorker) RequestAttempts(req coordinate.AttemptRequest) ([]coord
 	globalLock(worker)
 	defer globalUnlock(worker)
 
-	for _, workSpec := range worker.namespace.workSpecs {
-		if len(workSpec.available) == 0 {
-			continue
-		}
-		if workSpec.meta.Paused {
-			continue
-		}
-		workUnit := workSpec.available.Next()
-		start := time.Now()
-		duration := time.Duration(15) * time.Minute
-		attempt := &memAttempt{
-			workUnit:  workUnit,
-			worker:    worker,
-			status:    coordinate.Pending,
-			data:      workUnit.data,
-			startTime: start,
-			expirationTime: start.Add(duration),
-		}
-		workUnit.activeAttempt = attempt
-		workUnit.attempts = append(workUnit.attempts, attempt)
-		worker.addAttempt(attempt)
-		return []coordinate.Attempt{attempt}, nil
+	var attempts []coordinate.Attempt
+	if req.NumberOfWorkUnits < 1 {
+		return attempts, nil
 	}
-	return []coordinate.Attempt{}, nil
+	// Get the first work unit, which picks a work spec for the
+	// remainder
+	attempt := worker.getWork()
+	if attempt == nil {
+		return attempts, nil
+	}
+	attempts = append(attempts, attempt)
+	// Get more work units, but not more than either the number
+	// requested or the maximum allowed
+	target := attempt.workUnit.workSpec.meta.MaxAttemptsReturned
+	if target == 0 || target > req.NumberOfWorkUnits {
+		target = req.NumberOfWorkUnits
+	}
+	fmt.Printf("target=%v (max_jobs=%v max_getwork=%v)\n",
+		target, req.NumberOfWorkUnits, attempt.workUnit.workSpec.meta.MaxAttemptsReturned)
+	for len(attempts) < target {
+		attempt := worker.getWork()
+		if attempt == nil {
+			break
+		}
+		attempts = append(attempts, attempt)
+	}
+	return attempts, nil
+}
+
+// getWork finds an available work unit, creates an attempt for it,
+// sets that attempt as the active attempt for the work unit, adds
+// the attempt to the worker's active and history attempts list, and
+// returns it.  If there is no work to be had, returns nil.
+func (worker *memWorker) getWork() *memAttempt {
+	for _, workSpec := range worker.namespace.workSpecs {
+		attempt := worker.getWorkFromSpec(workSpec)
+		if attempt != nil {
+			return attempt
+		}
+	}
+	return nil
+}
+
+func (worker *memWorker) getWorkFromSpec(workSpec *memWorkSpec) *memAttempt {
+	// TODO(dmaze): Something, probably this, should also check
+	// workSpec.meta.MaxRunning
+	if len(workSpec.available) == 0 ||
+		workSpec.meta.Paused {
+		return nil
+	}
+	workUnit := workSpec.available.Next()
+	start := time.Now()
+	duration := time.Duration(15) * time.Minute
+	attempt := &memAttempt{
+		workUnit:       workUnit,
+		worker:         worker,
+		status:         coordinate.Pending,
+		data:           workUnit.data,
+		startTime:      start,
+		expirationTime: start.Add(duration),
+	}
+	workUnit.activeAttempt = attempt
+	workUnit.attempts = append(workUnit.attempts, attempt)
+	worker.addAttempt(attempt)
+	return attempt
 }
 
 func (worker *memWorker) ActiveAttempts() ([]coordinate.Attempt, error) {

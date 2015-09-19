@@ -45,12 +45,12 @@ type WorkSpecData struct {
 	// MaxRunning specifies the maximum number of work units that
 	// are allowed to be concurrently running, across all workers.
 	// If zero, there is no limit.
-	MaxRunning int
+	MaxRunning int `mapstructure:"max_running"`
 
 	// MaxGetwork specifies the maximum number of attempts that can
 	// be returned from a single call to Worker.RequestAttempts().
 	// If zero, there is no limit.
-	MaxGetwork int
+	MaxGetwork int `mapstructure:"max_getwork"`
 
 	// Then specifies the name of another work spec that runs
 	// after this one.  On successful completion, if Then is a
@@ -63,7 +63,7 @@ type WorkSpecData struct {
 	// unconditionally run work units in the Then work spec before
 	// this one.  Future versions of the scheduler may ignore this
 	// flag.  Defaults to true.
-	ThenPreempts bool
+	ThenPreempts bool `mapstructure:"then_preempts"`
 }
 
 // ExtractWorkSpecMeta fills in as much of a WorkSpecMeta object as
