@@ -247,7 +247,7 @@ func (jobs *JobServer) UpdateWorkUnit(
 				// finishes successfully, all at the same
 				// time.  In that case the successful
 				// finish should win.
-				attempt.Finish(nil)
+				err = attempt.Finish(nil)
 			default:
 				err = errors.New("update_work_unit cannot change failed unit")
 			}
