@@ -118,6 +118,15 @@ func SloppyString(obj interface{}) *string {
 	}
 }
 
+// DecodeBytesAsString is a mapstructure decode hook that accepts a
+// byte slice where a string is expected.
+func DecodeBytesAsString(from, to reflect.Type, data interface{}) (interface{}, error) {
+	if to.Kind() == reflect.String && from.Kind() == reflect.Slice && from.Elem().Kind() == reflect.Uint8 {
+		return string(data.([]uint8)), nil
+	}
+	return data, nil
+}
+
 // StringKeyedMap tries to convert an arbitrary object to a string-keyed
 // map.  If this fails (because obj isn't a map or because any of its keys
 // aren't strings) returns nil without further explanation.

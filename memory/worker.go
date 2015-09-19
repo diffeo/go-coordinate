@@ -84,6 +84,9 @@ func (worker *memWorker) RequestAttempts(req coordinate.AttemptRequest) ([]coord
 		if len(workSpec.available) == 0 {
 			continue
 		}
+		if workSpec.meta.Paused {
+			continue
+		}
 		workUnit := workSpec.available.Next()
 		start := time.Now()
 		duration := time.Duration(15) * time.Minute
@@ -162,10 +165,7 @@ func removeAttemptFromList(attempt *memAttempt, list []*memAttempt) []*memAttemp
 		return list
 	}
 	// Now make a new attempts list without that
-	newList := make([]*memAttempt, len(list)-1)
-	copy(newList[:attemptI], list[:attemptI])
-	copy(newList[attemptI:], list[attemptI+1:])
-	return newList
+	return append(list[:attemptI], list[attemptI+1:]...)
 }
 
 // completeAttempt removes an attempt from the active attempts list,

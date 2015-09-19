@@ -13,25 +13,25 @@ type GetWorkOptions struct {
 	// to needing not more than this min_gb; Python Coordinate
 	// ignores this constraint.  If zero, do not enforce this
 	// constraint.
-	AvailableGb float64
+	AvailableGb float64 `mapstructure:"available_gb"`
 
 	// LeaseTime specifies the number of seconds to complete the
 	// work.  If zero, use a default value of 5 minutes.  Cannot
 	// be less than 1 second or more than 1 day.
-	LeaseTime int
+	LeaseTime int `mapstructure:"lease_time"`
 
 	// MaxJobs indicates the number of jobs requested.  If zero,
 	// use 1 instead.  The response to GetWork() is different if
 	// this is 1 vs. a greater number.  Fewer jobs may be returned
 	// if fewer are available.  All returned work units belong to
 	// the same work spec.
-	MaxJobs int
+	MaxJobs int `mapstructure:"max_jobs"`
 
 	// WorkSpecNames gives a list of work specs to consider.  If
 	// not nil, no work specs not in this list will be considered.
 	// The list may be further filtered by resource constraints
 	// and work unit availability.
-	WorkSpecNames []string
+	WorkSpecNames []string `mapstructure:"work_spec_names"`
 }
 
 // GetWork requests one or more work units to perform.  The work unit
@@ -118,7 +118,7 @@ func getWorkTuple(attempt coordinate.Attempt) (cborrpc.PythonTuple, error) {
 type UpdateWorkUnitOptions struct {
 	// LeaseTime specifies the number of additional seconds required
 	// to complete the work unit.
-	LeaseTime int
+	LeaseTime int `mapstructure:"lease_time"`
 
 	// Status specifies the new status of the work unit.
 	// Depending on the current status of the work unit, this may
@@ -133,7 +133,7 @@ type UpdateWorkUnitOptions struct {
 	Data map[string]interface{}
 
 	// WorkerID identifies the worker making the request.
-	WorkerID string
+	WorkerID string `mapstructure:"worker_id"`
 }
 
 // UpdateWorkUnit causes some state change in a work unit.  If the

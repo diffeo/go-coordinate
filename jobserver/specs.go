@@ -149,7 +149,7 @@ type ControlWorkSpecOptions struct {
 	// MaxRunning specifies the maximum number of work units that
 	// can concurrently run for this work spec, across the entire
 	// system.
-	MaxRunning int
+	MaxRunning int `mapstructure:"max_running"`
 }
 
 // ControlWorkSpec makes changes to a work spec that are not directly

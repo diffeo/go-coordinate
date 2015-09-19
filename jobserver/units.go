@@ -106,7 +106,7 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 type GetWorkUnitsOptions struct {
 	// WorkUnitKeys contains a list of work unit keys to retrieve.
 	// If this option is supplied, all other options are ignored.
-	WorkUnitKeys []string
+	WorkUnitKeys []string `mapstructure:"work_unit_keys"`
 
 	// State provides a list of states to query on.  If this is
 	// provided then only work units in one of the specified states
@@ -161,7 +161,7 @@ func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]inte
 	var decoder *mapstructure.Decoder
 	if err == nil {
 		config := mapstructure.DecoderConfig{
-			DecodeHook: gwuStateHook,
+			DecodeHook: mapstructure.ComposeDecodeHookFunc(gwuStateHook, cborrpc.DecodeBytesAsString),
 			Result:     &gwuOptions,
 		}
 		decoder, err = mapstructure.NewDecoder(&config)
@@ -268,7 +268,7 @@ func (jobs *JobServer) GetWorkUnitStatus(workSpecName string, workUnitKeys []str
 type PrioritizeWorkUnitsOptions struct {
 	// WorkUnitKeys gives the names of the work units to reprioritize.
 	// If not present, does nothing.
-	WorkUnitKeys []string
+	WorkUnitKeys []string `mapstructure:"work_unit_keys"`
 
 	// Priority sets an absolute priority.  If a NaN value, make a
 	// change specified by Adjustment instead.
@@ -396,7 +396,7 @@ type DelWorkUnitsOptions struct {
 	// these specific work units are deleted; if State is also
 	// given, then each work unit must be in that state to be
 	// deleted.
-	WorkUnitKeys []string
+	WorkUnitKeys []string `mapstructure:"work_unit_keys"`
 
 	// State, if provided, is one of the external Coordinate work
 	// unit statuses, and all work units in this state are deleted.

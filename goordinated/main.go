@@ -30,6 +30,10 @@ func main() {
 
 	coordinate := backend.Coordinate()
 	namespace, err := coordinate.Namespace("")
+	cbor := new(codec.CborHandle)
+	if err == nil {
+		err = cborrpc.SetExts(cbor)
+	}
 	if err != nil {
 		panic(err)
 	}
@@ -46,7 +50,7 @@ func main() {
 			fmt.Printf("Could not accept connection: %v\n", err)
 			return
 		}
-		go handleConnection(conn, jobd)
+		go handleConnection(conn, jobd, cbor)
 	}
 }
 
@@ -60,13 +64,11 @@ func snakeToCamel(s string) string {
 	return strings.Join(words, "")
 }
 
-func handleConnection(conn net.Conn, jobd *jobserver.JobServer) {
+func handleConnection(conn net.Conn, jobd *jobserver.JobServer, cbor *codec.CborHandle) {
 	defer conn.Close()
 
 	jobdv := reflect.ValueOf(jobd)
 
-	cbor := new(codec.CborHandle)
-	cborrpc.SetExts(cbor)
 	reader := bufio.NewReader(conn)
 	decoder := codec.NewDecoder(reader, cbor)
 	writer := bufio.NewWriter(conn)
@@ -84,8 +86,16 @@ func handleConnection(conn net.Conn, jobd *jobserver.JobServer) {
 		fmt.Printf("Request: %v\n", request)
 		response := doRequest(jobdv, request)
 		fmt.Printf("Response: %v\n", response)
-		encoder.Encode(response)
-		writer.Flush()
+		err = encoder.Encode(response)
+		if err != nil {
+			fmt.Printf("Error encoding response: %v\n", err)
+			return
+		}
+		err = writer.Flush()
+		if err != nil {
+			fmt.Printf("Error writing response: %v\n", err)
+			return
+		}
 	}
 }
 
