@@ -158,6 +158,9 @@ func (x pythonTupleExt) ReadExt(v interface{}, data []byte) {
 }
 
 func (x pythonTupleExt) ConvertExt(v interface{}) interface{} {
+	if ptuple, ok := v.(*PythonTuple); ok {
+		return ptuple.Items
+	}
 	tuple := v.(PythonTuple)
 	return tuple.Items
 }
@@ -170,18 +173,25 @@ func (x pythonTupleExt) UpdateExt(dest interface{}, v interface{}) {
 
 // SetExts sets up the CBOR codec to understand the other objects in
 // this package.
-func SetExts(cbor *codec.CborHandle) {
+func SetExts(cbor *codec.CborHandle) error {
 	reqExt := new(reqExt)
 	reqExt.cbor = cbor
 	var req Request
-	cbor.SetExt(reflect.TypeOf(req), 24, reqExt)
+	if err := cbor.SetExt(reflect.TypeOf(req), 24, reqExt); err != nil {
+		return err
+	}
 
 	respExt := new(respExt)
 	respExt.cbor = cbor
 	var resp Response
-	cbor.SetExt(reflect.TypeOf(resp), 24, respExt)
+	if err := cbor.SetExt(reflect.TypeOf(resp), 24, respExt); err != nil {
+		return err
+	}
 
 	tupleExt := pythonTupleExt{cbor}
 	var tuple PythonTuple
-	cbor.SetExt(reflect.TypeOf(tuple), 128, &tupleExt)
+	if err := cbor.SetExt(reflect.TypeOf(tuple), 128, &tupleExt); err != nil {
+		return err
+	}
+	return nil
 }
