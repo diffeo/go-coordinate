@@ -38,11 +38,17 @@ func CreateParamList(funcv reflect.Value, params []interface{}) ([]reflect.Value
 //   map, then all keys in the map are checked to be string or []byte or
 //   not, and converted to string if possible.
 func FixUpType(expected reflect.Type, actual reflect.Value) (reflect.Value, error) {
+	if !actual.IsValid() {
+		return actual, nil
+	}
 	actualT := actual.Type()
 	// In practice we are probably getting passed an interface{},
 	// deal with the concrete value underneath it
 	if actualT.Kind() == reflect.Interface {
 		actual = actual.Elem()
+		if !actual.IsValid() {
+			return actual, nil
+		}
 		actualT = actual.Type()
 	}
 	if actualT == expected {
