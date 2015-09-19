@@ -10,8 +10,10 @@
 // correctness, not performance or scalability.
 package memory
 
-import "sync"
-import "github.com/dmaze/goordinate/coordinate"
+import (
+	"github.com/dmaze/goordinate/coordinate"
+	"sync"
+)
 
 // This is the only external entry point to this package:
 
@@ -19,19 +21,19 @@ import "github.com/dmaze/goordinate/coordinate"
 // memory.
 func New() coordinate.Coordinate {
 	c := new(memCoordinate)
-	c.namespaces = make(map[string]*memNamespace)
+	c.namespaces = make(map[string]*namespace)
 	return c
 }
 
 // coordinable is a common interface for objects that need to take the
 // global lock on the Coordinate state.
 type coordinable interface {
-	// Coordinate returns a pointer to the memCoordinate object
+	// Coordinate returns a pointer to the coordinate object
 	// at the root of this object tree.
 	Coordinate() *memCoordinate
 }
 
-// globalLock locks the memCoordinate object at the root of the object
+// globalLock locks the coordinate object at the root of the object
 // tree.  Pair this with globalUnlock, as
 //
 //     globalLock(self)
@@ -40,7 +42,7 @@ func globalLock(c coordinable) {
 	c.Coordinate().sem.Lock()
 }
 
-// globalUnlock unlocks the memCoordinate object at the root of the
+// globalUnlock unlocks the coordinate object at the root of the
 // object tree.
 func globalUnlock(c coordinable) {
 	c.Coordinate().sem.Unlock()
@@ -49,7 +51,7 @@ func globalUnlock(c coordinable) {
 // Coordinate wrapper type:
 
 type memCoordinate struct {
-	namespaces map[string]*memNamespace
+	namespaces map[string]*namespace
 	sem        sync.Mutex
 }
 

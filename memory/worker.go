@@ -1,35 +1,37 @@
 package memory
 
-import "github.com/dmaze/goordinate/coordinate"
-import "time"
-import "fmt"
+import (
+	"fmt"
+	"github.com/dmaze/goordinate/coordinate"
+	"time"
+)
 
-type memWorker struct {
+type worker struct {
 	name           string
-	parent         *memWorker
-	children       []*memWorker
-	activeAttempts []*memAttempt
-	attempts       []*memAttempt
-	namespace      *memNamespace
+	parent         *worker
+	children       []*worker
+	activeAttempts []*attempt
+	attempts       []*attempt
+	namespace      *namespace
 }
 
-func newWorker(namespace *memNamespace, name string) *memWorker {
-	return &memWorker{
+func newWorker(namespace *namespace, name string) *worker {
+	return &worker{
 		name:           name,
-		children:       make([]*memWorker, 0),
-		activeAttempts: make([]*memAttempt, 0),
-		attempts:       make([]*memAttempt, 0),
+		children:       make([]*worker, 0),
+		activeAttempts: make([]*attempt, 0),
+		attempts:       make([]*attempt, 0),
 		namespace:      namespace,
 	}
 }
 
 // coordinate.Worker interface:
 
-func (worker *memWorker) Name() string {
+func (worker *worker) Name() string {
 	return worker.name
 }
 
-func (worker *memWorker) Parent() (coordinate.Worker, error) {
+func (worker *worker) Parent() (coordinate.Worker, error) {
 	globalLock(worker)
 	defer globalUnlock(worker)
 
@@ -39,7 +41,7 @@ func (worker *memWorker) Parent() (coordinate.Worker, error) {
 	return worker.parent, nil
 }
 
-func (worker *memWorker) Children() ([]coordinate.Worker, error) {
+func (worker *worker) Children() ([]coordinate.Worker, error) {
 	globalLock(worker)
 	defer globalUnlock(worker)
 
@@ -50,7 +52,7 @@ func (worker *memWorker) Children() ([]coordinate.Worker, error) {
 	return result, nil
 }
 
-func (worker *memWorker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
+func (worker *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
 	// This is a stub implementation that returns the first work
 	// unit from the first work spec we can find that has any work
 	// units at all.  There are some interesting variations, like
@@ -114,7 +116,7 @@ func (worker *memWorker) RequestAttempts(req coordinate.AttemptRequest) ([]coord
 // sets that attempt as the active attempt for the work unit, adds
 // the attempt to the worker's active and history attempts list, and
 // returns it.  If there is no work to be had, returns nil.
-func (worker *memWorker) getWork() *memAttempt {
+func (worker *worker) getWork() *attempt {
 	for _, workSpec := range worker.namespace.workSpecs {
 		attempt := worker.getWorkFromSpec(workSpec)
 		if attempt != nil {
@@ -124,7 +126,7 @@ func (worker *memWorker) getWork() *memAttempt {
 	return nil
 }
 
-func (worker *memWorker) getWorkFromSpec(workSpec *memWorkSpec) *memAttempt {
+func (worker *worker) getWorkFromSpec(workSpec *workSpec) *attempt {
 	// TODO(dmaze): Something, probably this, should also check
 	// workSpec.meta.MaxRunning
 	if len(workSpec.available) == 0 ||
@@ -134,7 +136,7 @@ func (worker *memWorker) getWorkFromSpec(workSpec *memWorkSpec) *memAttempt {
 	workUnit := workSpec.available.Next()
 	start := time.Now()
 	duration := time.Duration(15) * time.Minute
-	attempt := &memAttempt{
+	attempt := &attempt{
 		workUnit:       workUnit,
 		worker:         worker,
 		status:         coordinate.Pending,
@@ -148,7 +150,7 @@ func (worker *memWorker) getWorkFromSpec(workSpec *memWorkSpec) *memAttempt {
 	return attempt
 }
 
-func (worker *memWorker) ActiveAttempts() ([]coordinate.Attempt, error) {
+func (worker *worker) ActiveAttempts() ([]coordinate.Attempt, error) {
 	globalLock(worker)
 	defer globalUnlock(worker)
 
@@ -159,7 +161,7 @@ func (worker *memWorker) ActiveAttempts() ([]coordinate.Attempt, error) {
 	return result, nil
 }
 
-func (worker *memWorker) AllAttempts() ([]coordinate.Attempt, error) {
+func (worker *worker) AllAttempts() ([]coordinate.Attempt, error) {
 	globalLock(worker)
 	defer globalUnlock(worker)
 
@@ -170,7 +172,7 @@ func (worker *memWorker) AllAttempts() ([]coordinate.Attempt, error) {
 	return result, nil
 }
 
-func (worker *memWorker) ChildAttempts() (result []coordinate.Attempt, err error) {
+func (worker *worker) ChildAttempts() (result []coordinate.Attempt, err error) {
 	globalLock(worker)
 	defer globalUnlock(worker)
 
@@ -185,7 +187,7 @@ func (worker *memWorker) ChildAttempts() (result []coordinate.Attempt, err error
 // addAttempt adds an attempt to both the active and historic attempts
 // list.  Does not check for duplicates.  Assumes the global lock.
 // Never fails.
-func (worker *memWorker) addAttempt(attempt *memAttempt) {
+func (worker *worker) addAttempt(attempt *attempt) {
 	worker.attempts = append(worker.attempts, attempt)
 	worker.activeAttempts = append(worker.activeAttempts, attempt)
 }
@@ -193,7 +195,7 @@ func (worker *memWorker) addAttempt(attempt *memAttempt) {
 // removeAttemptFromList removes an attempt from a list of attempts,
 // and returns a new attempt slice without that (or, if it is not there,
 // the same attempt slice).
-func removeAttemptFromList(attempt *memAttempt, list []*memAttempt) []*memAttempt {
+func removeAttemptFromList(attempt *attempt, list []*attempt) []*attempt {
 	// Find the attempt in the active attempts list
 	attemptI := -1
 	for i, active := range list {
@@ -212,18 +214,18 @@ func removeAttemptFromList(attempt *memAttempt, list []*memAttempt) []*memAttemp
 
 // completeAttempt removes an attempt from the active attempts list,
 // if it is there.  Assumes the global lock.  Never fails.
-func (worker *memWorker) completeAttempt(attempt *memAttempt) {
+func (worker *worker) completeAttempt(attempt *attempt) {
 	worker.activeAttempts = removeAttemptFromList(attempt, worker.activeAttempts)
 }
 
 // removeAttempt removes an attempt from the history attempts list,
 // if it is there.  Assumes the global lock.  Never fails.
-func (worker memWorker) removeAttempt(attempt *memAttempt) {
+func (worker worker) removeAttempt(attempt *attempt) {
 	worker.attempts = removeAttemptFromList(attempt, worker.attempts)
 }
 
 // memory.coordinable interface:
 
-func (worker *memWorker) Coordinate() *memCoordinate {
+func (worker *worker) Coordinate() *memCoordinate {
 	return worker.namespace.coordinate
 }

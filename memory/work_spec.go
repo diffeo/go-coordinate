@@ -1,38 +1,40 @@
 package memory
 
-import "github.com/dmaze/goordinate/coordinate"
-import "sort"
+import (
+	"github.com/dmaze/goordinate/coordinate"
+	"sort"
+)
 
-type memWorkSpec struct {
+type workSpec struct {
 	name      string
-	namespace *memNamespace
+	namespace *namespace
 	data      map[string]interface{}
 	meta      coordinate.WorkSpecMeta
-	workUnits map[string]*memWorkUnit
+	workUnits map[string]*workUnit
 	available availableUnits
 }
 
-func newWorkSpec(namespace *memNamespace, name string) *memWorkSpec {
-	return &memWorkSpec{
+func newWorkSpec(namespace *namespace, name string) *workSpec {
+	return &workSpec{
 		name:      name,
 		namespace: namespace,
 		data:      make(map[string]interface{}),
-		workUnits: make(map[string]*memWorkUnit),
+		workUnits: make(map[string]*workUnit),
 	}
 }
 
-func (spec *memWorkSpec) Name() string {
+func (spec *workSpec) Name() string {
 	return spec.name
 }
 
-func (spec *memWorkSpec) Data() (map[string]interface{}, error) {
+func (spec *workSpec) Data() (map[string]interface{}, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
 	return spec.data, nil
 }
 
-func (spec *memWorkSpec) SetData(data map[string]interface{}) error {
+func (spec *workSpec) SetData(data map[string]interface{}) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
@@ -41,7 +43,7 @@ func (spec *memWorkSpec) SetData(data map[string]interface{}) error {
 
 // setData is an internal version of SetData() with the same constraints,
 // guarantees, and checking.  It assumes the global lock.
-func (spec *memWorkSpec) setData(data map[string]interface{}) error {
+func (spec *workSpec) setData(data map[string]interface{}) error {
 	name, meta, err := coordinate.ExtractWorkSpecMeta(data)
 	if err == nil {
 		if name != spec.name {
@@ -55,7 +57,7 @@ func (spec *memWorkSpec) setData(data map[string]interface{}) error {
 	return err
 }
 
-func (spec *memWorkSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
+func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
@@ -63,7 +65,7 @@ func (spec *memWorkSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) 
 	return spec.meta, nil
 }
 
-func (spec *memWorkSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
+func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
@@ -76,11 +78,11 @@ func (spec *memWorkSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	return nil
 }
 
-func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
+func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
-	unit := new(memWorkUnit)
+	unit := new(workUnit)
 	unit.name = name
 	unit.data = data
 	unit.priority = priority
@@ -90,7 +92,7 @@ func (spec *memWorkSpec) AddWorkUnit(name string, data map[string]interface{}, p
 	return unit, nil
 }
 
-func (spec *memWorkSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
+func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 	workUnit := spec.workUnits[name]
@@ -103,7 +105,7 @@ func (spec *memWorkSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 // queryWithoutLimit calls a callback function for every work unit that
 // a coordinate.WorkUnitQuery selects, ignoring the limit field (which
 // requires sorting).
-func (spec *memWorkSpec) queryWithoutLimit(query coordinate.WorkUnitQuery, f func(*memWorkUnit)) {
+func (spec *workSpec) queryWithoutLimit(query coordinate.WorkUnitQuery, f func(*workUnit)) {
 	// Clarity over efficiency: iterate through *all* of the work
 	// units and keep the ones that match the query.  If Limit is
 	// specified then sort the result after the fact.
@@ -144,7 +146,7 @@ func (spec *memWorkSpec) queryWithoutLimit(query coordinate.WorkUnitQuery, f fun
 
 // query calls a callback function for every work unit that a
 // coordinate.WorkUnitQuery selects, in sorted order if limit is specified.
-func (spec *memWorkSpec) query(query coordinate.WorkUnitQuery, f func(*memWorkUnit)) {
+func (spec *workSpec) query(query coordinate.WorkUnitQuery, f func(*workUnit)) {
 	// No limit?  We know how to do that
 	if query.Limit <= 0 {
 		spec.queryWithoutLimit(query, f)
@@ -152,7 +154,7 @@ func (spec *memWorkSpec) query(query coordinate.WorkUnitQuery, f func(*memWorkUn
 	}
 	// Otherwise there *is* a limit.  Collect the interesting keys:
 	var names []string
-	spec.queryWithoutLimit(query, func(unit *memWorkUnit) {
+	spec.queryWithoutLimit(query, func(unit *workUnit) {
 		names = append(names, unit.name)
 	})
 	// Sort them:
@@ -167,43 +169,43 @@ func (spec *memWorkSpec) query(query coordinate.WorkUnitQuery, f func(*memWorkUn
 	}
 }
 
-func (spec *memWorkSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[string]coordinate.WorkUnit, err error) {
+func (spec *workSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[string]coordinate.WorkUnit, err error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
 	result = make(map[string]coordinate.WorkUnit)
-	spec.query(query, func(unit *memWorkUnit) {
+	spec.query(query, func(unit *workUnit) {
 		result[unit.name] = unit
 	})
 	return
 }
 
-func (spec *memWorkSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
+func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
-	spec.query(query, func(unit *memWorkUnit) {
+	spec.query(query, func(unit *workUnit) {
 		unit.priority = priority
 	})
 	return nil
 }
 
-func (spec *memWorkSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, adjustment float64) error {
+func (spec *workSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, adjustment float64) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
-	spec.query(query, func(unit *memWorkUnit) {
+	spec.query(query, func(unit *workUnit) {
 		unit.priority += adjustment
 	})
 	return nil
 }
 
-func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, error) {
+func (spec *workSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 	// NB: This depends somewhat on Go having good behavior if we
 	// modify the keys of the map of work units while iterating
 	// through it.
 	count := 0
-	deleteWorkUnit := func(workUnit *memWorkUnit) {
+	deleteWorkUnit := func(workUnit *workUnit) {
 		for _, attempt := range workUnit.attempts {
 			attempt.worker.completeAttempt(attempt)
 			attempt.worker.removeAttempt(attempt)
@@ -212,11 +214,11 @@ func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, e
 		spec.available.Remove(workUnit)
 		count++
 	}
-	
+
 	spec.query(query, deleteWorkUnit)
 	return count, nil
 }
 
-func (spec *memWorkSpec) Coordinate() *memCoordinate {
+func (spec *workSpec) Coordinate() *memCoordinate {
 	return spec.namespace.coordinate
 }

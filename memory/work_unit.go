@@ -1,38 +1,40 @@
 package memory
 
-import "github.com/dmaze/goordinate/coordinate"
+import (
+	"github.com/dmaze/goordinate/coordinate"
+)
 
-type memWorkUnit struct {
+type workUnit struct {
 	name           string
 	data           map[string]interface{}
 	priority       float64
-	activeAttempt  *memAttempt
-	attempts       []*memAttempt
-	workSpec       *memWorkSpec
+	activeAttempt  *attempt
+	attempts       []*attempt
+	workSpec       *workSpec
 	availableIndex int
 }
 
 // coordinate.WorkUnit interface:
 
-func (unit *memWorkUnit) Name() string {
+func (unit *workUnit) Name() string {
 	return unit.name
 }
 
-func (unit *memWorkUnit) Data() (map[string]interface{}, error) {
+func (unit *workUnit) Data() (map[string]interface{}, error) {
 	return unit.data, nil
 }
 
-func (unit *memWorkUnit) WorkSpec() coordinate.WorkSpec {
+func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 	return unit.workSpec
 }
 
-func (unit *memWorkUnit) Status() (coordinate.WorkUnitStatus, error) {
+func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
 	return unit.status(), nil
 }
 
-func (unit *memWorkUnit) status() coordinate.WorkUnitStatus {
+func (unit *workUnit) status() coordinate.WorkUnitStatus {
 	if unit.activeAttempt == nil {
 		return coordinate.AvailableUnit
 	}
@@ -52,13 +54,13 @@ func (unit *memWorkUnit) status() coordinate.WorkUnitStatus {
 	}
 }
 
-func (unit *memWorkUnit) Priority() (float64, error) {
+func (unit *workUnit) Priority() (float64, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
 	return unit.priority, nil
 }
 
-func (unit *memWorkUnit) SetPriority(priority float64) error {
+func (unit *workUnit) SetPriority(priority float64) error {
 	globalLock(unit)
 	defer globalUnlock(unit)
 	unit.priority = priority
@@ -66,7 +68,7 @@ func (unit *memWorkUnit) SetPriority(priority float64) error {
 	return nil
 }
 
-func (unit *memWorkUnit) ActiveAttempt() (coordinate.Attempt, error) {
+func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
 	// Since this returns an interface type, if we just return
@@ -81,21 +83,21 @@ func (unit *memWorkUnit) ActiveAttempt() (coordinate.Attempt, error) {
 
 // resetAttempt clears the active attempt for a unit and returns it
 // to its work spec's available list.  Assumes the global lock.
-func (unit *memWorkUnit) resetAttempt() {
+func (unit *workUnit) resetAttempt() {
 	if unit.activeAttempt != nil {
 		unit.activeAttempt = nil
 		unit.workSpec.available.Add(unit)
 	}
 }
 
-func (unit *memWorkUnit) ClearActiveAttempt() error {
+func (unit *workUnit) ClearActiveAttempt() error {
 	globalLock(unit)
 	defer globalUnlock(unit)
 	unit.resetAttempt()
 	return nil
 }
 
-func (unit *memWorkUnit) Attempts() ([]coordinate.Attempt, error) {
+func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
 
@@ -108,6 +110,6 @@ func (unit *memWorkUnit) Attempts() ([]coordinate.Attempt, error) {
 
 // memory.coordinable interface:
 
-func (unit *memWorkUnit) Coordinate() *memCoordinate {
+func (unit *workUnit) Coordinate() *memCoordinate {
 	return unit.workSpec.namespace.coordinate
 }

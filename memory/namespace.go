@@ -1,38 +1,41 @@
 package memory
 
-import "github.com/dmaze/goordinate/coordinate"
+import (
+	"github.com/dmaze/goordinate/coordinate"
+)
 
-// memNamespace is a container type for a coordinate.Namespace.
-type memNamespace struct {
+// namespace is a container type for a coordinate.Namespace.
+type namespace struct {
 	name       string
 	coordinate *memCoordinate
-	workSpecs  map[string]*memWorkSpec
-	workers    map[string]*memWorker
+	workSpecs  map[string]*workSpec
+	workers    map[string]*worker
 }
 
-func newNamespace(coordinate *memCoordinate, name string) *memNamespace {
-	return &memNamespace {
-		name: name,
+func newNamespace(coordinate *memCoordinate, name string) *namespace {
+	return &namespace{
+		name:       name,
 		coordinate: coordinate,
-		workSpecs: make(map[string]*memWorkSpec),
-		workers: make(map[string]*memWorker),
+		workSpecs:  make(map[string]*workSpec),
+		workers:    make(map[string]*worker),
 	}
 }
 
 // coordinate.Namespace interface:
 
-func (ns *memNamespace) Name() string {
+func (ns *namespace) Name() string {
 	return ns.name
 }
 
-func (ns *memNamespace) Destroy() error {
-	globalLock(ns); defer globalUnlock(ns)
+func (ns *namespace) Destroy() error {
+	globalLock(ns)
+	defer globalUnlock(ns)
 
 	delete(ns.coordinate.namespaces, ns.name)
 	return nil
 }
 
-func (ns *memNamespace) SetWorkSpec(workSpec map[string]interface{}) (coordinate.WorkSpec, error) {
+func (ns *namespace) SetWorkSpec(workSpec map[string]interface{}) (coordinate.WorkSpec, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
@@ -56,7 +59,7 @@ func (ns *memNamespace) SetWorkSpec(workSpec map[string]interface{}) (coordinate
 	return spec, nil
 }
 
-func (ns *memNamespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
+func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
@@ -67,7 +70,7 @@ func (ns *memNamespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 	return workSpec, nil
 }
 
-func (ns *memNamespace) DestroyWorkSpec(name string) error {
+func (ns *namespace) DestroyWorkSpec(name string) error {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
@@ -79,7 +82,7 @@ func (ns *memNamespace) DestroyWorkSpec(name string) error {
 	return coordinate.ErrNoSuchWorkSpec{Name: name}
 }
 
-func (ns *memNamespace) WorkSpecNames() ([]string, error) {
+func (ns *namespace) WorkSpecNames() ([]string, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
@@ -90,7 +93,7 @@ func (ns *memNamespace) WorkSpecNames() ([]string, error) {
 	return result, nil
 }
 
-func (ns *memNamespace) Worker(name string) (coordinate.Worker, error) {
+func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
 
@@ -104,6 +107,6 @@ func (ns *memNamespace) Worker(name string) (coordinate.Worker, error) {
 
 // memory.coordinable interface:
 
-func (ns *memNamespace) Coordinate() *memCoordinate {
+func (ns *namespace) Coordinate() *memCoordinate {
 	return ns.coordinate
 }

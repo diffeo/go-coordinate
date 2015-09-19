@@ -1,13 +1,15 @@
 package memory
 
-import "github.com/dmaze/goordinate/coordinate"
-import "time"
+import (
+	"github.com/dmaze/goordinate/coordinate"
+	"time"
+)
 
 // Attempt type:
 
-type memAttempt struct {
-	workUnit       *memWorkUnit
-	worker         *memWorker
+type attempt struct {
+	workUnit       *workUnit
+	worker         *worker
 	status         coordinate.AttemptStatus
 	data           map[string]interface{}
 	startTime      time.Time
@@ -15,39 +17,39 @@ type memAttempt struct {
 	expirationTime time.Time
 }
 
-func (attempt *memAttempt) WorkUnit() coordinate.WorkUnit {
+func (attempt *attempt) WorkUnit() coordinate.WorkUnit {
 	return attempt.workUnit
 }
 
-func (attempt *memAttempt) Worker() coordinate.Worker {
+func (attempt *attempt) Worker() coordinate.Worker {
 	return attempt.worker
 }
 
-func (attempt *memAttempt) Status() (coordinate.AttemptStatus, error) {
+func (attempt *attempt) Status() (coordinate.AttemptStatus, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	return attempt.status, nil
 }
 
-func (attempt *memAttempt) Data() (map[string]interface{}, error) {
+func (attempt *attempt) Data() (map[string]interface{}, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	return attempt.data, nil
 }
 
-func (attempt *memAttempt) StartTime() (time.Time, error) {
+func (attempt *attempt) StartTime() (time.Time, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	return attempt.startTime, nil
 }
 
-func (attempt *memAttempt) EndTime() (time.Time, error) {
+func (attempt *attempt) EndTime() (time.Time, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	return attempt.endTime, nil
 }
 
-func (attempt *memAttempt) ExpirationTime() (time.Time, error) {
+func (attempt *attempt) ExpirationTime() (time.Time, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	return attempt.expirationTime, nil
@@ -56,7 +58,7 @@ func (attempt *memAttempt) ExpirationTime() (time.Time, error) {
 // isPending checks to see whether an attempt is in "pending" state.
 // This counts if the attempt is nominally expired but is still the
 // active attempt its work unit.
-func (attempt *memAttempt) isPending() bool {
+func (attempt *attempt) isPending() bool {
 	return (attempt.status == coordinate.Pending) ||
 		((attempt.status == coordinate.Expired) &&
 			(attempt.workUnit.activeAttempt == attempt))
@@ -65,7 +67,7 @@ func (attempt *memAttempt) isPending() bool {
 // finish marks an attempt as finished in some form.  It updates the
 // completion time, status, and data, and removes itself as the active
 // work unit where possible.  Assumes the global lock.
-func (attempt *memAttempt) finish(status coordinate.AttemptStatus, data map[string]interface{}) {
+func (attempt *attempt) finish(status coordinate.AttemptStatus, data map[string]interface{}) {
 	attempt.endTime = time.Now()
 	attempt.status = status
 	if data != nil {
@@ -77,7 +79,7 @@ func (attempt *memAttempt) finish(status coordinate.AttemptStatus, data map[stri
 	}
 }
 
-func (attempt *memAttempt) Renew(extendDuration time.Duration, data map[string]interface{}) error {
+func (attempt *attempt) Renew(extendDuration time.Duration, data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 
@@ -100,7 +102,7 @@ func (attempt *memAttempt) Renew(extendDuration time.Duration, data map[string]i
 	return nil
 }
 
-func (attempt *memAttempt) Expire(data map[string]interface{}) error {
+func (attempt *attempt) Expire(data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 
@@ -115,7 +117,7 @@ func (attempt *memAttempt) Expire(data map[string]interface{}) error {
 	return nil
 }
 
-func (attempt *memAttempt) Finish(data map[string]interface{}) error {
+func (attempt *attempt) Finish(data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	if !attempt.isPending() {
@@ -125,7 +127,7 @@ func (attempt *memAttempt) Finish(data map[string]interface{}) error {
 	return nil
 }
 
-func (attempt *memAttempt) Fail(data map[string]interface{}) error {
+func (attempt *attempt) Fail(data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	if !attempt.isPending() {
@@ -135,7 +137,7 @@ func (attempt *memAttempt) Fail(data map[string]interface{}) error {
 	return nil
 }
 
-func (attempt *memAttempt) Retry(data map[string]interface{}) error {
+func (attempt *attempt) Retry(data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	if !attempt.isPending() {
@@ -145,6 +147,6 @@ func (attempt *memAttempt) Retry(data map[string]interface{}) error {
 	return nil
 }
 
-func (attempt *memAttempt) Coordinate() *memCoordinate {
+func (attempt *attempt) Coordinate() *memCoordinate {
 	return attempt.workUnit.workSpec.namespace.coordinate
 }
