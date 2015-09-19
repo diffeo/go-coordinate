@@ -315,7 +315,9 @@ type WorkSpec interface {
 	// terminate its worker, but the corresponding attempt will no
 	// longer appear in either the worker's attempt list or its
 	// active attempt list.
-	DeleteWorkUnits(WorkUnitQuery) error
+	//
+	// On success, returns the number of work units actually deleted.
+	DeleteWorkUnits(WorkUnitQuery) (int, error)
 }
 
 // A WorkUnit is a single job to perform.  It is associated with a

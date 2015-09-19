@@ -196,26 +196,25 @@ func (spec *memWorkSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery
 	return nil
 }
 
-// deleteWorkUnit does the heavy lifting to delete a work unit.  In
-// particular, it deletes the work unit's attempts from the
-// corresponding worker objects.  It assumes the global lock.
-func (spec *memWorkSpec) deleteWorkUnit(workUnit *memWorkUnit) {
-	for _, attempt := range workUnit.attempts {
-		attempt.worker.completeAttempt(attempt)
-		attempt.worker.removeAttempt(attempt)
-	}
-	delete(spec.workUnits, workUnit.name)
-	spec.available.Remove(workUnit)
-}
-
-func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) error {
+func (spec *memWorkSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 	// NB: This depends somewhat on Go having good behavior if we
 	// modify the keys of the map of work units while iterating
 	// through it.
-	spec.query(query, spec.deleteWorkUnit)
-	return nil
+	count := 0
+	deleteWorkUnit := func(workUnit *memWorkUnit) {
+		for _, attempt := range workUnit.attempts {
+			attempt.worker.completeAttempt(attempt)
+			attempt.worker.removeAttempt(attempt)
+		}
+		delete(spec.workUnits, workUnit.name)
+		spec.available.Remove(workUnit)
+		count++
+	}
+	
+	spec.query(query, deleteWorkUnit)
+	return count, nil
 }
 
 func (spec *memWorkSpec) Coordinate() *memCoordinate {

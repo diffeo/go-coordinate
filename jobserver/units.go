@@ -284,12 +284,12 @@ type PrioritizeWorkUnitsOptions struct {
 // higher priority results in the work units being scheduled sooner.
 func (jobs *JobServer) PrioritizeWorkUnits(workSpecName string, options map[string]interface{}) (bool, string, error) {
 	var (
-		err error
-		query coordinate.WorkUnitQuery
+		err      error
+		query    coordinate.WorkUnitQuery
 		workSpec coordinate.WorkSpec
 	)
 	pwuOptions := PrioritizeWorkUnitsOptions{
-		Priority: math.NaN(),
+		Priority:   math.NaN(),
 		Adjustment: math.NaN(),
 	}
 	workSpec, err = jobs.Namespace.WorkSpec(workSpecName)
@@ -327,7 +327,7 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 	for {
 		workUnits, err = workSpec.WorkUnits(coordinate.WorkUnitQuery{
 			PreviousName: prev,
-			Limit: 1000,
+			Limit:        1000,
 		})
 		if err != nil {
 			return nil, "", err
@@ -410,8 +410,11 @@ type DelWorkUnitsOptions struct {
 // number of work units deleted.
 func (jobs *JobServer) DelWorkUnits(workSpecName string, options map[string]interface{}) (int, string, error) {
 	workSpec, err := jobs.Namespace.WorkSpec(workSpecName)
-	var dwuOptions DelWorkUnitsOptions
-	var status coordinate.WorkUnitStatus
+	var (
+		count      int
+		dwuOptions DelWorkUnitsOptions
+		status     coordinate.WorkUnitStatus
+	)
 	if err == nil {
 		err = decode(&dwuOptions, options)
 	}
@@ -427,9 +430,9 @@ func (jobs *JobServer) DelWorkUnits(workSpecName string, options map[string]inte
 				query.Statuses = []coordinate.WorkUnitStatus{status}
 			}
 		}
-		err = workSpec.DeleteWorkUnits(query)
+		count, err = workSpec.DeleteWorkUnits(query)
 	}
-	return 0, "", err
+	return count, "", err
 }
 
 // Archive causes the system to clean up completed work units.  The
