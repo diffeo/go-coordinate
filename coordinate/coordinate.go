@@ -77,6 +77,21 @@ type Namespace interface {
 	// client-provided name.  If no Worker exists yet with the
 	// requested name, returns a new one with no parent.
 	Worker(name string) (Worker, error)
+
+	// Workers retrieves a complete map of worker IDs to worker
+	// objects, including parent, child, active, and inactive workers.
+	//
+	// TODO(dmaze): This interface is likely to change.  The
+	// Python coordinate worker system generates about one worker
+	// per 10 CPU-seconds (8640 per CPU-day, over a quarter
+	// million per day for a 32-core box).  The object hierarchy
+	// here requires keeping every worker object that is
+	// associated with an attempt.  The most obvious change is to
+	// add calls returning active (root) workers and summary
+	// statistics, but not have a single "fetch everything" call
+	// like this.  Another fairly obvious change is to add
+	// (start,limit) windowing like elsewhere.
+	Workers() (map[string]Worker, error)
 }
 
 // WorkSpecMeta defines control data for a work spec.  This information
@@ -87,7 +102,7 @@ type WorkSpecMeta struct {
 	// work spec will always run before that other one.  Default
 	// priority is the "priority" field in the work spec data, or 0.
 	Priority int
-	
+
 	// Weight specifies the relative weight of this work spec: if
 	// this work spec's priority is twice another one's, then the
 	// scheduler will try to arrange for twice as many work units
@@ -175,7 +190,7 @@ type WorkSpecMeta struct {
 	// value of the "then_preempts" flag in the work spec data, or
 	// true.
 	NextWorkSpecPreempts bool
-	
+
 	// PendingCount indicates the number of work units in this
 	// work spec that are currently have an active attempt that is
 	// in "pending" state, meaning there is a worker performing
@@ -282,7 +297,7 @@ type WorkSpec interface {
 	// SetMeta sets the WorkSpecMeta options for this work spec.
 	// The WorkSpecMeta.PendingCount field is ignored.
 	SetMeta(WorkSpecMeta) error
-	
+
 	// AddWorkUnit adds a single work unit to this work spec.  If
 	// a work unit already exists with the specified name, it is
 	// overridden.
@@ -305,7 +320,7 @@ type WorkSpec interface {
 	// AdjustWorkUnitPriorities adds a given amount to the
 	// priorities of multiple work units.
 	AdjustWorkUnitPriorities(WorkUnitQuery, float64) error
-	
+
 	// DeleteWorkUnits deletes work units selected by a query.  If
 	// a zero WorkUnitQuery is passed, this deletes all work units
 	// in this work spec.  Deleting a work unit also deletes all
@@ -344,7 +359,7 @@ type WorkUnit interface {
 	// SetPriority changes the priority score for this work unit.
 	// Higher priority executes sooner.
 	SetPriority(float64) error
-	
+
 	// ActiveAttempt returns the current Attempt for this work
 	// unit, if any.  If the work unit is completed, either
 	// successfully or unsuccessfully, this is the Attempt that
@@ -399,6 +414,11 @@ type AttemptRequest struct {
 // typically none if it is only a parent, exactly one if it runs work
 // units serially, or multiple if it requests multiple work units in one
 // shot or can actively run work units in parallel.
+//
+// In addition to their name, Worker objects track a worker-provided
+// "environment" dictionary.  They may be considered active or inactive,
+// and have an expiration time after which they will become inactive.
+// Workers have a worker-provided mode, with no semantics assigned to it.
 type Worker interface {
 	// Name returns the worker-chosen name of the worker.
 	Name() string
@@ -408,8 +428,41 @@ type Worker interface {
 	// an error.
 	Parent() (Worker, error)
 
+	// SetParent changes (or assigns) the parent of this worker.
+	// If a nil worker is passed, clear the parent.  This similarly
+	// changes whether this worker is returned from the old and new
+	// parents' Children() calls.
+	SetParent(Worker) error
+
 	// Children returns the children of this worker, if any.
 	Children() ([]Worker, error)
+
+	// Active determines whether or not this worker is currently
+	// active.
+	Active() (bool, error)
+
+	// Deactivate immediately sets this worker to inactive.
+	Deactivate() error
+
+	// Mode gets the mode reported in the last call to Update().
+	Mode() (int, error)
+
+	// Data gets the data dictionary passed to the last call to
+	// Update().
+	Data() (map[string]interface{}, error)
+
+	// Expiration gets the expiration time from the last call to
+	// Update().
+	Expiration() (time.Time, error)
+
+	// LastUpdate gets the current time at the last call to Update().
+	LastUpdate() (time.Time, error)
+
+	// Update refreshes this worker's data.  The worker is set to
+	// active.  The data, current and expiration times, and modes
+	// are recorded for future calls to Data(), LastUpdate(),
+	// Expiration(), and Mode(), respectively.
+	Update(data map[string]interface{}, now, expiration time.Time, mode int) error
 
 	// RequestAttempts tries to allocate new work to this worker.
 	// With a zero-valued AttemptRequest, this will return at most

@@ -105,6 +105,18 @@ func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 	return worker, nil
 }
 
+func (ns *namespace) Workers() (map[string]coordinate.Worker, error) {
+	// subject to change, see comments in coordinate.go
+	globalLock(ns)
+	defer globalUnlock(ns)
+
+	result := make(map[string]coordinate.Worker)
+	for name, worker := range ns.workers {
+		result[name] = worker
+	}
+	return result, nil
+}
+
 // memory.coordinable interface:
 
 func (ns *namespace) Coordinate() *memCoordinate {
