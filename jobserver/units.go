@@ -1,17 +1,85 @@
 package jobserver
 
-import "github.com/dmaze/goordinate/cborrpc"
-import "errors"
-import "reflect"
-import "github.com/dmaze/goordinate/coordinate"
-import "github.com/mitchellh/mapstructure"
-import "math"
+import (
+	"errors"
+	"github.com/dmaze/goordinate/cborrpc"
+	"github.com/dmaze/goordinate/coordinate"
+	"github.com/mitchellh/mapstructure"
+	"math"
+	"reflect"
+)
 
-type addWorkUnitItem struct {
-	key      string
-	data     map[string]interface{}
-	metadata map[string]interface{}
-	priority *float64
+// AddWorkUnitItem describes a single work unit to be added.  This is
+// actually passed across the wire as a tuple of Key, Data, Metadata,
+// and Priority, in that order, with later fields possibly missing.
+type AddWorkUnitItem struct {
+	// Key defines the name of the work unit.
+	Key string
+
+	// Data is the dictionary of per-work-unit data.
+	Data map[string]interface{}
+
+	// Metadata defines additional settings for this work unit.
+	// The only recognized key is "priority", which is used only
+	// if the Priority field is not set.
+	Metadata map[string]interface{}
+
+	// Priority defines a relative priority for this work unit.
+	// Higher priority runs sooner.
+	Priority float64
+}
+
+// unmarshalAddWorkUnitItem converts an arbitrary object (which really
+// should be a cborpc.PythonTuple or a list) into an AddWorkUnitItem.
+func unmarshalAddWorkUnitItem(obj interface{}) (result AddWorkUnitItem, err error) {
+	var (
+		decoder      *mapstructure.Decoder
+		haveMetadata bool
+		havePriority bool
+		kvpList      []interface{}
+		kvpMap       map[string]interface{}
+		ok           bool
+	)
+	// obj must be a tuple (or a list)
+	if kvpList, ok = cborrpc.Detuplify(obj); !ok {
+		err = errors.New("work unit must be a list")
+		return
+	}
+	// Turn that list into a string-keyed map
+	if len(kvpList) < 2 {
+		err = errors.New("too few parameters to work unit")
+		return
+	}
+	kvpMap = make(map[string]interface{})
+	kvpMap["key"] = kvpList[0]
+	kvpMap["data"] = kvpList[1]
+	if len(kvpList) >= 3 && kvpList[2] != nil {
+		kvpMap["metadata"] = kvpList[2]
+		haveMetadata = true
+	}
+	if len(kvpList) >= 4 && kvpList[3] != nil {
+		kvpMap["priority"] = kvpList[3]
+		havePriority = true
+	}
+	// Now we can invoke mapstructure
+	config := mapstructure.DecoderConfig{
+		DecodeHook: cborrpc.DecodeBytesAsString,
+		Result:     &result,
+	}
+	decoder, err = mapstructure.NewDecoder(&config)
+	if err == nil {
+		err = decoder.Decode(kvpMap)
+	}
+	if err == nil && haveMetadata && !havePriority {
+		// See if the caller passed metadata["priority"]
+		// instead of an explicit priority field.
+		if priority, ok := result.Metadata["priority"]; ok {
+			if result.Priority, ok = priority.(float64); !ok {
+				err = errors.New("priority must be a number")
+			}
+		}
+	}
+	return
 }
 
 // AddWorkUnits adds any number of work units to a work spec.  Each oy
@@ -24,75 +92,19 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 		return false, "", err
 	}
 
-	// Unmarshal the work unit list into a []addWorkUnitItem This
-	// will try to mimic the Python version in terms of whether an
-	// error or exception is returned, but there's no consistency
-	// there.  Just note that the tests don't check the return
-	// value and assume this succeeds.
-	items := make([]addWorkUnitItem, 0, len(workUnitKvp))
-	for _, kvp := range workUnitKvp {
-		var kvpT cborrpc.PythonTuple
-		var kvpL []interface{}
-		var ok bool
-
-		kvpT, ok = kvp.(cborrpc.PythonTuple)
-		if ok {
-			kvpL = kvpT.Items
-		} else {
-			kvpL, ok = kvp.([]interface{})
+	// Unmarshal the work unit list into a []AddWorkUnitItem.
+	// Fail now if any are invalid.
+	items := make([]AddWorkUnitItem, len(workUnitKvp))
+	for i, kvp := range workUnitKvp {
+		items[i], err = unmarshalAddWorkUnitItem(kvp)
+		if err != nil {
+			return false, "", err
 		}
-		if !ok {
-			return false, "", errors.New("work unit must be a list")
-		}
-		if len(kvpL) < 2 {
-			return false, "", errors.New("too few parameters to work unit")
-		}
-		name := cborrpc.SloppyString(kvpL[0])
-		if name == nil {
-			return false, "", errors.New("work unit key must be a string")
-		}
-		data := cborrpc.StringKeyedMap(kvpL[1])
-		if data == nil {
-			return false, "", errors.New("work unit data must be a map")
-		}
-		var metadata map[string]interface{}
-		if len(kvpL) > 2 {
-			metadata = cborrpc.StringKeyedMap(kvpL[2])
-			if metadata == nil {
-				return false, "", errors.New("work unit metadata must be a map")
-			}
-		}
-		var priority *float64
-		if len(kvpL) > 3 {
-			pri, ok := kvpL[3].(float64)
-			if !ok {
-				return false, "", errors.New("work unit priority must be a number")
-			}
-			priority = &pri
-		}
-		item := addWorkUnitItem{*name, data, metadata, priority}
-		items = append(items, item)
 	}
 
-	// If we've gotten to here, then we've marshaled all of the
-	// parameters into items.
+	// Now go through and add them all
 	for _, item := range items {
-		priority := item.priority
-		var priValue float64
-		if priority == nil {
-			priItem := item.metadata["priority"]
-			if priItem != nil {
-				priValue, ok := priItem.(float64)
-				if ok {
-					priority = &priValue
-				}
-			}
-		}
-		if priority == nil {
-			priValue = 0
-			priority = &priValue
-		}
-		_, err = spec.AddWorkUnit(item.key, item.data, *priority)
+		_, err = spec.AddWorkUnit(item.Key, item.Data, item.Priority)
 		if err != nil {
 			// Again, Python coordinate expects to never see
 			// a failure here?

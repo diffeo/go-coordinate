@@ -39,19 +39,6 @@ func CreateParamList(funcv reflect.Value, params []interface{}) ([]reflect.Value
 	return results, nil
 }
 
-// SloppyString converts a string or []byte to a string, or returns nil.
-func SloppyString(obj interface{}) *string {
-	switch str := obj.(type) {
-	case string:
-		return &str
-	case []byte:
-		s := string(str)
-		return &s
-	default:
-		return nil
-	}
-}
-
 // DecodeBytesAsString is a mapstructure decode hook that accepts a
 // byte slice where a string is expected.
 func DecodeBytesAsString(from, to reflect.Type, data interface{}) (interface{}, error) {
@@ -61,52 +48,25 @@ func DecodeBytesAsString(from, to reflect.Type, data interface{}) (interface{}, 
 	return data, nil
 }
 
-// StringKeyedMap tries to convert an arbitrary object to a string-keyed
-// map.  If this fails (because obj isn't a map or because any of its keys
-// aren't strings) returns nil without further explanation.
-func StringKeyedMap(obj interface{}) map[string]interface{} {
-	objAsMap, ok := obj.(map[interface{}]interface{})
-	if !ok {
-		// not a map
-		return nil
+// Detuplify removes a tuple wrapper.  If obj is a tuple, returns
+// the contained slice.  If obj is a slice, returns it.  Otherwise
+// returns failure.
+func Detuplify(obj interface{}) ([]interface{}, bool) {
+	if tuple, ok := obj.(PythonTuple); ok {
+		return tuple.Items, true
 	}
-
-	result := make(map[string]interface{})
-	for key, value := range objAsMap {
-		var keyAsString string
-		keyAsString, ok = key.(string)
-		if !ok {
-			// some key isn't a string
-			return nil
-		}
-		result[keyAsString] = value
+	if slice, ok := obj.([]interface{}); ok {
+		return slice, true
 	}
-	return result
+	return nil, false
 }
 
-// StringList tries to convert an arbitrary object to a list of strings.
-// If this fails, returns nil without further explanation.
-func StringList(obj interface{}) []string {
-	// First get a list of thingies
-	var listI []interface{}
-	switch listO := obj.(type) {
-	case PythonTuple:
-		listI = listO.Items
-	case []interface{}:
-		listI = listO
-	default:
-		return nil
+// SloppyDetuplify turns any object into a slice.  If it is already a
+// PythonTuple or a slice, returns the slice as Detuplify; otherwise
+// packages up obj into a new slice.  This never fails.
+func SloppyDetuplify(obj interface{}) []interface{} {
+	if slice, ok := Detuplify(obj); ok {
+		return slice
 	}
-
-	// Now go through the list and cast each to string
-	var result []string
-	result = make([]string, 0, len(listI))
-	for _, stringish := range listI {
-		stringP := SloppyString(stringish)
-		if stringP == nil {
-			return nil
-		}
-		result = append(result, *stringP)
-	}
-	return result
+	return []interface{}{obj}
 }
