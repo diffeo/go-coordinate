@@ -1,6 +1,7 @@
 package jobserver
 
 import (
+	"errors"
 	"github.com/dmaze/goordinate/coordinate"
 	"time"
 )
@@ -193,4 +194,11 @@ func attemptMap(attempt coordinate.Attempt) (map[string]interface{}, error) {
 		"expires":        timeLeft.Seconds(),
 	}
 	return result, nil
+}
+
+// GetConfig returns a global configuration map.  Sadly, the RPC interface
+// has no way to set a global configuration map and this implementation
+// doesn't have one on its own, so this method fails.
+func (jobs *JobServer) GetConfig() (map[string]interface{}, string, error) {
+	return nil, "", errors.New("no config to get")
 }
