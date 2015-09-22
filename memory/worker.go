@@ -207,8 +207,29 @@ func (w *worker) getWorkFromSpec(workSpec *workSpec) *attempt {
 		return nil
 	}
 	workUnit := workSpec.available.Next()
+	return w.makeAttempt(workUnit, time.Duration(0))
+}
+
+func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, duration time.Duration) (coordinate.Attempt, error) {
+	globalLock(w)
+	defer globalUnlock(w)
+	unit, ok := cUnit.(*workUnit)
+	if !ok {
+		return nil, errors.New("cannot make attempt for unit from a different backend")
+	}
+	attempt := w.makeAttempt(unit, duration)
+	return attempt, nil
+}
+
+// makeAttempt creates an attempt and makes it the active attempt.
+// This is the implementation for MakeAttempt(), and also is called at
+// the bottom of the stack for RequestAttempts().  Assumes the global
+// lock and never fails.
+func (w *worker) makeAttempt(workUnit *workUnit, duration time.Duration) *attempt {
 	start := time.Now()
-	duration := time.Duration(15) * time.Minute
+	if duration == time.Duration(0) {
+		duration = time.Duration(15) * time.Minute
+	}
 	attempt := &attempt{
 		workUnit:       workUnit,
 		worker:         w,

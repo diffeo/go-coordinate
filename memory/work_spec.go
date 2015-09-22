@@ -74,6 +74,11 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	meta.NextWorkSpecName = spec.meta.NextWorkSpecName
 	meta.NextWorkSpecPreempts = spec.meta.NextWorkSpecPreempts
 
+	// If this cannot be continuous, force-clear that flag
+	if !meta.CanBeContinuous {
+		meta.Continuous = false
+	}
+
 	spec.meta = meta
 	return nil
 }

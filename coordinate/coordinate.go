@@ -108,7 +108,8 @@ type WorkSpecMeta struct {
 	// scheduler will try to arrange for twice as many work units
 	// of this work spec to be pending as the other.  Default
 	// weight is the "weight" field in the work spec data, or 20
-	// minus the "nice" field in the work spec data, or else 1.
+	// minus the "nice" field in the work spec data, defaulting
+	// to 20 if neither field is specified at all.
 	Weight int
 
 	// Paused indicates whether this work unit can generate more
@@ -475,6 +476,20 @@ type Worker interface {
 	// returned from AllAttempts(), and will be returned from
 	// ActiveAttempts() until they are completed or expired.
 	RequestAttempts(req AttemptRequest) ([]Attempt, error)
+
+	// MakeAttempt creates an attempt for a specific work unit.
+	// On success the new attempt is added to the current and
+	// historic attempts for this worker, and becomes the active
+	// attempt for the work unit.
+	//
+	// This method is principally intended for testing and
+	// debugging.  It should not be used to resurrect an attempt
+	// that has been preempted by another worker; the most likely
+	// outcome of this is two workers fighting over the same unit
+	// of work.  This will not check the state of the work unit,
+	// and could restart a work unit that otherwise is in a
+	// terminal state.
+	MakeAttempt(WorkUnit, time.Duration) (Attempt, error)
 
 	// ActiveAttempts returns all Attempts this worker is
 	// currently performing, or an empty slice if this worker is
