@@ -2,16 +2,20 @@ package coordinatetest
 
 import (
 	"fmt"
+	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
 	"reflect"
 )
 
+// ---------------------------------------------------------------------------
+// HasKeys
+
 type hasKeysChecker struct {
-	CInfo *check.CheckerInfo
+	*check.CheckerInfo
 }
 
 func (c hasKeysChecker) Info() *check.CheckerInfo {
-	return c.CInfo
+	return c.CheckerInfo
 }
 
 func (c hasKeysChecker) Check(params []interface{}, names []string) (result bool, error string) {
@@ -46,8 +50,52 @@ func (c hasKeysChecker) Check(params []interface{}, names []string) (result bool
 //     actual = ...
 //     c.Check(actual, HasKeys, []string{"foo", "bar"})
 var HasKeys check.Checker = &hasKeysChecker{
-	CInfo: &check.CheckerInfo{
+	&check.CheckerInfo{
 		Name:   "HasKeys",
+		Params: []string{"obtained", "expected"},
+	},
+}
+
+// ---------------------------------------------------------------------------
+// AttemptMatches
+
+type attemptMatchesChecker struct {
+	*check.CheckerInfo
+}
+
+func (c attemptMatchesChecker) Info() *check.CheckerInfo {
+	return c.CheckerInfo
+}
+
+func (c attemptMatchesChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	if len(params) != 2 {
+		return false, "incorrect number of parameters to AttemptMatches check"
+	}
+	obtained, ok := params[0].(coordinate.Attempt)
+	if !ok {
+		return false, "non-Attempt obtained value"
+	}
+	expected, ok := params[1].(coordinate.Attempt)
+	if !ok {
+		return false, "non-Attempt expected value"
+	}
+	if obtained.Worker().Name() != expected.Worker().Name() {
+		return false, "mismatched workers"
+	}
+	if obtained.WorkUnit().Name() != expected.WorkUnit().Name() {
+		return false, "mismatched work units"
+	}
+	if obtained.WorkUnit().WorkSpec().Name() != expected.WorkUnit().WorkSpec().Name() {
+		return false, "mismatched work specs"
+	}
+	return true, ""
+}
+
+// The AttemptMatches checker verifies that two attempts are compatible
+// based on their observable data.
+var AttemptMatches check.Checker = &attemptMatchesChecker{
+	&check.CheckerInfo{
+		Name:   "AttemptMatches",
 		Params: []string{"obtained", "expected"},
 	},
 }

@@ -21,6 +21,9 @@ func (unit *workUnit) Name() string {
 }
 
 func (unit *workUnit) Data() (map[string]interface{}, error) {
+	if unit.activeAttempt != nil && unit.activeAttempt.data != nil {
+		return unit.activeAttempt.data, nil
+	}
 	return unit.data, nil
 }
 

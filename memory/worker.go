@@ -256,7 +256,7 @@ func (w *worker) AllAttempts() ([]coordinate.Attempt, error) {
 	globalLock(w)
 	defer globalUnlock(w)
 
-	result := make([]coordinate.Attempt, len(w.activeAttempts))
+	result := make([]coordinate.Attempt, len(w.attempts))
 	for i, attempt := range w.attempts {
 		result[i] = attempt
 	}
