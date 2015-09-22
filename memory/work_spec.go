@@ -190,6 +190,7 @@ func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, prio
 	defer globalUnlock(spec)
 	spec.query(query, func(unit *workUnit) {
 		unit.priority = priority
+		spec.available.Reprioritize(unit)
 	})
 	return nil
 }
@@ -199,6 +200,7 @@ func (spec *workSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, a
 	defer globalUnlock(spec)
 	spec.query(query, func(unit *workUnit) {
 		unit.priority += adjustment
+		spec.available.Reprioritize(unit)
 	})
 	return nil
 }

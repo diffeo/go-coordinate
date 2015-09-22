@@ -2,7 +2,6 @@ package memory
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dmaze/goordinate/coordinate"
 	"time"
 )
@@ -158,7 +157,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 
 	var attempts []coordinate.Attempt
 	if req.NumberOfWorkUnits < 1 {
-		return attempts, nil
+		req.NumberOfWorkUnits = 1
 	}
 	// Get the first work unit, which picks a work spec for the
 	// remainder
@@ -173,8 +172,6 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	if target == 0 || target > req.NumberOfWorkUnits {
 		target = req.NumberOfWorkUnits
 	}
-	fmt.Printf("target=%v (max_jobs=%v max_getwork=%v)\n",
-		target, req.NumberOfWorkUnits, attempt.workUnit.workSpec.meta.MaxAttemptsReturned)
 	for len(attempts) < target {
 		attempt := w.getWork()
 		if attempt == nil {

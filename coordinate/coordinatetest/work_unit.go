@@ -52,6 +52,22 @@ func (s *Suite) TestTrivialWorkUnitFlow(c *check.C) {
 	c.Check(units, check.HasLen, 0)
 }
 
+// makeWorkSpecAndWorker does some boring setup to create a default
+// work spec named "spec" and a default worker named "worker".  If
+// either fails, abort the test.
+func (s *Suite) makeWorkSpecAndWorker(c *check.C) (coordinate.WorkSpec, coordinate.Worker) {
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":   "spec",
+		"min_gb": 1,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err := s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	return spec, worker
+}
+
 // makeWorkUnits creates a handful of work units within a work spec.
 // These have keys "available", "pending", "finished", "failed",
 // "expired", and "retryable", and wind up in the corresponding
@@ -102,16 +118,9 @@ func makeWorkUnits(spec coordinate.WorkSpec, worker coordinate.Worker) (map[stri
 
 // TestWorkUnitQueries calls WorkSpec.WorkUnits() with various queries.
 func (s *Suite) TestWorkUnitQueries(c *check.C) {
-	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":   "spec",
-		"min_gb": 1,
-	})
-	c.Assert(err, check.IsNil)
+	spec, worker := s.makeWorkSpecAndWorker(c)
 
-	worker, err := s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
-
-	_, err = makeWorkUnits(spec, worker)
+	_, err := makeWorkUnits(spec, worker)
 	c.Assert(err, check.IsNil)
 
 	// Get everything
@@ -200,4 +209,237 @@ func (s *Suite) TestWorkUnitQueries(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(units, check.HasLen, 2)
 	c.Check(units, HasKeys, []string{"available", "retryable"})
+}
+
+// TestDeleteWorkUnits is a smaller set of tests for
+// WorkSpec.DeleteWorkUnits(), on the assumption that a fair amount of
+// code will typically be shared with GetWorkUnits() and because it is
+// intrinsically a mutating operation.
+func (s *Suite) TestDeleteWorkUnits(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+
+	_, err := makeWorkUnits(spec, worker)
+	c.Assert(err, check.IsNil)
+
+	// Get everything
+	units, err := spec.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 6)
+	c.Check(units, HasKeys, []string{"available", "expired", "failed",
+		"finished", "pending", "retryable"})
+
+	// Delete by name
+	count, err := spec.DeleteWorkUnits(coordinate.WorkUnitQuery{
+		Names: []string{"retryable"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 1)
+
+	units, err = spec.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 5)
+	c.Check(units, HasKeys, []string{"available", "expired", "failed",
+		"finished", "pending"})
+
+	// Delete the same thing again; missing name should be a no-op
+	count, err = spec.DeleteWorkUnits(coordinate.WorkUnitQuery{
+		Names: []string{"retryable"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 0)
+
+	units, err = spec.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 5)
+	c.Check(units, HasKeys, []string{"available", "expired", "failed",
+		"finished", "pending"})
+
+	// Delete by status
+	count, err = spec.DeleteWorkUnits(coordinate.WorkUnitQuery{
+		Statuses: []coordinate.WorkUnitStatus{
+			coordinate.FailedUnit,
+			coordinate.FinishedUnit,
+		},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 2)
+
+	units, err = spec.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 3)
+	c.Check(units, HasKeys, []string{"available", "expired", "pending"})
+
+	// Delete everything
+	count, err = spec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 3)
+
+	units, err = spec.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 0)
+}
+
+// checkWorkUnitOrder verifies that getting all of the work possible
+// retrieves work units in a specific order.
+func checkWorkUnitOrder(
+	c *check.C,
+	worker coordinate.Worker,
+	spec coordinate.WorkSpec,
+	unitNames ...string,
+) {
+	for _, unitName := range unitNames {
+		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+		c.Assert(err, check.IsNil)
+		c.Check(attempts, check.HasLen, 1)
+		if len(attempts) > 0 {
+			c.Check(attempts[0].WorkUnit().Name(), check.Equals, unitName)
+			c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, spec.Name())
+			err = attempts[0].Finish(nil)
+			c.Assert(err, check.IsNil)
+		}
+	}
+
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 0)
+}
+
+// TestWorkUnitOrder is a very basic test that work units get returned
+// in alphabetic order absent any other constraints.
+func (s *Suite) TestWorkUnitOrder(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+
+	for _, name := range []string{"c", "b", "a"} {
+		_, err := spec.AddWorkUnit(name, map[string]interface{}{}, 0)
+		c.Assert(err, check.IsNil)
+	}
+
+	checkWorkUnitOrder(c, worker, spec, "a", "b", "c")
+}
+
+// TestWorkUnitPriorityCtor tests that priorities passed in the work unit
+// constructor are honored.
+func (s *Suite) TestWorkUnitPriorityCtor(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+
+	var units = []struct {
+		string
+		float64
+	}{
+		{"a", 0},
+		{"b", 10},
+		{"c", 0},
+	}
+
+	for _, unit := range units {
+		workUnit, err := spec.AddWorkUnit(unit.string, map[string]interface{}{}, unit.float64)
+		c.Assert(err, check.IsNil)
+		pri, err := workUnit.Priority()
+		c.Assert(err, check.IsNil)
+		c.Check(pri, check.Equals, unit.float64)
+	}
+
+	checkWorkUnitOrder(c, worker, spec, "b", "a", "c")
+}
+
+// TestWorkUnitPrioritySet tests two different ways of setting work unit
+// priority.
+func (s *Suite) TestWorkUnitPrioritySet(c *check.C) {
+	var (
+		err      error
+		priority float64
+		unit     coordinate.WorkUnit
+	)
+	spec, worker := s.makeWorkSpecAndWorker(c)
+
+	unit, err = spec.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 0.0)
+
+	unit, err = spec.AddWorkUnit("b", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+	err = unit.SetPriority(10.0)
+	c.Assert(err, check.IsNil)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 10.0)
+
+	unit, err = spec.AddWorkUnit("c", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+	err = spec.SetWorkUnitPriorities(coordinate.WorkUnitQuery{
+		Names: []string{"c"},
+	}, 20.0)
+	c.Assert(err, check.IsNil)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 20.0)
+
+	unit, err = spec.AddWorkUnit("d", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+	err = spec.AdjustWorkUnitPriorities(coordinate.WorkUnitQuery{
+		Names: []string{"d"},
+	}, 20.0)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 20.0)
+	c.Assert(err, check.IsNil)
+	err = spec.AdjustWorkUnitPriorities(coordinate.WorkUnitQuery{
+		Names: []string{"d"},
+	}, 10.0)
+	c.Assert(err, check.IsNil)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 30.0)
+
+	unit, err = spec.WorkUnit("b")
+	c.Assert(err, check.IsNil)
+	priority, err = unit.Priority()
+	c.Assert(err, check.IsNil)
+	c.Check(priority, check.Equals, 10.0)
+
+	checkWorkUnitOrder(c, worker, spec, "d", "c", "b", "a")
+}
+
+// TestWorkUnitData validates that the system can store and update
+// data.
+func (s *Suite) TestWorkUnitData(c *check.C) {
+	var (
+		data map[string]interface{}
+		unit coordinate.WorkUnit
+	)
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":   "spec",
+		"min_gb": 1,
+	})
+	c.Assert(err, check.IsNil)
+
+	_, err = spec.AddWorkUnit("a", map[string]interface{}{
+		"name":  "a",
+		"value": 1,
+	}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	_, err = spec.AddWorkUnit("b", map[string]interface{}{
+		"name":  "b",
+		"value": 2,
+	}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	unit, err = spec.WorkUnit("a")
+	c.Assert(err, check.IsNil)
+	data, err = unit.Data()
+	c.Assert(err, check.IsNil)
+	c.Check(data, check.HasLen, 2)
+	c.Check(data["name"], check.Equals, "a")
+	c.Check(data["value"], check.Equals, 1)
+
+	unit, err = spec.WorkUnit("b")
+	c.Assert(err, check.IsNil)
+	data, err = unit.Data()
+	c.Assert(err, check.IsNil)
+	c.Check(data, check.HasLen, 2)
+	c.Check(data["name"], check.Equals, "b")
+	c.Check(data["value"], check.Equals, 2)
 }
