@@ -28,7 +28,7 @@ func (s *Suite) TestSpecCreateDestroy(c *check.C) {
 
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
-	c.Check(names, check.DeepEquals, []string{})
+	c.Check(names, check.HasLen, 0)
 
 	dict = map[string]interface{}{
 		"name":   name,
@@ -61,7 +61,7 @@ func (s *Suite) TestSpecCreateDestroy(c *check.C) {
 
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
-	c.Check(names, check.DeepEquals, []string{})
+	c.Check(names, check.HasLen, 0)
 }
 
 // TestTwoWorkSpecsBasic ensures that two work specs can be created
@@ -82,7 +82,7 @@ func (s *Suite) TestTwoWorkSpecsBasic(c *check.C) {
 
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
-	c.Check(names, check.DeepEquals, []string{})
+	c.Check(names, check.HasLen, 0)
 
 	spec, err = s.Namespace.SetWorkSpec(dict1)
 	c.Assert(err, check.IsNil)
@@ -97,10 +97,12 @@ func (s *Suite) TestTwoWorkSpecsBasic(c *check.C) {
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
 	c.Check(names, check.HasLen, 2)
-	if names[0] == name1 {
-		c.Check(names, check.DeepEquals, []string{name1, name2})
-	} else {
-		c.Check(names, check.DeepEquals, []string{name2, name1})
+	if len(names) > 0 {
+		if names[0] == name1 {
+			c.Check(names, check.DeepEquals, []string{name1, name2})
+		} else {
+			c.Check(names, check.DeepEquals, []string{name2, name1})
+		}
 	}
 
 	spec, err = s.Namespace.WorkSpec(name1)
@@ -133,7 +135,7 @@ func (s *Suite) TestTwoWorkSpecsBasic(c *check.C) {
 
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
-	c.Check(names, check.DeepEquals, []string{})
+	c.Check(names, check.HasLen, 0)
 
 	spec, err = s.Namespace.WorkSpec(name1)
 	c.Check(err, check.DeepEquals, coordinate.ErrNoSuchWorkSpec{Name: name1})

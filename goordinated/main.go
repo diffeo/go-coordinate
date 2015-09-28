@@ -25,14 +25,17 @@ import (
 )
 
 func main() {
+	var namespace coordinate.Namespace
 	bind := flag.String("bind", ":5932", "[ip]:port to listen on")
 	backend := backend.Backend{Implementation: "memory", Address: ""}
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
 	flag.Parse()
 
-	coordinate := backend.Coordinate()
-	namespace, err := coordinate.Namespace("")
 	cbor := new(codec.CborHandle)
+	coordinate, err := backend.Coordinate()
+	if err == nil {
+		namespace, err = coordinate.Namespace("")
+	}
 	if err == nil {
 		err = cborrpc.SetExts(cbor)
 	}

@@ -212,7 +212,7 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, duration time.Duration) 
 	defer globalUnlock(w)
 	unit, ok := cUnit.(*workUnit)
 	if !ok {
-		return nil, errors.New("cannot make attempt for unit from a different backend")
+		return nil, coordinate.ErrWrongBackend
 	}
 	attempt := w.makeAttempt(unit, duration)
 	return attempt, nil

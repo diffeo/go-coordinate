@@ -287,21 +287,22 @@ func checkWorkUnitOrder(
 	spec coordinate.WorkSpec,
 	unitNames ...string,
 ) {
-	for _, unitName := range unitNames {
+	var processedUnits []string
+	for {
 		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 		c.Assert(err, check.IsNil)
-		c.Check(attempts, check.HasLen, 1)
-		if len(attempts) > 0 {
-			c.Check(attempts[0].WorkUnit().Name(), check.Equals, unitName)
-			c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, spec.Name())
-			err = attempts[0].Finish(nil)
-			c.Assert(err, check.IsNil)
+		if len(attempts) == 0 {
+			break
 		}
+		c.Assert(attempts, check.HasLen, 1)
+		attempt := attempts[0]
+		c.Check(attempt.WorkUnit().WorkSpec().Name(), check.Equals, spec.Name())
+		processedUnits = append(processedUnits, attempt.WorkUnit().Name())
+		err = attempt.Finish(nil)
+		c.Assert(err, check.IsNil)
 	}
 
-	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	c.Check(processedUnits, check.DeepEquals, unitNames)
 }
 
 // TestWorkUnitOrder is a very basic test that work units get returned

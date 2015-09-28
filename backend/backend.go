@@ -4,6 +4,7 @@ package backend
 
 import "github.com/dmaze/goordinate/coordinate"
 import "github.com/dmaze/goordinate/memory"
+import "github.com/dmaze/goordinate/postgres"
 import "errors"
 import "strings"
 
@@ -33,14 +34,18 @@ type Backend struct {
 // b.Implementation is "memory", multiple calls to this will create
 // multiple independent coordinate "worlds".
 //
-// If b.Implementation does not match a known implementation, panics.
-// It is assumed that Set() will validate at least the implementation.
-func (b *Backend) Coordinate() coordinate.Coordinate {
+// If b.Implementation does not match a known implementation, returns
+// an error.  It is assumed that Set() will validate at least the
+// implementation.  The choice of implementation can also produce
+// errors (invalid connection string, etc.)
+func (b *Backend) Coordinate() (coordinate.Coordinate, error) {
 	switch b.Implementation {
 	case "memory":
-		return memory.New()
+		return memory.New(), nil
+	case "postgres":
+		return postgres.New(b.Address)
 	default:
-		panic(errors.New("unknown coordinate backend " + b.Implementation))
+		return nil, errors.New("unknown coordinate backend " + b.Implementation)
 	}
 }
 

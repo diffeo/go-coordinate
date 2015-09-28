@@ -36,7 +36,7 @@ func (s *Suite) TestAttemptLifetime(c *check.C) {
 	// Get an attempt for it
 	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
+	c.Assert(attempts, check.HasLen, 1)
 	attempt = attempts[0]
 
 	// The work unit should be "pending"
