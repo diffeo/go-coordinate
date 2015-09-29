@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"database/sql"
+	"encoding/gob"
 	"github.com/dmaze/goordinate/coordinate"
 
 	// This Coordinate backend requires the PostgreSQL database/sql
@@ -46,6 +47,11 @@ func New(connectionString string) (coordinate.Coordinate, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Make sure the gob library understands our data maps
+	gob.Register(map[string]interface{}{})
+	gob.Register(map[interface{}]interface{}{})
+	gob.Register([]interface{}{})
+
 	return &pgCoordinate{
 		db: db,
 	}, nil
