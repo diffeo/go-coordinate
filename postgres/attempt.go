@@ -276,6 +276,7 @@ func (w *worker) chooseWorkSpec(tx *sql.Tx, availableGb float64) (*workSpec, err
 	query := "SELECT work_spec.id, work_spec.name "
 	query += "FROM work_spec, work_unit LEFT OUTER JOIN attempt ON work_unit.active_attempt_id=attempt.id "
 	query += "WHERE work_spec.namespace_id=$1 "
+	query += "AND work_spec.paused=FALSE "
 	query += "AND work_unit.work_spec_id=work_spec.id "
 	query += "AND (attempt.status IS NULL OR attempt.status='expired' OR attempt.status='retryable') "
 	query += "GROUP BY work_spec.id"

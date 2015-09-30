@@ -78,6 +78,88 @@ func (s *PythonSuite) TearDownTest(c *check.C) {
 	s.JobServer.Namespace = nil
 }
 
+// Helpers that do some checking
+
+// setWorkSpec calls the eponymous JobServer function, checking that
+// it ran successfully, and returns the work spec name on success.
+func (s *PythonSuite) setWorkSpec(c *check.C, workSpec map[string]interface{}) string {
+	ok, msg, err := s.JobServer.SetWorkSpec(workSpec)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	workSpecName, ok := workSpec["name"].(string)
+	c.Assert(ok, check.Equals, true)
+	return workSpecName
+}
+
+// addWorkUnit packages a single work unit key and data dictionary
+// into the tuple format JobServer expects, and calls AddWorkUnits(),
+// checking the result.
+func (s *PythonSuite) addWorkUnit(c *check.C, workSpecName, key string, data map[string]interface{}) {
+	keyDataPair := cborrpc.PythonTuple{Items: []interface{}{key, data}}
+	keyDataList := []interface{}{keyDataPair}
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, keyDataList)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+}
+
+// getOneWorkUnit calls GetWorkUnits for a single specific work unit,
+// checks the results, and returns its data dictionary (or nil if absent).
+func (s *PythonSuite) getOneWorkUnit(c *check.C, workSpecName, workUnitKey string) map[string]interface{} {
+	list, msg, err := s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{workUnitKey}})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	if len(list) == 0 {
+		return nil
+	}
+	c.Check(list, check.HasLen, 1)
+	tuple, ok := list[0].(cborrpc.PythonTuple)
+	c.Assert(ok, check.Equals, true)
+	c.Check(tuple.Items, check.HasLen, 2)
+	c.Check(tuple.Items[0], check.DeepEquals, workUnitKey)
+	result, ok := tuple.Items[1].(map[string]interface{})
+	c.Assert(ok, check.Equals, true)
+	return result
+}
+
+// checkWorkUnitStatus makes a weak assertion about a specific work
+// unit's status by calling GetWorkUnitStatus for it.
+func (s *PythonSuite) checkWorkUnitStatus(c *check.C, workSpecName, workUnitKey string, status jobserver.WorkUnitStatus) {
+	dicts, msg, err := s.JobServer.GetWorkUnitStatus(workSpecName, []string{workUnitKey})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(dicts, check.HasLen, 1)
+	if len(dicts) > 0 {
+		c.Check(dicts[0]["status"], check.Equals, status)
+	}
+}
+
+func (s *PythonSuite) getOneWork(c *check.C) (ok bool, workSpecName, workUnitKey string, workUnitData map[string]interface{}) {
+	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	// Since we didn't request multiple work units we should always
+	// get at most one, but maybe none
+	c.Assert(anything, check.NotNil)
+	tuple, ok := anything.(cborrpc.PythonTuple)
+	c.Assert(ok, check.Equals, true)
+	c.Assert(tuple.Items, check.HasLen, 3)
+	// "no work unit" gets returned as tuple (nil, nil, nil)
+	if tuple.Items[0] == nil {
+		ok = false
+		return
+	}
+	workSpecName, ok = tuple.Items[0].(string)
+	c.Assert(ok, check.Equals, true)
+	workUnitKey, ok = tuple.Items[1].(string)
+	c.Assert(ok, check.Equals, true)
+	workUnitData, ok = tuple.Items[2].(map[string]interface{})
+	c.Assert(ok, check.Equals, true)
+	return
+}
+
 // Tests from test_job_client.py
 
 // DoWork runs through a basic sequence of creating a work spec,
@@ -88,15 +170,15 @@ func (s *PythonSuite) TearDownTest(c *check.C) {
 func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}) map[string]interface{} {
 	var (
 		// Various return values
-		ok       bool
-		msg      string
-		err      error
-		list     []interface{}
-		dict     map[string]interface{}
-		wuData   map[string]interface{}
-		dicts    []map[string]interface{}
-		tuple    cborrpc.PythonTuple
-		anything interface{}
+		ok   bool
+		msg  string
+		err  error
+		list []interface{}
+		dict map[string]interface{}
+		// Return values from getOneWork
+		wuSpec string
+		wuKey  string
+		wuData map[string]interface{}
 		// workSpecName is workSpec["name"], extracted just once
 		workSpecName string
 		// keyDataPair is the pair (key, data)
@@ -106,61 +188,28 @@ func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}
 		keyDataList []interface{}
 	)
 
-	workSpecName, ok = s.WorkSpec["name"].(string)
-	c.Assert(ok, check.Equals, true)
 	keyDataPair = cborrpc.PythonTuple{Items: []interface{}{key, data}}
 	keyDataList = []interface{}{keyDataPair}
 
-	ok, msg, err = s.JobServer.SetWorkSpec(s.WorkSpec)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	workSpecName = s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, key, data)
 
-	ok, msg, err = s.JobServer.AddWorkUnits(workSpecName, keyDataList)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	dict = s.getOneWorkUnit(c, workSpecName, key)
+	c.Check(dict, check.DeepEquals, data)
+	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Available)
+
+	ok, wuSpec, wuKey, wuData = s.getOneWork(c)
+	c.Assert(ok, check.Equals, true)
+	c.Check(wuSpec, check.Equals, workSpecName)
+	c.Check(wuKey, check.Equals, key)
+	c.Check(wuData, check.DeepEquals, data)
 
 	list, msg, err = s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{key}})
 	c.Assert(err, check.IsNil)
 	c.Check(msg, check.Equals, "")
 	c.Check(list, check.DeepEquals, keyDataList)
 
-	dicts, msg, err = s.JobServer.GetWorkUnitStatus(workSpecName, []string{key})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(dicts, check.HasLen, 1)
-	if len(dicts) > 0 {
-		c.Check(dicts[0]["status"], check.Equals, jobserver.Available)
-	}
-
-	anything, msg, err = s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	// Since we didn't request multiple work units we should always
-	// get exactly one; and we must have succeeded in this to move on
-	c.Assert(anything, check.NotNil)
-	tuple, ok = anything.(cborrpc.PythonTuple)
-	c.Assert(ok, check.Equals, true)
-	c.Assert(tuple.Items, check.HasLen, 3)
-	// tuple.Items contains work spec name, work unit name, data
-	c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
-	c.Check(tuple.Items[1], check.DeepEquals, key)
-	wuData, ok = tuple.Items[2].(map[string]interface{})
-	c.Assert(ok, check.Equals, true)
-
-	list, msg, err = s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{key}})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(list, check.DeepEquals, keyDataList)
-
-	dicts, msg, err = s.JobServer.GetWorkUnitStatus(workSpecName, []string{key})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(dicts, check.HasLen, 1)
-	if len(dicts) > 0 {
-		c.Check(dicts[0]["status"], check.Equals, jobserver.Pending)
-	}
+	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Pending)
 
 	// This "runs" the work unit
 	wuData["output"] = map[string]interface{}{
@@ -172,30 +221,15 @@ func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
 
-	dicts, msg, err = s.JobServer.GetWorkUnitStatus(workSpecName, []string{key})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(dicts, check.HasLen, 1)
-	if len(dicts) > 0 {
-		c.Check(dicts[0]["status"], check.Equals, jobserver.Finished)
-	}
-
-	list, msg, err = s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{key}})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(list, check.HasLen, 1)
-	// This final get_work_units call returns the output data, so we
-	// must make strong asserts about its return value and type or
-	// else there is nothing to return.
-	tuple, ok = list[0].(cborrpc.PythonTuple)
-	c.Assert(ok, check.Equals, true)
-	c.Check(tuple.Items, check.HasLen, 2)
-	c.Check(tuple.Items[0], check.DeepEquals, key)
-	dict, ok = tuple.Items[1].(map[string]interface{})
-	c.Assert(ok, check.Equals, true)
+	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Finished)
+	dict = s.getOneWorkUnit(c, workSpecName, key)
+	c.Assert(dict, check.NotNil)
 	return dict
 }
 
+// TestDataUpdates runs through the full sequence of creating a work
+// spec and work unit and running them, and verifies that the data
+// dictionary did in fact get updated.
 func (s *PythonSuite) TestDataUpdates(c *check.C) {
 	res := s.DoWork(c, "u", map[string]interface{}{"k": "v"})
 	c.Check(res, check.DeepEquals, map[string]interface{}{
@@ -211,3 +245,45 @@ func (s *PythonSuite) TestDataUpdates(c *check.C) {
 // Skipping TestArgs and TestKwargs: these test specific behaviors of
 // the Python WorkUnit.run() call and how it invokes run_function,
 // which are out of scope here
+
+// TestPause validates that pausing and unpausing a work spec affect
+// what GetWork returns.
+func (s *PythonSuite) TestPause(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "u", map[string]interface{}{"k": "v"})
+
+	list, msg, err := s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(list, check.DeepEquals, []interface{}{
+		cborrpc.PythonTuple{Items: []interface{}{
+			"u",
+			map[string]interface{}{"k": "v"},
+		}},
+	})
+	s.checkWorkUnitStatus(c, workSpecName, "u", jobserver.Available)
+
+	// Pause the work spec
+	ok, msg, err := s.JobServer.ControlWorkSpec(workSpecName, map[string]interface{}{"status": jobserver.Paused})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// We should not get work now
+	ok, spec, unit, _ := s.getOneWork(c)
+	c.Check(ok, check.Equals, false)
+
+	// Resume the work spec
+	ok, msg, err = s.JobServer.ControlWorkSpec(workSpecName, map[string]interface{}{"status": jobserver.Runnable})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// We should the work unit back
+	ok, spec, unit, _ = s.getOneWork(c)
+	c.Check(ok, check.Equals, true)
+	if ok {
+		c.Check(spec, check.Equals, workSpecName)
+		c.Check(unit, check.Equals, "u")
+	}
+}
