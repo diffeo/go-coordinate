@@ -192,6 +192,15 @@ type WorkSpecMeta struct {
 	// true.
 	NextWorkSpecPreempts bool
 
+	// AvailableCount indicates the number of work units in this
+	// work spec that could be returned from a
+	// Worker.RequestAttempts() call.  These are work units that
+	// do not have an active attempt, or that do but it is either
+	// expired or retryable.  WorkSpec.Meta() only returns this
+	// field if its "withCounts" parameter is true.
+	// WorkSpec.SetMeta() ignores this field.
+	AvailableCount int
+
 	// PendingCount indicates the number of work units in this
 	// work spec that are currently have an active attempt that is
 	// in "pending" state, meaning there is a worker performing
@@ -290,9 +299,9 @@ type WorkSpec interface {
 	SetData(data map[string]interface{}) error
 
 	// Meta returns the WorkSpecMeta options for this work spec.
-	// If withCounts is true, the WorkSpecMeta.PendingCount field
-	// will be filled in; this may be more expensive than other
-	// operations.
+	// If withCounts is true, the WorkSpecMeta.AvailableCount and
+	// WorkSpecMeta.PendingCount fields will be filled in; this
+	// may be more expensive than other operations.
 	Meta(withCounts bool) (WorkSpecMeta, error)
 
 	// SetMeta sets the WorkSpecMeta options for this work spec.

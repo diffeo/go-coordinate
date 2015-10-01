@@ -5,6 +5,7 @@ package jobserver_test
 
 import (
 	"flag"
+	"fmt"
 	"github.com/dmaze/goordinate/backend"
 	"github.com/dmaze/goordinate/cborrpc"
 	"github.com/dmaze/goordinate/coordinate"
@@ -46,19 +47,6 @@ type PythonSuite struct {
 	WorkSpec map[string]interface{}
 }
 
-// SetUpSuite does one-time setup for the entire test suite.
-func (s *PythonSuite) SetUpSuite(c *check.C) {
-	// The work spec every test here uses is constant, but a map
-	// with constant keys and values isn't compile-time constant
-	// according to Go rules apparently.  :-/
-	s.WorkSpec = map[string]interface{}{
-		"name":         "test_job_client",
-		"min_gb":       1,
-		"module":       "coordinate.tests.test_job_client",
-		"run_function": "run_function",
-	}
-}
-
 func (s *PythonSuite) SetUpTest(c *check.C) {
 	var err error
 	s.Namespace, err = s.Coordinate.Namespace(c.TestName())
@@ -67,6 +55,13 @@ func (s *PythonSuite) SetUpTest(c *check.C) {
 		return
 	}
 	s.JobServer = jobserver.JobServer{Namespace: s.Namespace}
+	// Reset the "default" work spec for every test; some modify it
+	s.WorkSpec = map[string]interface{}{
+		"name":         "test_job_client",
+		"min_gb":       1,
+		"module":       "coordinate.tests.test_job_client",
+		"run_function": "run_function",
+	}
 }
 
 func (s *PythonSuite) TearDownTest(c *check.C) {
@@ -286,4 +281,79 @@ func (s *PythonSuite) TestPause(c *check.C) {
 		c.Check(spec, check.Equals, workSpecName)
 		c.Check(unit, check.Equals, "u")
 	}
+}
+
+// TestGetMany tests that the GetWork call with a "max_jobs" parameter
+// actually retrieves the requested number of jobs.
+func (s *PythonSuite) TestGetMany(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+
+	workUnitKvps := make([]interface{}, 100)
+	for i := range workUnitKvps {
+		key := fmt.Sprintf("u%03d", i+1)
+		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
+		items := []interface{}{key, data}
+		workUnitKvps[i] = cborrpc.PythonTuple{Items: items}
+	}
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, workUnitKvps)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1, "lease_time": 300, "max_jobs": 10})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(anything, check.NotNil)
+	c.Assert(anything, check.FitsTypeOf, []cborrpc.PythonTuple{})
+	list := anything.([]cborrpc.PythonTuple)
+	c.Check(list, check.HasLen, 10)
+
+	keys := make([]interface{}, len(list))
+	expected := make([]interface{}, len(list))
+	for i, tuple := range list {
+		expected[i] = fmt.Sprintf("u%03d", i+1)
+		if len(tuple.Items) > 1 {
+			keys[i] = tuple.Items[1]
+		}
+	}
+	c.Check(keys, check.DeepEquals, expected)
+}
+
+// TestGetMany tests that the GetWork call with a "max_jobs" parameter
+// actually retrieves the requested number of jobs.
+func (s *PythonSuite) TestGetManyMaxGetwork(c *check.C) {
+	s.WorkSpec["max_getwork"] = 5
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+
+	workUnitKvps := make([]interface{}, 100)
+	for i := range workUnitKvps {
+		key := fmt.Sprintf("u%03d", i+1)
+		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
+		items := []interface{}{key, data}
+		workUnitKvps[i] = cborrpc.PythonTuple{Items: items}
+	}
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, workUnitKvps)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1, "lease_time": 300, "max_jobs": 10})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(anything, check.NotNil)
+	c.Assert(anything, check.FitsTypeOf, []cborrpc.PythonTuple{})
+	list := anything.([]cborrpc.PythonTuple)
+	// Even though we requested 10 jobs, we should actually get 5
+	// (e.g. the work spec's max_getwork)
+	c.Check(list, check.HasLen, 5)
+
+	keys := make([]interface{}, len(list))
+	expected := make([]interface{}, len(list))
+	for i, tuple := range list {
+		expected[i] = fmt.Sprintf("u%03d", i+1)
+		if len(tuple.Items) > 1 {
+			keys[i] = tuple.Items[1]
+		}
+	}
+	c.Check(keys, check.DeepEquals, expected)
 }

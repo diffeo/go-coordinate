@@ -240,14 +240,22 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	}
 
 	err := withTx(w, func(tx *sql.Tx) error {
-		spec, err := w.chooseWorkSpec(tx, req.AvailableGb)
+		spec, meta, err := w.chooseWorkSpec(tx, req.AvailableGb)
 		if err != nil {
 			return err
 		}
-		if spec == nil {
+		if spec == nil || meta == nil {
 			return nil
 		}
-		units, err := w.chooseWorkUnits(tx, spec, req.NumberOfWorkUnits)
+		// Adjust the work unit count based on what's possible here
+		count := req.NumberOfWorkUnits
+		if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
+			count = meta.MaxAttemptsReturned
+		}
+		if meta.MaxRunning > 0 && count > meta.PendingCount-meta.MaxRunning {
+			count = meta.PendingCount - meta.MaxRunning
+		}
+		units, err := w.chooseWorkUnits(tx, spec, count)
 		if err != nil {
 			return err
 		}
@@ -266,43 +274,40 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 
 // chooseWorkSpec chooses some work spec that has available work units.
 // If no work spec has available work, return nil.
-func (w *worker) chooseWorkSpec(tx *sql.Tx, availableGb float64) (*workSpec, error) {
-	// This is a single query that picks some work spec that should
-	// have an available work unit.
-	//
-	// This should consider returning the entire metadata object.
-	// Or we should pull all of the metadata objects for all of the
-	// work specs.
-	query := "SELECT work_spec.id, work_spec.name "
-	query += "FROM work_spec, work_unit LEFT OUTER JOIN attempt ON work_unit.active_attempt_id=attempt.id "
-	query += "WHERE work_spec.namespace_id=$1 "
-	query += "AND work_spec.paused=FALSE "
-	query += "AND work_unit.work_spec_id=work_spec.id "
-	query += "AND (attempt.status IS NULL OR attempt.status='expired' OR attempt.status='retryable') "
-	query += "GROUP BY work_spec.id"
-	row := tx.QueryRow(query, w.namespace.id)
-	spec := workSpec{namespace: w.namespace}
-	err := row.Scan(&spec.id, &spec.name)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+func (w *worker) chooseWorkSpec(tx *sql.Tx, availableGb float64) (*workSpec, *coordinate.WorkSpecMeta, error) {
+	specs, metas, err := w.namespace.allMetas(tx, true)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &spec, nil
+	// Prune out uninteresting work specs
+	for name, meta := range metas {
+		// We are not interested if the work spec is paused or
+		// if there is nothing to do
+		if meta.Paused ||
+			meta.AvailableCount == 0 ||
+			(meta.MaxRunning > 0 && meta.PendingCount >= meta.MaxRunning) {
+			delete(specs, name)
+			delete(metas, name)
+		}
+		// TODO(dmaze): implement the rest of the scheduler here.
+		// We have all of the data we need.
+		return specs[name], metas[name], nil
+	}
+	// Nothing to do
+	return nil, nil, nil
 }
 
 // chooseWorkUnits chooses up to a specified number of work units from
 // some work spec.
 func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*workUnit, error) {
 	query := buildSelect([]string{
-		"work_unit.id",
-		"work_unit.name",
+		workUnitID,
+		workUnitName,
 	}, []string{
-		"work_unit LEFT OUTER JOIN attempt ON work_unit.active_attempt_id=attempt.id",
+		workUnitAttemptJoin,
 	}, []string{
-		"work_unit.work_spec_id=$1",
-		"(attempt.status IS NULL OR attempt.status='expired' OR attempt.status='retryable')",
+		inThisWorkSpec,
+		attemptIsAvailable,
 	})
 	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC LIMIT %v", numUnits)
 	rows, err := tx.Query(query, spec.id)

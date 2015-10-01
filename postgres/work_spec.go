@@ -149,6 +149,104 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	return meta, err
 }
 
+// AllMetas retrieves the metadata for all work specs.  This is
+// expected to run within a pre-existing transaction.  On success,
+// returns maps from work spec name to work spec object and to
+// metadata object.
+func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec, map[string]*coordinate.WorkSpecMeta, error) {
+	query := buildSelect([]string{
+		workSpecID,
+		workSpecName,
+		"priority",
+		"weight",
+		"paused",
+		"continuous",
+		"can_be_continuous",
+		"interval",
+		"next_continuous",
+		"max_running",
+		"max_attempts_returned",
+		"next_work_spec_name",
+		"next_work_spec_preempts",
+	}, []string{
+		workSpecTable,
+	}, []string{
+		workSpecNamespace + "=$1",
+	})
+	rows, err := tx.Query(query, ns.id)
+	if err != nil {
+		return nil, nil, err
+	}
+	specs := make(map[string]*workSpec)
+	metas := make(map[string]*coordinate.WorkSpecMeta)
+	err = scanRows(rows, func() error {
+		var (
+			spec           workSpec
+			meta           coordinate.WorkSpecMeta
+			interval       string
+			nextContinuous pq.NullTime
+			err            error
+		)
+		err = rows.Scan(&spec.id, &spec.name, &meta.Priority,
+			&meta.Weight, &meta.Paused, &meta.Continuous,
+			&meta.CanBeContinuous, &interval, &nextContinuous,
+			&meta.MaxRunning, &meta.MaxAttemptsReturned,
+			&meta.NextWorkSpecName, &meta.NextWorkSpecPreempts)
+		specs[spec.name] = &spec
+		metas[spec.name] = &meta
+		return err
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if withCounts {
+		query = buildSelect([]string{
+			workSpecName,
+			attemptStatus,
+			"COUNT(*)",
+		}, []string{
+			workSpecTable,
+			workUnitAttemptJoin,
+		}, []string{
+			inThisNamespace, // binds $1
+			workUnitInSpec,
+			// We ignore finished/failed status; is it
+			// worthwhile to ignore those here?
+		})
+		query += " GROUP BY " + workSpecName + ", " + attemptStatus
+		rows, err = tx.Query(query, ns.id)
+		if err != nil {
+			return nil, nil, err
+		}
+		err = scanRows(rows, func() error {
+			var name string
+			var status sql.NullString
+			var count int
+			err := rows.Scan(&name, &status, &count)
+			if err != nil {
+				return err
+			}
+			if !status.Valid {
+				metas[name].AvailableCount += count
+			} else {
+				switch status.String {
+				case "expired":
+					metas[name].AvailableCount += count
+				case "retryable":
+					metas[name].AvailableCount += count
+				case "pending":
+					metas[name].PendingCount += count
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	return specs, metas, nil
+}
+
 func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	// There are a couple of fields we can't set; in this implementation
 	// we can just not update them and be done with it.
