@@ -240,13 +240,18 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	}
 
 	err := withTx(w, func(tx *sql.Tx) error {
-		spec, meta, err := w.chooseWorkSpec(tx, req.AvailableGb)
+		specs, metas, err := w.namespace.allMetas(tx, true)
 		if err != nil {
 			return err
 		}
-		if spec == nil || meta == nil {
+		name, err := coordinate.SimplifiedScheduler(metas, req.AvailableGb)
+		if err == coordinate.ErrNoWork {
 			return nil
+		} else if err != nil {
+			return err
 		}
+		spec := specs[name]
+		meta := metas[name]
 		// Adjust the work unit count based on what's possible here
 		count := req.NumberOfWorkUnits
 		if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
@@ -270,31 +275,6 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		return nil
 	})
 	return attempts, err
-}
-
-// chooseWorkSpec chooses some work spec that has available work units.
-// If no work spec has available work, return nil.
-func (w *worker) chooseWorkSpec(tx *sql.Tx, availableGb float64) (*workSpec, *coordinate.WorkSpecMeta, error) {
-	specs, metas, err := w.namespace.allMetas(tx, true)
-	if err != nil {
-		return nil, nil, err
-	}
-	// Prune out uninteresting work specs
-	for name, meta := range metas {
-		// We are not interested if the work spec is paused or
-		// if there is nothing to do
-		if meta.Paused ||
-			meta.AvailableCount == 0 ||
-			(meta.MaxRunning > 0 && meta.PendingCount >= meta.MaxRunning) {
-			delete(specs, name)
-			delete(metas, name)
-		}
-		// TODO(dmaze): implement the rest of the scheduler here.
-		// We have all of the data we need.
-		return specs[name], metas[name], nil
-	}
-	// Nothing to do
-	return nil, nil, nil
 }
 
 // chooseWorkUnits chooses up to a specified number of work units from

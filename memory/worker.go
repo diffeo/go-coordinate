@@ -159,21 +159,29 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	if req.NumberOfWorkUnits < 1 {
 		req.NumberOfWorkUnits = 1
 	}
-	// Get the first work unit, which picks a work spec for the
-	// remainder
-	attempt := w.getWork()
-	if attempt == nil {
+
+	// Get the metadata and choose a work spec
+	specs, metas := w.namespace.allMetas(true)
+	name, err := coordinate.SimplifiedScheduler(metas, req.AvailableGb)
+	if err == coordinate.ErrNoWork {
 		return attempts, nil
+	} else if err != nil {
+		return nil, err
 	}
-	attempts = append(attempts, attempt)
+	spec := specs[name]
+	meta := metas[name]
+
 	// Get more work units, but not more than either the number
 	// requested or the maximum allowed
-	target := attempt.workUnit.workSpec.meta.MaxAttemptsReturned
-	if target == 0 || target > req.NumberOfWorkUnits {
-		target = req.NumberOfWorkUnits
+	count := req.NumberOfWorkUnits
+	if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
+		count = meta.MaxAttemptsReturned
 	}
-	for len(attempts) < target {
-		attempt := w.getWork()
+	if meta.MaxRunning > 0 && count > meta.PendingCount-meta.MaxRunning {
+		count = meta.PendingCount - meta.MaxRunning
+	}
+	for len(attempts) < count {
+		attempt := w.getWorkFromSpec(spec)
 		if attempt == nil {
 			break
 		}
@@ -182,28 +190,15 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	return attempts, nil
 }
 
-// getWork finds an available work unit, creates an attempt for it,
-// sets that attempt as the active attempt for the work unit, adds
-// the attempt to the worker's active and history attempts list, and
-// returns it.  If there is no work to be had, returns nil.
-func (w *worker) getWork() *attempt {
-	for _, workSpec := range w.namespace.workSpecs {
-		attempt := w.getWorkFromSpec(workSpec)
-		if attempt != nil {
-			return attempt
-		}
-	}
-	return nil
-}
-
-func (w *worker) getWorkFromSpec(workSpec *workSpec) *attempt {
-	// TODO(dmaze): Something, probably this, should also check
-	// workSpec.meta.MaxRunning
-	if len(workSpec.available) == 0 ||
-		workSpec.meta.Paused {
+// getWorkFromSpec forcibly retrieves a work unit from a work spec.
+// It could create a work unit if spec is a continuous spec with no
+// available units.  It ignores other constraints, such as whether the
+// work spec is paused.
+func (w *worker) getWorkFromSpec(spec *workSpec) *attempt {
+	if len(spec.available) == 0 {
 		return nil
 	}
-	workUnit := workSpec.available.Next()
+	workUnit := spec.available.Next()
 	return w.makeAttempt(workUnit, time.Duration(0))
 }
 

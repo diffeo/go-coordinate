@@ -36,6 +36,10 @@ var ErrCannotBecomeContinuous = errors.New("Cannot set work spec to continuous")
 // different backends.  This is impossible in ordinary usage.
 var ErrWrongBackend = errors.New("Cannot combine coordinate objects from different backends")
 
+// ErrNoWork is returned from scheduler calls when there is no work to
+// do.
+var ErrNoWork = errors.New("No work to do")
+
 // ErrNoSuchWorkSpec is returned by Namespace.WorkSpec() and similar
 // functions that want to look up a work spec, but cannot find it.
 type ErrNoSuchWorkSpec struct {

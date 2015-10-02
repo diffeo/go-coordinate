@@ -60,9 +60,27 @@ func (spec *workSpec) setData(data map[string]interface{}) error {
 func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
+	return spec.getMeta(withCounts), nil
+}
 
-	// TODO(dmaze): fill in meta.PendingCount
-	return spec.meta, nil
+// getMeta gets a copy of this spec's metadata, optionally with counts
+// filled in.  It expects to run within the global lock.
+func (spec *workSpec) getMeta(withCounts bool) coordinate.WorkSpecMeta {
+	result := spec.meta
+	result.AvailableCount = 0
+	result.PendingCount = 0
+	if withCounts {
+		for _, unit := range spec.workUnits {
+			if unit.activeAttempt == nil ||
+				unit.activeAttempt.status == coordinate.Expired ||
+				unit.activeAttempt.status == coordinate.Retryable {
+				result.AvailableCount++
+			} else if unit.activeAttempt.status == coordinate.Pending {
+				result.PendingCount++
+			}
+		}
+	}
+	return result
 }
 
 func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {

@@ -42,6 +42,9 @@ type WorkSpecData struct {
 	// nice(1) tool.  If Weight is zero, then it is set to 20 - Nice.
 	Nice int
 
+	// MinGb specifies the minimum amount of memory required to run.
+	MinGb float64 `mapstructure:"min_gb"`
+
 	// MaxRunning specifies the maximum number of work units that
 	// are allowed to be concurrently running, across all workers.
 	// If zero, there is no limit.
@@ -95,6 +98,7 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 		meta.Paused = data.Disabled
 		meta.Continuous = data.Continuous
 		meta.CanBeContinuous = data.Continuous
+		meta.MinMemoryGb = data.MinGb
 		meta.Interval = time.Duration(data.Interval) * time.Second
 		meta.MaxRunning = data.MaxRunning
 		meta.MaxAttemptsReturned = data.MaxGetwork

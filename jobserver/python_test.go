@@ -100,6 +100,38 @@ func (s *PythonSuite) addWorkUnit(c *check.C, workSpecName, key string, data map
 	c.Check(msg, check.Equals, "")
 }
 
+// addPrefixedWorkUnits adds a series of similarly-named work units
+// to a work spec.  If prefix is "u", it adds count work units named
+// u001, u002, ....  The work spec dictionaries have a single key "k"
+// with values v1, v2, ....
+func (s *PythonSuite) addPrefixedWorkUnits(c *check.C, workSpecName, prefix string, count int) {
+	workUnitKvps := make([]interface{}, count)
+	for i := range workUnitKvps {
+		key := fmt.Sprintf("%s%03d", prefix, i+1)
+		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
+		items := []interface{}{key, data}
+		workUnitKvps[i] = cborrpc.PythonTuple{Items: items}
+	}
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, workUnitKvps)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+}
+
+// expectPrefixedWorkUnits returns a list of expected return values from
+// the GetWork call, if the returns are the first count work units from
+// workSpecName with prefix prefix.
+func (s *PythonSuite) expectPrefixedWorkUnits(workSpecName, prefix string, count int) interface{} {
+	result := make([]cborrpc.PythonTuple, count)
+	for i := range result {
+		key := fmt.Sprintf("%s%03d", prefix, i+1)
+		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
+		items := []interface{}{workSpecName, key, data}
+		result[i] = cborrpc.PythonTuple{Items: items}
+	}
+	return result
+}
+
 // getOneWorkUnit calls GetWorkUnits for a single specific work unit,
 // checks the results, and returns its data dictionary (or nil if absent).
 func (s *PythonSuite) getOneWorkUnit(c *check.C, workSpecName, workUnitKey string) map[string]interface{} {
@@ -287,73 +319,60 @@ func (s *PythonSuite) TestPause(c *check.C) {
 // actually retrieves the requested number of jobs.
 func (s *PythonSuite) TestGetMany(c *check.C) {
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
-
-	workUnitKvps := make([]interface{}, 100)
-	for i := range workUnitKvps {
-		key := fmt.Sprintf("u%03d", i+1)
-		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
-		items := []interface{}{key, data}
-		workUnitKvps[i] = cborrpc.PythonTuple{Items: items}
-	}
-	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, workUnitKvps)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.addPrefixedWorkUnits(c, workSpecName, "u", 100)
 
 	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1, "lease_time": 300, "max_jobs": 10})
 	c.Assert(err, check.IsNil)
 	c.Check(msg, check.Equals, "")
-	c.Assert(anything, check.NotNil)
-	c.Assert(anything, check.FitsTypeOf, []cborrpc.PythonTuple{})
-	list := anything.([]cborrpc.PythonTuple)
-	c.Check(list, check.HasLen, 10)
 
-	keys := make([]interface{}, len(list))
-	expected := make([]interface{}, len(list))
-	for i, tuple := range list {
-		expected[i] = fmt.Sprintf("u%03d", i+1)
-		if len(tuple.Items) > 1 {
-			keys[i] = tuple.Items[1]
-		}
-	}
-	c.Check(keys, check.DeepEquals, expected)
+	expected := s.expectPrefixedWorkUnits(workSpecName, "u", 10)
+	c.Check(anything, check.DeepEquals, expected)
 }
 
-// TestGetMany tests that the GetWork call with a "max_jobs" parameter
-// actually retrieves the requested number of jobs.
+// TestGetManyMaxGetwork tests that the GetWork call with a "max_jobs"
+// parameter actually retrieves the requested number of jobs.
 func (s *PythonSuite) TestGetManyMaxGetwork(c *check.C) {
 	s.WorkSpec["max_getwork"] = 5
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
-
-	workUnitKvps := make([]interface{}, 100)
-	for i := range workUnitKvps {
-		key := fmt.Sprintf("u%03d", i+1)
-		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
-		items := []interface{}{key, data}
-		workUnitKvps[i] = cborrpc.PythonTuple{Items: items}
-	}
-	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, workUnitKvps)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.addPrefixedWorkUnits(c, workSpecName, "u", 100)
 
 	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1, "lease_time": 300, "max_jobs": 10})
 	c.Assert(err, check.IsNil)
 	c.Check(msg, check.Equals, "")
-	c.Assert(anything, check.NotNil)
-	c.Assert(anything, check.FitsTypeOf, []cborrpc.PythonTuple{})
-	list := anything.([]cborrpc.PythonTuple)
+
 	// Even though we requested 10 jobs, we should actually get 5
 	// (e.g. the work spec's max_getwork)
-	c.Check(list, check.HasLen, 5)
+	expected := s.expectPrefixedWorkUnits(workSpecName, "u", 5)
+	c.Check(anything, check.DeepEquals, expected)
+}
 
-	keys := make([]interface{}, len(list))
-	expected := make([]interface{}, len(list))
-	for i, tuple := range list {
-		expected[i] = fmt.Sprintf("u%03d", i+1)
-		if len(tuple.Items) > 1 {
-			keys[i] = tuple.Items[1]
-		}
+// TestGetTooMany tests what happens when there are two work specs,
+// and the one that gets chosen has fewer work units than are requested.
+// This test validates that the higher-weight work spec is chosen and
+// that the GetWork call does not "spill" to retrieving work units from
+// the other work spec.
+func (s *PythonSuite) TestGetTooMany(c *check.C) {
+	s.WorkSpec["weight"] = 1
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addPrefixedWorkUnits(c, workSpecName, "u", 100)
+
+	otherWorkSpec := map[string]interface{}{
+		"name":         "ws2",
+		"min_gb":       0.1,
+		"module":       "coordinate.tests.test_job_client",
+		"run_function": "run_function",
+		"weight":       300,
 	}
-	c.Check(keys, check.DeepEquals, expected)
+	otherWorkSpecName := s.setWorkSpec(c, otherWorkSpec)
+	s.addPrefixedWorkUnits(c, otherWorkSpecName, "z", 4)
+
+	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1, "lease_time": 300, "max_jobs": 10})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+
+	// We requested 10 jobs.  Since ws2 has (much) higher weight,
+	// the scheduler should choose it.  But, that has only
+	// 4 work units in it.  We should get exactly those.
+	expected := s.expectPrefixedWorkUnits(otherWorkSpecName, "z", 4)
+	c.Check(anything, check.DeepEquals, expected)
 }

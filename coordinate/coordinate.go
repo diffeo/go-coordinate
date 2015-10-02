@@ -130,6 +130,10 @@ type WorkSpecMeta struct {
 	// WorkSpec.SetMeta() will not change this.
 	CanBeContinuous bool
 
+	// MinMemoryGb specifies the minimum memory required to run
+	// this job (or 0 for unlimited).
+	MinMemoryGb float64
+
 	// Interval specifies the minimum time duration before
 	// generating another continuous work unit.  Setting this in
 	// isolation will affect the second continuous work unit

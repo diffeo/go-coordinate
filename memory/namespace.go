@@ -93,6 +93,17 @@ func (ns *namespace) WorkSpecNames() ([]string, error) {
 	return result, nil
 }
 
+// allMetas retrieves the metadata for all work specs.  This cannot
+// fail.  It expects to run within the global lock.
+func (ns *namespace) allMetas(withCounts bool) (map[string]*workSpec, map[string]*coordinate.WorkSpecMeta) {
+	metas := make(map[string]*coordinate.WorkSpecMeta)
+	for name, spec := range ns.workSpecs {
+		meta := spec.getMeta(withCounts)
+		metas[name] = &meta
+	}
+	return ns.workSpecs, metas
+}
+
 func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 	globalLock(ns)
 	defer globalUnlock(ns)
