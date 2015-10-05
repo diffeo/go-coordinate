@@ -78,7 +78,6 @@ func (s *Suite) TestDefaultMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, true)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -91,17 +90,16 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 		meta coordinate.WorkSpecMeta
 	)
 	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":          "spec",
-		"min_gb":        1,
-		"priority":      10,
-		"weight":        100,
-		"disabled":      true,
-		"continuous":    true,
-		"interval":      60,
-		"max_running":   10,
-		"max_getwork":   1,
-		"then":          "spec2",
-		"then_preempts": false,
+		"name":        "spec",
+		"min_gb":      1,
+		"priority":    10,
+		"weight":      100,
+		"disabled":    true,
+		"continuous":  true,
+		"interval":    60,
+		"max_running": 10,
+		"max_getwork": 1,
+		"then":        "spec2",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -117,7 +115,6 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, false)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -146,21 +143,19 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, true)
 	c.Check(meta.PendingCount, check.Equals, 0)
 
 	err = spec.SetData(map[string]interface{}{
-		"name":          "spec",
-		"min_gb":        1,
-		"priority":      10,
-		"weight":        100,
-		"disabled":      true,
-		"continuous":    true,
-		"interval":      60,
-		"max_running":   10,
-		"max_getwork":   1,
-		"then":          "spec2",
-		"then_preempts": false,
+		"name":        "spec",
+		"min_gb":      1,
+		"priority":    10,
+		"weight":      100,
+		"disabled":    true,
+		"continuous":  true,
+		"interval":    60,
+		"max_running": 10,
+		"max_getwork": 1,
+		"then":        "spec2",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -176,7 +171,6 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, false)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -270,20 +264,18 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, true)
 	c.Check(meta.PendingCount, check.Equals, 0)
 
 	err = spec.SetMeta(coordinate.WorkSpecMeta{
-		Priority:             10,
-		Weight:               100,
-		Paused:               true,
-		Continuous:           false,
-		CanBeContinuous:      false,
-		Interval:             time.Duration(60) * time.Second,
-		MaxRunning:           10,
-		MaxAttemptsReturned:  1,
-		NextWorkSpecName:     "then",
-		NextWorkSpecPreempts: false,
+		Priority:            10,
+		Weight:              100,
+		Paused:              true,
+		Continuous:          false,
+		CanBeContinuous:     false,
+		Interval:            time.Duration(60) * time.Second,
+		MaxRunning:          10,
+		MaxAttemptsReturned: 1,
+		NextWorkSpecName:    "then",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -301,8 +293,6 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	// Cannot change following work spec
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	// Cannot change this preempts flag
-	c.Check(meta.NextWorkSpecPreempts, check.Equals, true)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 

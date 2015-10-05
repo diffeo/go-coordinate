@@ -176,26 +176,6 @@ type WorkSpecMeta struct {
 	// data, or empty string.
 	NextWorkSpecName string
 
-	// NextWorkSpecPreempts specifies whether the scheduler should
-	// give NextWorkSpecName priority over this one.  If this is
-	// true and the work spec in NextWorkSpecName has at least one
-	// work unit then this work spec is ignored.  The net effect
-	// of this is to set up a pipeline of work units where the job
-	// scheduler will prioritize getting work all the way through
-	// the pipeline over starting new work at the front of the
-	// pipeline.
-	//
-	// A similar effect can be obtained with the Priority and
-	// Weight settings: if downstream stages have higher weight
-	// then the scheduler will prioritize those downstream work
-	// specs without actually starving out the earlier ones.
-	// Future versions of the scheduler may ignore this flag.
-	//
-	// WorkSpec.SetMeta() ignores this field.  Defaults to the
-	// value of the "then_preempts" flag in the work spec data, or
-	// true.
-	NextWorkSpecPreempts bool
-
 	// AvailableCount indicates the number of work units in this
 	// work spec that could be returned from a
 	// Worker.RequestAttempts() call.  These are work units that

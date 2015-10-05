@@ -289,9 +289,9 @@ func (s *SimplifiedSuite) TestThreeSpecsOneOverfull(c *check.C) {
 	}
 	trials := 1000
 	counts := s.RunScheduler(c, metas, trials)
-	// Even in this case it's hard for the "one more work unit"
-	// score for "three"!  "one" should have a score of 100,
-	// and "two" 500, but "three" should come up with
+	// This setup produces a negative score for "three"!  "one"
+	// should have a score of 100, and "two" 500, but "three"
+	// should come up with
 	// (weight * (total pending + 1)) - pending * total weight
 	// 1 * 100 - 99 * 7 = 100 - 693 = -593
 	// and so "three" should basically just get ignored.

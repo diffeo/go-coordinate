@@ -37,7 +37,7 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 			}
 			interval := durationToSQL(meta.Interval)
 			nextContinuous := timeToNullTime(meta.NextContinuous)
-			row = tx.QueryRow("INSERT INTO work_spec(namespace_id, name, data, priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id", ns.id, name, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, meta.NextWorkSpecPreempts)
+			row = tx.QueryRow("INSERT INTO work_spec(namespace_id, name, data, priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id", ns.id, name, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
 			err = row.Scan(&spec.id)
 		}
 		return err
@@ -129,7 +129,7 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 
 	interval := durationToSQL(meta.Interval)
 	nextContinuous := timeToNullTime(meta.NextContinuous)
-	_, err = tx.Exec("UPDATE work_spec SET data=$2, priority=$3, weight=$4, paused=$5, continuous=$6, can_be_continuous=$7, min_memory_gb=$8, interval=$9, next_continuous=$10, max_running=$11, max_attempts_returned=$12, next_work_spec_name=$13, next_work_spec_preempts=$14 WHERE id=$1", spec.id, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, meta.NextWorkSpecPreempts)
+	_, err = tx.Exec("UPDATE work_spec SET data=$2, priority=$3, weight=$4, paused=$5, continuous=$6, can_be_continuous=$7, min_memory_gb=$8, interval=$9, next_continuous=$10, max_running=$11, max_attempts_returned=$12, next_work_spec_name=$13, next_work_spec_preempts=$14 WHERE id=$1", spec.id, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
 	return err
 }
 
@@ -139,8 +139,8 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 		interval       string
 		nextContinuous pq.NullTime
 	)
-	row := theDB(spec).QueryRow("SELECT priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts FROM work_spec WHERE id=$1", spec.id)
-	err := row.Scan(&meta.Priority, &meta.Weight, &meta.Paused, &meta.Continuous, &meta.CanBeContinuous, &meta.MinMemoryGb, &interval, &nextContinuous, &meta.MaxRunning, &meta.MaxAttemptsReturned, &meta.NextWorkSpecName, &meta.NextWorkSpecPreempts)
+	row := theDB(spec).QueryRow("SELECT priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name FROM work_spec WHERE id=$1", spec.id)
+	err := row.Scan(&meta.Priority, &meta.Weight, &meta.Paused, &meta.Continuous, &meta.CanBeContinuous, &meta.MinMemoryGb, &interval, &nextContinuous, &meta.MaxRunning, &meta.MaxAttemptsReturned, &meta.NextWorkSpecName)
 	if err == nil {
 		meta.NextContinuous = nullTimeToTime(nextContinuous)
 		meta.Interval, err = sqlToDuration(interval)
@@ -168,11 +168,10 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		"max_running",
 		"max_attempts_returned",
 		"next_work_spec_name",
-		"next_work_spec_preempts",
 	}, []string{
 		workSpecTable,
 	}, []string{
-		workSpecNamespace + "=$1",
+		inThisNamespace,
 	})
 	rows, err := tx.Query(query, ns.id)
 	if err != nil {
@@ -193,7 +192,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			&meta.CanBeContinuous, &meta.MinMemoryGb,
 			&interval, &nextContinuous, &meta.MaxRunning,
 			&meta.MaxAttemptsReturned,
-			&meta.NextWorkSpecName, &meta.NextWorkSpecPreempts)
+			&meta.NextWorkSpecName)
 		specs[spec.name] = &spec
 		metas[spec.name] = &meta
 		return err

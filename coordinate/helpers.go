@@ -61,20 +61,12 @@ type WorkSpecData struct {
 	// "outputs", these will be translated into new work units in
 	// the Then work spec.
 	Then string
-
-	// ThenPreempts specifies whether the scheduler will
-	// unconditionally run work units in the Then work spec before
-	// this one.  Future versions of the scheduler may ignore this
-	// flag.  Defaults to true.
-	ThenPreempts bool `mapstructure:"then_preempts"`
 }
 
 // ExtractWorkSpecMeta fills in as much of a WorkSpecMeta object as
 // possible based on information given in a work spec definition.
 func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta WorkSpecMeta, err error) {
-	data := WorkSpecData{
-		ThenPreempts: true,
-	}
+	data := WorkSpecData{}
 	config := mapstructure.DecoderConfig{Result: &data}
 	decoder, err := mapstructure.NewDecoder(&config)
 	if err == nil {
@@ -103,7 +95,6 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 		meta.MaxRunning = data.MaxRunning
 		meta.MaxAttemptsReturned = data.MaxGetwork
 		meta.NextWorkSpecName = data.Then
-		meta.NextWorkSpecPreempts = data.ThenPreempts
 	}
 	return
 }

@@ -70,6 +70,52 @@ def task_master():
 
 `test_job_client.py`, `test_job_flow.py`, and `test_task_master.py`
 all use this fixture and will run against the `goordinated` server.
+Many of these tests have been extracted into Go tests in the
+"jobserver" package.
+
+Differences from Python Coordinate
+----------------------------------
+
+Most Python Coordinate applications should run successfully against
+this server.  Known issues are noted in the "status" section below.
+
+The work spec scheduler is much simpler than in the Python
+coordinated.  The scheduler only considers work specs' `priority` and
+`weight` fields.  Work specs with no work are discarded; then work
+specs not of the highest priority are discarded; then the scheduler
+randomly chooses a work spec to try to make the ratio of the number of
+pending work units match the weights.  Work specs' successors, as
+identified by the `then` field, do not factor into the scheduler, and
+the `then_preempts` field is ignored.
+
+For example, given work specs:
+
+```yaml
+flows:
+  a:
+    weight: 1000
+    then: b
+  b:
+    weight: 1
+``` 
+
+Add two work units to "a", and have an implementation that copies
+those work units to the work unit data `output` field.
+
+```python
+def run_function(work_unit):
+  work_unit.data["output"] = {work_unit.key: {}}
+```
+
+The Python coordinated will run a work unit from "a", producing one in
+"b"; then its rule that later work specs take precedence applies, and
+it will run the work unit in "b"; then "a", then "b".  This
+implementation does not have that precedence rule, and so the second
+request for work will (very probably) get the second work unit from
+"a" in accordance with the specified weights.
+
+If you need a later work spec to preempt an earlier one, set a
+`priority` key on the later work spec.
 
 Packages
 --------
@@ -88,22 +134,20 @@ tracked.  `memory` is the in-memory implementation of this API.
 Status
 ------
 
-(As of 15 Sep 2015)
+(As of 5 Oct 2015)
+
+The overall system is probably usable for some applications, though
+I have not done any particular real-world testing yet.
 
 The `coordinate summary` command, and the most basic flows that create
 work specs, add work units, get work, and complete it work.  This
-passes 3 tests in `test_job_client.py`.
+passes almost but not quite all of the Python tests.  In particular,
+there is no special handling for UUID data.  Continuous jobs are
+believed to be broken as well.  Binary-string work unit keys probably
+also do not work; they must be UTF-8, especially for the PostgreSQL
+backend.  The PostgreSQL backend in particular also needs real
+concurrency testing.
 
-About a dozen Coordinate RPC calls are unimplemented.  There is
-currently no work scheduler (the alphabetically first work unit from
-any work spec is returned).  Neither job chaining (work spec `then`
-key) nor continuous jobs are implemented.
-
-Currently the only storage backend is in-memory, but the abstract API
-is intended to support other storage systems.  In particular,
-PostgreSQL support is planned.
-
-This implementation also has no way to make outbound calls to a
-Coordinate server from a Go program.  This will likely involve
-creating a new network service, possibly a REST API mirroring the
-Coordinate API.
+This implementation has no way to make outbound calls to a Coordinate
+server from a Go program.  This will likely involve creating a new
+network service, possibly a REST API mirroring the Coordinate API.

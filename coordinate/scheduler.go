@@ -5,11 +5,6 @@ import (
 	"math/rand"
 )
 
-// This file provides two schedulers to choose work for a
-// Worker.AttemptRequests() call.
-//
-// TODO(dmaze): How is the caller supposed to choose?
-
 // SimplifiedScheduler chooses a work spec to do work from a mapping
 // of work spec metadata, including counts.  It works as follows:
 //
@@ -107,46 +102,4 @@ func SimplifiedScheduler(metas map[string]*WorkSpecMeta, availableGb float64) (s
 	}
 	// The preceding loop always should have picked a candidate
 	panic(errors.New("SimplifiedScheduler didn't pick a candidate"))
-}
-
-// ThenChainScheduler choose a work spec to do work from a mapping of
-// work spec metadata, including counts.  It replicates the scheduling
-// algorithm in the Python Coordinate daemon.  It works as follows:
-//
-//     * Analyze all work specs and their NextWorkSpec metadata fields
-//       ("then" work spec keys) and build up a graph of work specs
-//     * Classify each work spec as a source (the start of a work spec
-//       chain), part of a chain, or part of a loop
-//     * Choose "sources", "chains", or "loops" with a fixed probability
-//     * If "chains", choose the most-downstream work spec in each
-//       chain that has work; otherwise choose all work specs
-//     * Assign a score to each work spec based on its assigned weight
-//       and the number of pending work units it currently has, aiming
-//       to make the ratio of pending work units match the ratio of
-//       weights
-//     * Choose the work spec with the highest score
-//
-// If work spec "a" sets NextWorkSpec "b" in its metadata, then if "b"
-// has work, it will always be done before "a".  Setting
-// NextWorkSpecPreempts (or the "then_preempts" work spec key) to
-// false breaks this chain; the analysis phase simply does not treat
-// "b" as a successor of "a" in this case.
-//
-// If the number of workers is small, this scheduler can starve
-// low-weight work specs.  The Python implementation saved the graph
-// of work specs; since practical experience suggests the number of
-// work specs is small, this simply repeats it on every call.
-// Practical experience also suggests that the pattern of a pipeline
-// of work specs, chained by NextWorkSpec, where the system wants to
-// emphasize completing work over leaving it mid-pipeline, is rare,
-// though accommodating that was the original design goal of this
-// scheduler.  Appropriate setting of priorities can make
-// SimplifiedScheduler have the same effect in a more comprehensible
-// framework.
-//
-// If none of the work specs have work (that is, no work specs have
-// available work units, and continuous work specs already have jobs
-// pending) returns ErrNoWork.
-func ThenChainScheduler(map[string]*WorkSpecMeta) (string, error) {
-	return "", ErrNoWork
 }
