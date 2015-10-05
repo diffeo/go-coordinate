@@ -100,6 +100,24 @@ func (s *PythonSuite) addWorkUnit(c *check.C, workSpecName, key string, data map
 	c.Check(msg, check.Equals, "")
 }
 
+// prioritizeWorkUnit changes the priority of a single work unit.
+func (s *PythonSuite) prioritizeWorkUnit(c *check.C, workSpecName, key string, priority int, adjust bool) {
+	options := map[string]interface{}{
+		"work_unit_keys": []interface{}{key},
+	}
+	if adjust {
+		options["priority"] = nil
+		options["adjustment"] = priority
+	} else {
+		options["priority"] = priority
+		options["adjustment"] = nil
+	}
+	ok, msg, err := s.JobServer.PrioritizeWorkUnits(workSpecName, options)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+}
+
 // addPrefixedWorkUnits adds a series of similarly-named work units
 // to a work spec.  If prefix is "u", it adds count work units named
 // u001, u002, ....  The work spec dictionaries have a single key "k"
@@ -185,6 +203,21 @@ func (s *PythonSuite) getOneWork(c *check.C) (ok bool, workSpecName, workUnitKey
 	workUnitData, ok = tuple.Items[2].(map[string]interface{})
 	c.Assert(ok, check.Equals, true)
 	return
+}
+
+func (s *PythonSuite) doOneWork(c *check.C, workSpecName, workUnitKey string) {
+	ok, gotSpec, gotKey, _ := s.getOneWork(c)
+	c.Check(ok, check.Equals, true)
+	if ok {
+		c.Check(gotSpec, check.Equals, workSpecName)
+		c.Check(gotKey, check.Equals, workUnitKey)
+	}
+}
+
+func (s *PythonSuite) doNoWork(c *check.C) {
+	ok, gotSpec, gotKey, _ := s.getOneWork(c)
+	c.Check(ok, check.Equals, false,
+		check.Commentf("got work spec %v key %v", gotSpec, gotKey))
 }
 
 // Tests from test_job_client.py
@@ -375,4 +408,61 @@ func (s *PythonSuite) TestGetTooMany(c *check.C) {
 	// 4 work units in it.  We should get exactly those.
 	expected := s.expectPrefixedWorkUnits(otherWorkSpecName, "z", 4)
 	c.Check(anything, check.DeepEquals, expected)
+}
+
+func (s *PythonSuite) TestPrioritize(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "b", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "c", map[string]interface{}{"k": "v"})
+
+	// Default order is alphabetical
+	s.doOneWork(c, workSpecName, "a")
+
+	// If we prioritize c, it should go first, before b
+	s.prioritizeWorkUnit(c, workSpecName, "c", 1, false)
+
+	s.doOneWork(c, workSpecName, "c")
+	s.doOneWork(c, workSpecName, "b")
+	s.doNoWork(c)
+}
+
+func (s *PythonSuite) TestPrioritizeAdjust(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "b", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "c", map[string]interface{}{"k": "v"})
+
+	// Use "adjust" mode to adjust the priorities
+	s.prioritizeWorkUnit(c, workSpecName, "a", 10, true)
+	s.prioritizeWorkUnit(c, workSpecName, "b", 20, true)
+	s.prioritizeWorkUnit(c, workSpecName, "c", 30, true)
+
+	// Highest priority goes first
+	s.doOneWork(c, workSpecName, "c")
+	s.doOneWork(c, workSpecName, "b")
+	s.doOneWork(c, workSpecName, "a")
+	s.doNoWork(c)
+}
+
+func (s *PythonSuite) TestReprioritize(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "b", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "c", map[string]interface{}{"k": "v"})
+
+	// Use "priority" mode to set the priorities
+	s.prioritizeWorkUnit(c, workSpecName, "a", 10, false)
+	s.prioritizeWorkUnit(c, workSpecName, "b", 20, false)
+	s.prioritizeWorkUnit(c, workSpecName, "c", 30, false)
+
+	// Highest priority goes first
+	s.doOneWork(c, workSpecName, "c")
+
+	// Now adjust "a" to have higher priority
+	s.prioritizeWorkUnit(c, workSpecName, "a", 15, true) // +10 = 25
+
+	s.doOneWork(c, workSpecName, "a")
+	s.doOneWork(c, workSpecName, "b")
+	s.doNoWork(c)
 }
