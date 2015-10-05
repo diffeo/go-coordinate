@@ -419,6 +419,7 @@ func (s *PythonSuite) TestGetTooMany(c *check.C) {
 	c.Check(anything, check.DeepEquals, expected)
 }
 
+// TestPrioritize tests basic work unit prioritization.
 func (s *PythonSuite) TestPrioritize(c *check.C) {
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
 	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
@@ -436,6 +437,8 @@ func (s *PythonSuite) TestPrioritize(c *check.C) {
 	s.doNoWork(c)
 }
 
+// TestPrioritizeAdjust tests using the "adjust" mode to change work unit
+// priorities.
 func (s *PythonSuite) TestPrioritizeAdjust(c *check.C) {
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
 	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
@@ -454,6 +457,8 @@ func (s *PythonSuite) TestPrioritizeAdjust(c *check.C) {
 	s.doNoWork(c)
 }
 
+// TestReprioritize tests that changing a work unit priority mid-stream
+// correctly adjusts the work unit priorities.
 func (s *PythonSuite) TestReprioritize(c *check.C) {
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
 	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
@@ -523,4 +528,157 @@ func (s *PythonSuite) TestFailSucceed(c *check.C) {
 
 	// The end status should be "succeeded"
 	s.checkWorkUnitStatus(c, workSpecName, "a", jobserver.Finished)
+}
+
+// TestGetChildUnitsBasic verifies the GetChildWorkUnits call with a
+// basic work flow.
+func (s *PythonSuite) TestGetChildUnitsBasic(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+
+	// register parent worker
+	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", 0, 6000, nil, "")
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// register child worker
+	ok, msg, err = s.JobServer.WorkerHeartbeat("child", 0, 6000, nil, "parent")
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// right now there should be no child units
+	// (the Python version of this test expects an empty dict back,
+	// but there is explicit protection for returning a falsey value
+	// in the return dict)
+	units, msg, err := s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+
+	// get the work unit
+	anything, msg, err := s.JobServer.GetWork("child", map[string]interface{}{"available_gb": 1})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(anything, check.NotNil)
+	tuple, ok := anything.(cborrpc.PythonTuple)
+	c.Assert(ok, check.Equals, true)
+	c.Assert(tuple.Items, check.HasLen, 3)
+	c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
+	c.Check(tuple.Items[1], check.DeepEquals, "a")
+	c.Check(tuple.Items[2], check.DeepEquals, map[string]interface{}{"k": "v"})
+
+	// it should be reported as a child unit
+	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.HasLen, 1)
+	c.Assert(units["child"], check.HasLen, 1)
+	unit := units["child"][0]
+	c.Check(unit["work_spec_name"], check.Equals, workSpecName)
+	c.Check(unit["work_unit_key"], check.Equals, "a")
+	c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
+	c.Check(unit["worker_id"], check.Equals, "child")
+
+	// now finish it
+	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// there should be no work units left now
+	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+}
+
+// TestGetChildUnitsMulti verifies the GetChildWorkUnits call when the child gets multiple work units.
+func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+	s.addWorkUnit(c, workSpecName, "b", map[string]interface{}{"k": "v"})
+
+	// register parent worker
+	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", 0, 6000, nil, "")
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// register child worker
+	ok, msg, err = s.JobServer.WorkerHeartbeat("child", 0, 6000, nil, "parent")
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// right now there should be no child units
+	units, msg, err := s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+
+	// get the work units
+	anything, msg, err := s.JobServer.GetWork("child", map[string]interface{}{"available_gb": 1, "max_jobs": 10})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(anything, check.NotNil)
+	list, ok := anything.([]cborrpc.PythonTuple)
+	c.Assert(ok, check.Equals, true)
+	c.Check(list, check.HasLen, 2)
+	for i, tuple := range list {
+		c.Assert(tuple.Items, check.HasLen, 3)
+		c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
+		if i == 0 {
+			c.Check(tuple.Items[1], check.DeepEquals, "a")
+		} else {
+			c.Check(tuple.Items[1], check.DeepEquals, "b")
+		}
+		c.Check(tuple.Items[2], check.DeepEquals, map[string]interface{}{"k": "v"})
+	}
+
+	// both should be reported as child units
+	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.HasLen, 1)
+	c.Assert(units["child"], check.HasLen, 2)
+	for _, unit := range units["child"] {
+		c.Check(unit["work_spec_name"], check.Equals, workSpecName)
+		c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
+		c.Check(unit["worker_id"], check.Equals, "child")
+	}
+	c.Check((units["child"][0]["work_unit_key"] == "a" && units["child"][1]["work_unit_key"] == "b") ||
+		(units["child"][0]["work_unit_key"] == "b" && units["child"][1]["work_unit_key"] == "a"),
+		check.Equals, true)
+
+	// finish "a"
+	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// we should have "b" left
+	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.HasLen, 1)
+	c.Assert(units["child"], check.HasLen, 1)
+	unit := units["child"][0]
+	c.Check(unit["work_spec_name"], check.Equals, workSpecName)
+	c.Check(unit["work_unit_key"], check.Equals, "b")
+	c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
+	c.Check(unit["worker_id"], check.Equals, "child")
+
+	// now finish b
+	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "b", map[string]interface{}{"status": jobserver.Finished})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// there should be no work units left now
+	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
 }
