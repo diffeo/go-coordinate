@@ -7,6 +7,7 @@ import (
 
 	// This Coordinate backend requires the PostgreSQL database/sql
 	// driver library, and creates the connection pool here
+	"github.com/dmaze/goordinate/cborrpc"
 	_ "github.com/lib/pq"
 )
 
@@ -51,6 +52,7 @@ func New(connectionString string) (coordinate.Coordinate, error) {
 	gob.Register(map[string]interface{}{})
 	gob.Register(map[interface{}]interface{}{})
 	gob.Register([]interface{}{})
+	gob.Register(cborrpc.PythonTuple{})
 
 	return &pgCoordinate{
 		db: db,

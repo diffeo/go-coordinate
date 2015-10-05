@@ -280,6 +280,7 @@ func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}
 	wuData["output"] = map[string]interface{}{
 		"foo": map[string]interface{}{"bar": "baz"},
 	}
+	wuData["args"] = cborrpc.PythonTuple{Items: []interface{}{"arg"}}
 
 	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, key, map[string]interface{}{"data": wuData, "status": jobserver.Finished})
 	c.Assert(err, check.IsNil)
@@ -303,6 +304,9 @@ func (s *PythonSuite) TestDataUpdates(c *check.C) {
 			"foo": map[string]interface{}{
 				"bar": "baz",
 			},
+		},
+		"args": cborrpc.PythonTuple{
+			Items: []interface{}{"arg"},
 		},
 	})
 }
