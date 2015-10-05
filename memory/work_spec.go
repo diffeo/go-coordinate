@@ -115,6 +115,18 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 	return unit, nil
 }
 
+func (spec *workSpec) addWorkUnits(units map[string]map[string]interface{}) {
+	for name, data := range units {
+		unit := workUnit{
+			name:     name,
+			data:     data,
+			workSpec: spec,
+		}
+		spec.workUnits[name] = &unit
+		spec.available.Add(&unit)
+	}
+}
+
 func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)

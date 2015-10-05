@@ -169,6 +169,19 @@ func (s *PythonSuite) getOneWorkUnit(c *check.C, workSpecName, workUnitKey strin
 	return result
 }
 
+func (s *PythonSuite) finishWorkUnit(c *check.C, workSpecName, workUnitKey string, data map[string]interface{}) {
+	options := map[string]interface{}{
+		"status": jobserver.Finished,
+	}
+	if data != nil {
+		options["data"] = data
+	}
+	ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, workUnitKey, options)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+}
+
 // checkWorkUnitStatus makes a weak assertion about a specific work
 // unit's status by calling GetWorkUnitStatus for it.
 func (s *PythonSuite) checkWorkUnitStatus(c *check.C, workSpecName, workUnitKey string, status jobserver.WorkUnitStatus) {
@@ -205,17 +218,31 @@ func (s *PythonSuite) getOneWork(c *check.C) (ok bool, workSpecName, workUnitKey
 	return
 }
 
+// getSpecificWork calls GetWork expecting a specific work unit to
+// come back, and returns its data dictionary.
+func (s *PythonSuite) getSpecificWork(c *check.C, workSpecName, workUnitKey string) map[string]interface{} {
+	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(anything, check.NotNil)
+	tuple, ok := anything.(cborrpc.PythonTuple)
+	c.Assert(ok, check.Equals, true)
+	c.Assert(tuple.Items, check.HasLen, 3)
+	c.Assert(tuple.Items[0], check.NotNil)
+	c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
+	c.Check(tuple.Items[1], check.DeepEquals, workUnitKey)
+	workUnitData, ok := tuple.Items[2].(map[string]interface{})
+	c.Assert(ok, check.Equals, true)
+	return workUnitData
+}
+
 func (s *PythonSuite) doOneWork(c *check.C, workSpecName, workUnitKey string) {
 	ok, gotSpec, gotKey, _ := s.getOneWork(c)
 	c.Check(ok, check.Equals, true)
 	if ok {
 		c.Check(gotSpec, check.Equals, workSpecName)
 		c.Check(gotKey, check.Equals, workUnitKey)
-
-		ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, workUnitKey, map[string]interface{}{"status": jobserver.Finished})
-		c.Assert(err, check.IsNil)
-		c.Check(ok, check.Equals, true)
-		c.Check(msg, check.Equals, "")
+		s.finishWorkUnit(c, workSpecName, workUnitKey, nil)
 	}
 }
 
@@ -282,11 +309,7 @@ func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}
 	}
 	wuData["args"] = cborrpc.PythonTuple{Items: []interface{}{"arg"}}
 
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, key, map[string]interface{}{"data": wuData, "status": jobserver.Finished})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
-
+	s.finishWorkUnit(c, workSpecName, key, wuData)
 	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Finished)
 	dict = s.getOneWorkUnit(c, workSpecName, key)
 	c.Assert(dict, check.NotNil)
@@ -521,10 +544,7 @@ func (s *PythonSuite) TestFailSucceed(c *check.C) {
 	c.Check(msg, check.Equals, "")
 
 	// But wait!  We actually did the job!
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.finishWorkUnit(c, workSpecName, "a", nil)
 
 	// The end status should be "succeeded"
 	s.checkWorkUnitStatus(c, workSpecName, "a", jobserver.Finished)
@@ -582,10 +602,7 @@ func (s *PythonSuite) TestGetChildUnitsBasic(c *check.C) {
 	c.Check(unit["worker_id"], check.Equals, "child")
 
 	// now finish it
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.finishWorkUnit(c, workSpecName, "a", nil)
 
 	// there should be no work units left now
 	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
@@ -653,10 +670,7 @@ func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
 		check.Equals, true)
 
 	// finish "a"
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.finishWorkUnit(c, workSpecName, "a", nil)
 
 	// we should have "b" left
 	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
@@ -671,14 +685,88 @@ func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
 	c.Check(unit["worker_id"], check.Equals, "child")
 
 	// now finish b
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "b", map[string]interface{}{"status": jobserver.Finished})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	s.finishWorkUnit(c, workSpecName, "b", nil)
 
 	// there should be no work units left now
 	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
 	c.Assert(err, check.IsNil)
 	c.Check(msg, check.Equals, "")
 	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+}
+
+// Tests from test_job_flow.py
+//
+// Note that several of the tests here really test the client-side
+// TaskMaster.add_flow() function and some of the parameter passing
+// of the Python worker implementation.  The important and interesting
+// tests are the ones that exercise the work spec "then" field.
+//
+// Also note that the SimplifiedScheduler does not automatically
+// prefer later work specs to earlier ones.  None of the ported tests
+// take advantage of that.
+//
+// There are two tests that really exercise the "job flow" part.
+
+// TestSimpleFlow verifies that the output of an earlier work spec
+// can become a work unit in a later work spec.  The work unit "output"
+// field is a mapping of work unit name to definition.
+func (s *PythonSuite) TestSimpleFlow(c *check.C) {
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "first",
+		"then": "second",
+	})
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "second",
+	})
+	s.addWorkUnit(c, "first", "u", map[string]interface{}{"k": "v"})
+
+	data := s.getSpecificWork(c, "first", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{
+		"k": "v",
+	})
+	data["output"] = map[string]interface{}{
+		"u": map[string]interface{}{"x": "y"},
+	}
+	s.finishWorkUnit(c, "first", "u", data)
+
+	data = s.getSpecificWork(c, "second", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{
+		"x": "y",
+	})
+	data["output"] = map[string]interface{}{
+		"u": map[string]interface{}{"mode": "foo"},
+	}
+	s.finishWorkUnit(c, "second", "u", data)
+
+	s.doNoWork(c)
+}
+
+// TestSimpleFlow verifies that the output of an earlier work spec
+// can become a work unit in a later work spec.  The work unit "output"
+// field is a flat list of work unit keys.
+func (s *PythonSuite) TestListFlow(c *check.C) {
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "first",
+		"then": "second",
+	})
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "second",
+	})
+	s.addWorkUnit(c, "first", "u", map[string]interface{}{"k": "v"})
+
+	data := s.getSpecificWork(c, "first", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{
+		"k": "v",
+	})
+	data["output"] = []string{"u"}
+	s.finishWorkUnit(c, "first", "u", data)
+
+	data = s.getSpecificWork(c, "second", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{})
+	data["output"] = map[string]interface{}{
+		"u": map[string]interface{}{"mode": "foo"},
+	}
+	s.finishWorkUnit(c, "second", "u", data)
+
+	s.doNoWork(c)
 }

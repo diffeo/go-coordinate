@@ -119,22 +119,97 @@ func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{
 }
 
 func (a *attempt) Expire(data map[string]interface{}) error {
-	return a.complete(data, "expired")
+	return withTx(a, func(tx *sql.Tx) error {
+		return a.complete(tx, data, "expired")
+	})
 }
 
 func (a *attempt) Finish(data map[string]interface{}) error {
-	return a.complete(data, "finished")
+	return withTx(a, func(tx *sql.Tx) error {
+		err := a.complete(tx, data, "finished")
+		if err != nil {
+			return err
+		}
+
+		// Does the work unit data include an "output" key
+		// that we understand?  We may need to ring back to
+		// the work unit here; we need the next work spec name
+		// too in any case
+		outputs := []string{workSpecNextWorkSpec}
+		if data == nil {
+			outputs = append(outputs, workSpecData)
+		}
+		query := buildSelect(outputs, []string{workSpecTable},
+			[]string{isWorkSpec})
+
+		row := tx.QueryRow(query, a.unit.spec.id)
+		var nextWorkSpec string
+		if data == nil {
+			var dataGob []byte
+			err = row.Scan(&nextWorkSpec, &dataGob)
+			if err == nil {
+				data, err = gobToMap(dataGob)
+			}
+		} else {
+			err = row.Scan(&nextWorkSpec)
+		}
+		if err != nil {
+			return err
+		}
+		if nextWorkSpec == "" {
+			return nil // nothing to do
+		}
+
+		// TODO(dmaze): This should become a join in the
+		// previous query
+		query = buildSelect([]string{
+			workSpecID,
+		}, []string{
+			workSpecTable,
+		}, []string{
+			inThisNamespace,
+			workSpecName + "=$2",
+		})
+		row = tx.QueryRow(query, a.unit.spec.namespace.id, nextWorkSpec)
+		var nextWorkSpecID int
+		err = row.Scan(&nextWorkSpecID)
+		if err != nil {
+			return err
+		}
+
+		units := coordinate.ExtractWorkUnitOutput(data["output"])
+		if units == nil {
+			return nil // nothing to do
+		}
+		for name, data := range units {
+			var dataGob []byte
+			dataGob, err = mapToGob(data)
+			if err != nil {
+				return err
+			}
+			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataGob, 0)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
 }
 
 func (a *attempt) Fail(data map[string]interface{}) error {
-	return a.complete(data, "failed")
+	return withTx(a, func(tx *sql.Tx) error {
+		return a.complete(tx, data, "failed")
+	})
 }
 
 func (a *attempt) Retry(data map[string]interface{}) error {
-	return a.complete(data, "retryable")
+	return withTx(a, func(tx *sql.Tx) error {
+		return a.complete(tx, data, "retryable")
+	})
 }
 
-func (a *attempt) complete(data map[string]interface{}, status string) error {
+func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status string) error {
 	// TODO(dmaze): check valid state transitions
 	// TODO(dmaze): check if attempt is active if required
 	conditions := []string{
@@ -154,7 +229,7 @@ func (a *attempt) complete(data map[string]interface{}, status string) error {
 		args = append(args, dataGob)
 	}
 	query := buildUpdate("attempt", changes, conditions)
-	_, err := theDB(a).Exec(query, args...)
+	_, err := tx.Exec(query, args...)
 	return err
 }
 

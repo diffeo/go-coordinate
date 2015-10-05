@@ -107,3 +107,44 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 	}
 	return
 }
+
+// ExtractWorkUnitOutput coerces the "output" key from a work unit into
+// a map of new work units.  The resulting map is nil if output cannot
+// be coerced, or else is a map from work unit key to data dictionary.
+// Backends should call this when an attempt is successfully finished
+// to get new work units to create, if the work spec's metadata's
+// NextWorkSpec field is non-empty.
+func ExtractWorkUnitOutput(output interface{}) map[string]map[string]interface{} {
+	var newUnits map[string]map[string]interface{}
+
+	// Can we decode it as a map?
+	config := mapstructure.DecoderConfig{Result: &newUnits}
+	decoder, err := mapstructure.NewDecoder(&config)
+	if err == nil {
+		err = decoder.Decode(output)
+	}
+	if err == nil {
+		return newUnits
+	}
+
+	// Otherwise assume a format failure.  Try to decode it as a
+	// string list instead.
+	var list []string
+	config = mapstructure.DecoderConfig{Result: &list}
+	decoder, err = mapstructure.NewDecoder(&config)
+	if err == nil {
+		err = decoder.Decode(output)
+	}
+	if err == nil {
+		// Each of the items in list is the name of a work
+		// unit and the datas are empty
+		newUnits = make(map[string]map[string]interface{})
+		for _, key := range list {
+			newUnits[key] = map[string]interface{}{}
+		}
+		return newUnits
+	}
+
+	// Otherwise, we don't know how to decode it
+	return nil
+}

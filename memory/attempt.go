@@ -124,6 +124,26 @@ func (attempt *attempt) Finish(data map[string]interface{}) error {
 		return coordinate.ErrNotPending
 	}
 	attempt.finish(coordinate.Finished, data)
+
+	// Does the work unit data include an "output" key that we
+	// understand?
+	if data == nil {
+		data = attempt.workUnit.data
+	}
+	var newUnits map[string]map[string]interface{}
+	var nextWorkSpec *workSpec
+	output, ok := data["output"]
+	if ok {
+		newUnits = coordinate.ExtractWorkUnitOutput(output)
+	}
+	if newUnits != nil {
+		then := attempt.workUnit.workSpec.meta.NextWorkSpecName
+		if then != "" {
+			nextWorkSpec, ok = attempt.workUnit.workSpec.namespace.workSpecs[then]
+			nextWorkSpec.addWorkUnits(newUnits)
+		}
+	}
+
 	return nil
 }
 
