@@ -228,6 +228,7 @@ func (jobs *JobServer) UpdateWorkUnit(
 				changed = false // no-op
 			case Available:
 				err = workUnit.ClearActiveAttempt()
+				changed = true
 			case Failed:
 				changed = false // see below
 			default:
@@ -239,6 +240,7 @@ func (jobs *JobServer) UpdateWorkUnit(
 				changed = false // no-op
 			case Available: // "retry"
 				err = workUnit.ClearActiveAttempt()
+				changed = true
 			case Finished:
 				// The Python worker, with two separate
 				// processes, has a race wherein there
@@ -248,6 +250,7 @@ func (jobs *JobServer) UpdateWorkUnit(
 				// time.  In that case the successful
 				// finish should win.
 				err = attempt.Finish(nil)
+				changed = true
 			default:
 				err = errors.New("update_work_unit cannot change failed unit")
 			}

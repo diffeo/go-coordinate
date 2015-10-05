@@ -211,6 +211,11 @@ func (s *PythonSuite) doOneWork(c *check.C, workSpecName, workUnitKey string) {
 	if ok {
 		c.Check(gotSpec, check.Equals, workSpecName)
 		c.Check(gotKey, check.Equals, workUnitKey)
+
+		ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, workUnitKey, map[string]interface{}{"status": jobserver.Finished})
+		c.Assert(err, check.IsNil)
+		c.Check(ok, check.Equals, true)
+		c.Check(msg, check.Equals, "")
 	}
 }
 
@@ -465,4 +470,53 @@ func (s *PythonSuite) TestReprioritize(c *check.C) {
 	s.doOneWork(c, workSpecName, "a")
 	s.doOneWork(c, workSpecName, "b")
 	s.doNoWork(c)
+}
+
+// TestSucceedFail tests that failing a finished work unit is a no-op.
+// This can happen if a work unit finishes successfully just before its
+// timeout, and its parent worker tries to kill it.
+func (s *PythonSuite) TestSucceedFail(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+	s.doOneWork(c, workSpecName, "a")
+
+	// ...meanwhile, the parent nukes us from orbit
+	ok, _, err := s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Failed})
+	c.Assert(err, check.IsNil)
+	// This should return "no-op"
+	c.Check(ok, check.Equals, false)
+
+	// The end status should be "succeeded"
+	s.checkWorkUnitStatus(c, workSpecName, "a", jobserver.Finished)
+}
+
+// TestFailSucceed tests that finishing a failed work unit makes it
+// finished.  This happens under the same conditions as
+// TestSucceedFail, but with different timing.
+func (s *PythonSuite) TestFailSucceed(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
+
+	// Get the work unit
+	ok, gotSpec, gotKey, _ := s.getOneWork(c)
+	c.Check(ok, check.Equals, true)
+	if ok {
+		c.Check(gotSpec, check.Equals, workSpecName)
+		c.Check(gotKey, check.Equals, "a")
+	}
+
+	// Meanwhile, the parent nukes us from orbit
+	ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Failed})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// But wait!  We actually did the job!
+	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "a", map[string]interface{}{"status": jobserver.Finished})
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, true)
+	c.Check(msg, check.Equals, "")
+
+	// The end status should be "succeeded"
+	s.checkWorkUnitStatus(c, workSpecName, "a", jobserver.Finished)
 }

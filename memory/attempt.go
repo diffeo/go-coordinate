@@ -120,7 +120,7 @@ func (attempt *attempt) Expire(data map[string]interface{}) error {
 func (attempt *attempt) Finish(data map[string]interface{}) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
-	if !attempt.isPending() {
+	if attempt.status != coordinate.Failed && !attempt.isPending() {
 		return coordinate.ErrNotPending
 	}
 	attempt.finish(coordinate.Finished, data)
