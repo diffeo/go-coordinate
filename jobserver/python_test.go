@@ -10,6 +10,7 @@ import (
 	"github.com/dmaze/goordinate/cborrpc"
 	"github.com/dmaze/goordinate/coordinate"
 	"github.com/dmaze/goordinate/jobserver"
+	"github.com/satori/go.uuid"
 	"gopkg.in/check.v1"
 	"os"
 	"testing"
@@ -73,6 +74,53 @@ func (s *PythonSuite) TearDownTest(c *check.C) {
 	s.JobServer.Namespace = nil
 }
 
+// Assorted useful constantish values:
+var (
+	// noWorkUnits is an empty work unit map
+	noWorkUnits = map[string]map[string]interface{}{}
+
+	// gwuEverything is parameters for GetWorkUnits returning
+	// all work units
+	gwuEverything = map[string]interface{}{}
+
+	// gwuDefault is the default list_work_units settings for
+	// GetWorkUnits, returning both available and pending units
+	gwuDefault = map[string]interface{}{
+		"state": []interface{}{jobserver.Available, jobserver.Pending},
+	}
+
+	// gwuFinished is a GetWorkUnits parameter map returning only
+	// finished units
+	gwuFinished = map[string]interface{}{
+		"state": jobserver.Finished,
+	}
+
+	// allStates lists out the valid work unit states.
+	allStates = []jobserver.WorkUnitStatus{
+		jobserver.Available,
+		jobserver.Pending,
+		jobserver.Finished,
+		jobserver.Failed,
+	}
+
+	// stateShortName gives brief abbreviations for state names
+	// that are used as work unit keys.
+	stateShortName = map[jobserver.WorkUnitStatus]string{
+		jobserver.Available: "AV",
+		jobserver.Pending:   "PE",
+		jobserver.Finished:  "FI",
+		jobserver.Failed:    "FA",
+	}
+
+	// stateShortName2 gives another set of work unit keys.
+	stateShortName2 = map[jobserver.WorkUnitStatus]string{
+		jobserver.Available: "AI",
+		jobserver.Pending:   "ND",
+		jobserver.Finished:  "NI",
+		jobserver.Failed:    "IL",
+	}
+)
+
 // Helpers that do some checking
 
 // setWorkSpec calls the eponymous JobServer function, checking that
@@ -98,6 +146,21 @@ func (s *PythonSuite) addWorkUnit(c *check.C, workSpecName, key string, data map
 	c.Assert(err, check.IsNil)
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
+}
+
+// addWorkUnits adds a batch of work units to the system in one call.
+func (s *PythonSuite) addWorkUnits(c *check.C, workSpecName string, workUnits map[string]map[string]interface{}) {
+	// Assemble the parameters to AddWorkUnits as one big list of
+	// pairs of (key, data)
+	var awu []interface{}
+	for name, data := range workUnits {
+		pair := []interface{}{name, data}
+		awu = append(awu, pair)
+	}
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, awu)
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Assert(ok, check.Equals, true)
 }
 
 // prioritizeWorkUnit changes the priority of a single work unit.
@@ -144,7 +207,7 @@ func (s *PythonSuite) expectPrefixedWorkUnits(workSpecName, prefix string, count
 	for i := range result {
 		key := fmt.Sprintf("%s%03d", prefix, i+1)
 		data := map[string]interface{}{"k": fmt.Sprintf("v%v", i+1)}
-		items := []interface{}{workSpecName, key, data}
+		items := []interface{}{workSpecName, []byte(key), data}
 		result[i] = cborrpc.PythonTuple{Items: items}
 	}
 	return result
@@ -163,12 +226,44 @@ func (s *PythonSuite) getOneWorkUnit(c *check.C, workSpecName, workUnitKey strin
 	tuple, ok := list[0].(cborrpc.PythonTuple)
 	c.Assert(ok, check.Equals, true)
 	c.Check(tuple.Items, check.HasLen, 2)
-	c.Check(tuple.Items[0], check.DeepEquals, workUnitKey)
+	c.Check(tuple.Items[0], check.DeepEquals, []byte(workUnitKey))
 	result, ok := tuple.Items[1].(map[string]interface{})
 	c.Assert(ok, check.Equals, true)
 	return result
 }
 
+// listWorkUnits calls GetWorkUnits (as the similarly-named Python
+// function does) and validates that the response matches an expected
+// set of work units.
+func (s *PythonSuite) listWorkUnits(c *check.C, workSpecName string, options map[string]interface{}, expected map[string]map[string]interface{}) {
+	gwu, msg, err := s.JobServer.GetWorkUnits(workSpecName, options)
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	missing := make(map[string]struct{})
+	for name := range expected {
+		missing[name] = struct{}{}
+	}
+	for _, item := range gwu {
+		tuple, ok := item.(cborrpc.PythonTuple)
+		c.Assert(ok, check.Equals, true)
+		c.Assert(tuple.Items, check.HasLen, 2)
+		bName, ok := tuple.Items[0].([]byte)
+		c.Assert(ok, check.Equals, true)
+		name := string(bName)
+		exData, ok := expected[name]
+		c.Assert(ok, check.Equals, true,
+			check.Commentf("unexpected work unit %v", name))
+		_, ok = missing[name]
+		c.Assert(ok, check.Equals, true,
+			check.Commentf("duplicate work unit %v", name))
+		delete(missing, name)
+		data, ok := tuple.Items[1].(map[string]interface{})
+		c.Assert(ok, check.Equals, true)
+		c.Check(data, check.DeepEquals, exData)
+	}
+}
+
+// finishWorkUnit marks a specific work unit as finished.
 func (s *PythonSuite) finishWorkUnit(c *check.C, workSpecName, workUnitKey string, data map[string]interface{}) {
 	options := map[string]interface{}{
 		"status": jobserver.Finished,
@@ -194,6 +289,39 @@ func (s *PythonSuite) checkWorkUnitStatus(c *check.C, workSpecName, workUnitKey 
 	}
 }
 
+func (s *PythonSuite) checkChildWorkUnits(c *check.C, parent, child, workSpecName string, expected map[string]map[string]interface{}) {
+	missing := make(map[string]struct{})
+	for name := range expected {
+		missing[name] = struct{}{}
+	}
+	units, msg, err := s.JobServer.GetChildWorkUnits(parent)
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	childUnits, ok := units[child]
+	c.Assert(ok, check.Equals, true,
+		check.Commentf("no %v worker in child work units", child))
+	for _, unit := range childUnits {
+		c.Check(unit["worker_id"], check.Equals, child)
+		c.Check(unit["work_spec_name"], check.Equals, workSpecName)
+		c.Check(unit["work_unit_key"], check.FitsTypeOf, []byte{})
+		bKey, ok := unit["work_unit_key"].([]byte)
+		if ok {
+			name := string(bKey)
+			data, ok := expected[name]
+			c.Check(ok, check.Equals, true,
+				check.Commentf("unexpected child work unit %v", name))
+			if ok {
+				c.Check(unit["work_unit_data"], check.DeepEquals, data)
+			}
+			_, ok = missing[name]
+			c.Check(ok, check.Equals, true,
+				check.Commentf("duplicate child work unit %v", name))
+			delete(missing, name)
+		}
+	}
+	c.Check(missing, check.DeepEquals, map[string]struct{}{})
+}
+
 func (s *PythonSuite) getOneWork(c *check.C) (ok bool, workSpecName, workUnitKey string, workUnitData map[string]interface{}) {
 	anything, msg, err := s.JobServer.GetWork("test", map[string]interface{}{"available_gb": 1})
 	c.Assert(err, check.IsNil)
@@ -211,8 +339,9 @@ func (s *PythonSuite) getOneWork(c *check.C) (ok bool, workSpecName, workUnitKey
 	}
 	workSpecName, ok = tuple.Items[0].(string)
 	c.Assert(ok, check.Equals, true)
-	workUnitKey, ok = tuple.Items[1].(string)
+	bWorkUnitKey, ok := tuple.Items[1].([]byte)
 	c.Assert(ok, check.Equals, true)
+	workUnitKey = string(bWorkUnitKey)
 	workUnitData, ok = tuple.Items[2].(map[string]interface{})
 	c.Assert(ok, check.Equals, true)
 	return
@@ -230,7 +359,7 @@ func (s *PythonSuite) getSpecificWork(c *check.C, workSpecName, workUnitKey stri
 	c.Assert(tuple.Items, check.HasLen, 3)
 	c.Assert(tuple.Items[0], check.NotNil)
 	c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
-	c.Check(tuple.Items[1], check.DeepEquals, workUnitKey)
+	c.Check(tuple.Items[1], check.DeepEquals, []byte(workUnitKey))
 	workUnitData, ok := tuple.Items[2].(map[string]interface{})
 	c.Assert(ok, check.Equals, true)
 	return workUnitData
@@ -260,46 +389,19 @@ func (s *PythonSuite) doNoWork(c *check.C) {
 // unit state after running the test, or calls c.Assert() (e.g.,
 // panics) if this becomes impossible.
 func (s *PythonSuite) DoWork(c *check.C, key string, data map[string]interface{}) map[string]interface{} {
-	var (
-		// Various return values
-		ok   bool
-		msg  string
-		err  error
-		list []interface{}
-		dict map[string]interface{}
-		// Return values from getOneWork
-		wuSpec string
-		wuKey  string
-		wuData map[string]interface{}
-		// workSpecName is workSpec["name"], extracted just once
-		workSpecName string
-		// keyDataPair is the pair (key, data)
-		keyDataPair cborrpc.PythonTuple
-		// keyDataList is the single-item list containing
-		// keyDataPair, e.g. [(key, data)]
-		keyDataList []interface{}
-	)
-
-	keyDataPair = cborrpc.PythonTuple{Items: []interface{}{key, data}}
-	keyDataList = []interface{}{keyDataPair}
-
-	workSpecName = s.setWorkSpec(c, s.WorkSpec)
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
 	s.addWorkUnit(c, workSpecName, key, data)
 
-	dict = s.getOneWorkUnit(c, workSpecName, key)
+	dict := s.getOneWorkUnit(c, workSpecName, key)
 	c.Check(dict, check.DeepEquals, data)
 	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Available)
 
-	ok, wuSpec, wuKey, wuData = s.getOneWork(c)
-	c.Assert(ok, check.Equals, true)
-	c.Check(wuSpec, check.Equals, workSpecName)
-	c.Check(wuKey, check.Equals, key)
+	wuData := s.getSpecificWork(c, workSpecName, key)
 	c.Check(wuData, check.DeepEquals, data)
 
-	list, msg, err = s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{key}})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(list, check.DeepEquals, keyDataList)
+	s.listWorkUnits(c, workSpecName,
+		map[string]interface{}{"work_unit_keys": []interface{}{key}},
+		map[string]map[string]interface{}{key: data})
 
 	s.checkWorkUnitStatus(c, workSpecName, key, jobserver.Pending)
 
@@ -341,18 +443,11 @@ func (s *PythonSuite) TestDataUpdates(c *check.C) {
 // TestPause validates that pausing and unpausing a work spec affect
 // what GetWork returns.
 func (s *PythonSuite) TestPause(c *check.C) {
+	workUnits := map[string]map[string]interface{}{"u": {"k": "v"}}
 	workSpecName := s.setWorkSpec(c, s.WorkSpec)
-	s.addWorkUnit(c, workSpecName, "u", map[string]interface{}{"k": "v"})
+	s.addWorkUnits(c, workSpecName, workUnits)
 
-	list, msg, err := s.JobServer.GetWorkUnits(workSpecName, map[string]interface{}{})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(list, check.DeepEquals, []interface{}{
-		cborrpc.PythonTuple{Items: []interface{}{
-			"u",
-			map[string]interface{}{"k": "v"},
-		}},
-	})
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
 	s.checkWorkUnitStatus(c, workSpecName, "u", jobserver.Available)
 
 	// Pause the work spec
@@ -426,7 +521,7 @@ func (s *PythonSuite) TestGetTooMany(c *check.C) {
 		"min_gb":       0.1,
 		"module":       "coordinate.tests.test_job_client",
 		"run_function": "run_function",
-		"weight":       300,
+		"priority":     2,
 	}
 	otherWorkSpecName := s.setWorkSpec(c, otherWorkSpec)
 	s.addPrefixedWorkUnits(c, otherWorkSpecName, "z", 4)
@@ -435,7 +530,7 @@ func (s *PythonSuite) TestGetTooMany(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(msg, check.Equals, "")
 
-	// We requested 10 jobs.  Since ws2 has (much) higher weight,
+	// We requested 10 jobs.  Since ws2 has higher priority,
 	// the scheduler should choose it.  But, that has only
 	// 4 work units in it.  We should get exactly those.
 	expected := s.expectPrefixedWorkUnits(otherWorkSpecName, "z", 4)
@@ -569,13 +664,7 @@ func (s *PythonSuite) TestGetChildUnitsBasic(c *check.C) {
 	c.Check(msg, check.Equals, "")
 
 	// right now there should be no child units
-	// (the Python version of this test expects an empty dict back,
-	// but there is explicit protection for returning a falsey value
-	// in the return dict)
-	units, msg, err := s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, noWorkUnits)
 
 	// get the work unit
 	anything, msg, err := s.JobServer.GetWork("child", map[string]interface{}{"available_gb": 1})
@@ -586,29 +675,17 @@ func (s *PythonSuite) TestGetChildUnitsBasic(c *check.C) {
 	c.Assert(ok, check.Equals, true)
 	c.Assert(tuple.Items, check.HasLen, 3)
 	c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
-	c.Check(tuple.Items[1], check.DeepEquals, "a")
+	c.Check(tuple.Items[1], check.DeepEquals, []byte("a"))
 	c.Check(tuple.Items[2], check.DeepEquals, map[string]interface{}{"k": "v"})
 
 	// it should be reported as a child unit
-	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.HasLen, 1)
-	c.Assert(units["child"], check.HasLen, 1)
-	unit := units["child"][0]
-	c.Check(unit["work_spec_name"], check.Equals, workSpecName)
-	c.Check(unit["work_unit_key"], check.Equals, "a")
-	c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
-	c.Check(unit["worker_id"], check.Equals, "child")
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, map[string]map[string]interface{}{"a": {"k": "v"}})
 
 	// now finish it
 	s.finishWorkUnit(c, workSpecName, "a", nil)
 
 	// there should be no work units left now
-	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, noWorkUnits)
 }
 
 // TestGetChildUnitsMulti verifies the GetChildWorkUnits call when the child gets multiple work units.
@@ -630,10 +707,7 @@ func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
 	c.Check(msg, check.Equals, "")
 
 	// right now there should be no child units
-	units, msg, err := s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, noWorkUnits)
 
 	// get the work units
 	anything, msg, err := s.JobServer.GetWork("child", map[string]interface{}{"available_gb": 1, "max_jobs": 10})
@@ -647,51 +721,27 @@ func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
 		c.Assert(tuple.Items, check.HasLen, 3)
 		c.Check(tuple.Items[0], check.DeepEquals, workSpecName)
 		if i == 0 {
-			c.Check(tuple.Items[1], check.DeepEquals, "a")
+			c.Check(tuple.Items[1], check.DeepEquals, []byte("a"))
 		} else {
-			c.Check(tuple.Items[1], check.DeepEquals, "b")
+			c.Check(tuple.Items[1], check.DeepEquals, []byte("b"))
 		}
 		c.Check(tuple.Items[2], check.DeepEquals, map[string]interface{}{"k": "v"})
 	}
 
 	// both should be reported as child units
-	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.HasLen, 1)
-	c.Assert(units["child"], check.HasLen, 2)
-	for _, unit := range units["child"] {
-		c.Check(unit["work_spec_name"], check.Equals, workSpecName)
-		c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
-		c.Check(unit["worker_id"], check.Equals, "child")
-	}
-	c.Check((units["child"][0]["work_unit_key"] == "a" && units["child"][1]["work_unit_key"] == "b") ||
-		(units["child"][0]["work_unit_key"] == "b" && units["child"][1]["work_unit_key"] == "a"),
-		check.Equals, true)
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, map[string]map[string]interface{}{"a": {"k": "v"}, "b": {"k": "v"}})
 
 	// finish "a"
 	s.finishWorkUnit(c, workSpecName, "a", nil)
 
 	// we should have "b" left
-	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.HasLen, 1)
-	c.Assert(units["child"], check.HasLen, 1)
-	unit := units["child"][0]
-	c.Check(unit["work_spec_name"], check.Equals, workSpecName)
-	c.Check(unit["work_unit_key"], check.Equals, "b")
-	c.Check(unit["work_unit_data"], check.DeepEquals, map[string]interface{}{"k": "v"})
-	c.Check(unit["worker_id"], check.Equals, "child")
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, map[string]map[string]interface{}{"b": {"k": "v"}})
 
 	// now finish b
 	s.finishWorkUnit(c, workSpecName, "b", nil)
 
 	// there should be no work units left now
-	units, msg, err = s.JobServer.GetChildWorkUnits("parent")
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(units, check.DeepEquals, map[string][]map[string]interface{}{"child": []map[string]interface{}{}})
+	s.checkChildWorkUnits(c, "parent", "child", workSpecName, noWorkUnits)
 }
 
 // Tests from test_job_flow.py
@@ -741,10 +791,10 @@ func (s *PythonSuite) TestSimpleFlow(c *check.C) {
 	s.doNoWork(c)
 }
 
-// TestSimpleFlow verifies that the output of an earlier work spec
+// TestSimpleOutput verifies that the output of an earlier work spec
 // can become a work unit in a later work spec.  The work unit "output"
 // field is a flat list of work unit keys.
-func (s *PythonSuite) TestListFlow(c *check.C) {
+func (s *PythonSuite) TestSimpleOutput(c *check.C) {
 	s.setWorkSpec(c, map[string]interface{}{
 		"name": "first",
 		"then": "second",
@@ -758,7 +808,7 @@ func (s *PythonSuite) TestListFlow(c *check.C) {
 	c.Check(data, check.DeepEquals, map[string]interface{}{
 		"k": "v",
 	})
-	data["output"] = []string{"u"}
+	data["output"] = []interface{}{"u"}
 	s.finishWorkUnit(c, "first", "u", data)
 
 	data = s.getSpecificWork(c, "second", "u")
@@ -769,4 +819,384 @@ func (s *PythonSuite) TestListFlow(c *check.C) {
 	s.finishWorkUnit(c, "second", "u", data)
 
 	s.doNoWork(c)
+}
+
+// TestSimpleOutputBytes is the same as TestSimpleOutput, but the "next"
+// work unit name is a byte string.
+func (s *PythonSuite) TestSimpleOutputBytes(c *check.C) {
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "first",
+		"then": "second",
+	})
+	s.setWorkSpec(c, map[string]interface{}{
+		"name": "second",
+	})
+	s.addWorkUnit(c, "first", "u", map[string]interface{}{"k": "v"})
+
+	data := s.getSpecificWork(c, "first", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{
+		"k": "v",
+	})
+	data["output"] = []interface{}{[]byte("u")}
+	s.finishWorkUnit(c, "first", "u", data)
+
+	data = s.getSpecificWork(c, "second", "u")
+	c.Check(data, check.DeepEquals, map[string]interface{}{})
+	data["output"] = map[string]interface{}{
+		"u": map[string]interface{}{"mode": "foo"},
+	}
+	s.finishWorkUnit(c, "second", "u", data)
+
+	s.doNoWork(c)
+}
+
+// Tests from test_task_master.py
+
+// TestListWorkSpecs verifies that ListWorkSpecs will return one work
+// spec when added.
+func (s *PythonSuite) TestListWorkSpecs(c *check.C) {
+	// Initial state is nothing
+	specs, next, err := s.JobServer.ListWorkSpecs(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(specs, check.DeepEquals, []map[string]interface{}{})
+	c.Check(next, check.Equals, "")
+
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+
+	specs, next, err = s.JobServer.ListWorkSpecs(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(next, check.Equals, "")
+	c.Check(specs, check.HasLen, 1)
+	if len(specs) > 0 {
+		c.Check(specs[0]["name"], check.Equals, workSpecName)
+	}
+}
+
+// TestClear verifies that Clear will remove work specs.
+func (s *PythonSuite) TestClear(c *check.C) {
+	specs, next, err := s.JobServer.ListWorkSpecs(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(specs, check.DeepEquals, []map[string]interface{}{})
+	c.Check(next, check.Equals, "")
+
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+
+	specs, next, err = s.JobServer.ListWorkSpecs(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(next, check.Equals, "")
+	c.Check(specs, check.HasLen, 1)
+	if len(specs) > 0 {
+		c.Check(specs[0]["name"], check.Equals, workSpecName)
+	}
+
+	dropped, err := s.JobServer.Clear()
+	c.Assert(err, check.IsNil)
+	c.Check(dropped, check.Equals, 1)
+
+	specs, next, err = s.JobServer.ListWorkSpecs(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(specs, check.DeepEquals, []map[string]interface{}{})
+	c.Check(next, check.Equals, "")
+}
+
+// TestListWorkUnits tests state-based paths of the GetWorkUnits call.
+func (s *PythonSuite) TestListWorkUnits(c *check.C) {
+	workUnits := map[string]map[string]interface{}{
+		"foo":    {"length": 3},
+		"foobar": {"length": 6},
+	}
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnits(c, workSpecName, workUnits)
+
+	// Initial check: both work units are there
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuDefault, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuFinished, noWorkUnits)
+
+	// Start one unit; should still be there
+	ok, spec, unit, data := s.getOneWork(c)
+	c.Assert(ok, check.Equals, true)
+	c.Check(spec, check.Equals, workSpecName)
+	c.Check(workUnits[unit], check.NotNil)
+	c.Check(data, check.DeepEquals, workUnits[unit])
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuDefault, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuFinished, noWorkUnits)
+
+	// Finish that unit; should be gone, the other should be there
+	s.finishWorkUnit(c, workSpecName, unit, nil)
+	available := map[string]map[string]interface{}{}
+	finished := map[string]map[string]interface{}{}
+	if unit == "foo" {
+		available["foobar"] = workUnits["foobar"]
+		finished["foo"] = workUnits["foo"]
+	} else {
+		available["foo"] = workUnits["foo"]
+		finished["foobar"] = workUnits["foobar"]
+	}
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuDefault, available)
+	s.listWorkUnits(c, workSpecName, gwuFinished, finished)
+}
+
+// TestListWorkUnitsStartLimit validates a simple case of the
+// GetWorkUnits "start" and "limit" parameters.
+func (s *PythonSuite) TestListWorkUnitsStartLimit(c *check.C) {
+	workUnits := map[string]map[string]interface{}{
+		"foo": {"length": 3},
+		"bar": {"length": 6},
+	}
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnits(c, workSpecName, workUnits)
+
+	s.listWorkUnits(c, workSpecName, map[string]interface{}{
+		"limit": 1,
+	}, map[string]map[string]interface{}{
+		"bar": {"length": 6},
+	})
+
+	s.listWorkUnits(c, workSpecName, map[string]interface{}{
+		"start": "bar",
+		"limit": 1,
+	}, map[string]map[string]interface{}{
+		"foo": {"length": 3},
+	})
+
+	s.listWorkUnits(c, workSpecName, map[string]interface{}{
+		"start": "foo",
+		"limit": 1,
+	}, map[string]map[string]interface{}{})
+}
+
+func (s *PythonSuite) TestDelWorkUnitsSimple(c *check.C) {
+	workUnits := map[string]map[string]interface{}{
+		"foo": {"length": 3},
+		"bar": {"length": 6},
+	}
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnits(c, workSpecName, workUnits)
+
+	count, msg, err := s.JobServer.DelWorkUnits(workSpecName, map[string]interface{}{"work_unit_keys": []interface{}{"foo"}})
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 1)
+	c.Check(msg, check.Equals, "")
+	s.listWorkUnits(c, workSpecName, gwuEverything, map[string]map[string]interface{}{"bar": {"length": 6}})
+}
+
+func (s *PythonSuite) prepareSomeOfEach(c *check.C, n int) (workSpecName string, expected map[string]map[string]interface{}) {
+	data := map[string]interface{}{"x": 1}
+	expected = map[string]map[string]interface{}{}
+	workSpecName = s.setWorkSpec(c, s.WorkSpec)
+
+	for _, name := range []string{"FA", "IL"}[:n] {
+		s.addWorkUnit(c, workSpecName, name, data)
+		s.getSpecificWork(c, workSpecName, name)
+		ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, name, map[string]interface{}{"status": jobserver.Failed})
+		c.Assert(err, check.IsNil)
+		c.Check(ok, check.Equals, true)
+		c.Check(msg, check.Equals, "")
+		expected[name] = data
+	}
+
+	for _, name := range []string{"FI", "NI"}[:n] {
+		s.addWorkUnit(c, workSpecName, name, data)
+		s.getSpecificWork(c, workSpecName, name)
+		s.finishWorkUnit(c, workSpecName, name, nil)
+		expected[name] = data
+	}
+
+	for _, name := range []string{"PE", "ND"}[:n] {
+		s.addWorkUnit(c, workSpecName, name, data)
+		s.getSpecificWork(c, workSpecName, name)
+		expected[name] = data
+	}
+
+	for _, name := range []string{"AV", "AI"}[:n] {
+		s.addWorkUnit(c, workSpecName, name, data)
+		expected[name] = data
+	}
+
+	return
+}
+
+// delWorkUnitsBy is the core of the DelWorkUnits tests that expect to
+// delet single work units.  It calls options(state) to get options
+// to DelWorkUnits, and verifies that this deletes the single work unit
+// associated with state.
+func (s *PythonSuite) delWorkUnitsBy(c *check.C, n int, state jobserver.WorkUnitStatus, options func(jobserver.WorkUnitStatus) map[string]interface{}) {
+	workSpecName, expected := s.prepareSomeOfEach(c, n)
+	delete(expected, stateShortName[state])
+
+	count, msg, err := s.JobServer.DelWorkUnits(workSpecName, options(state))
+	c.Assert(err, check.IsNil)
+	c.Check(count, check.Equals, 1)
+	c.Check(msg, check.Equals, "")
+	s.listWorkUnits(c, workSpecName, gwuEverything, expected)
+
+	_, err = s.JobServer.Clear()
+	c.Assert(err, check.IsNil)
+}
+
+// allDelWorkUnitsBy calls the delWorkUnitsBy core for all states.
+func (s *PythonSuite) allDelWorkUnitsBy(c *check.C, n int, options func(jobserver.WorkUnitStatus) map[string]interface{}) {
+	for _, state := range allStates {
+		s.delWorkUnitsBy(c, n, state, options)
+	}
+}
+
+// TestDelWorkUnitsByName tests that deleting specific work units by
+// their keys works.
+func (s *PythonSuite) TestDelWorkUnitsByName(c *check.C) {
+	options := func(state jobserver.WorkUnitStatus) map[string]interface{} {
+		return map[string]interface{}{
+			"work_unit_keys": []interface{}{stateShortName[state]},
+		}
+	}
+	s.allDelWorkUnitsBy(c, 1, options)
+}
+
+// TestDelWorkUnitsByName2 creates 2 work units in each state and
+// deletes one specific one by name.
+func (s *PythonSuite) TestDelWorkUnitsByName2(c *check.C) {
+	options := func(state jobserver.WorkUnitStatus) map[string]interface{} {
+		return map[string]interface{}{
+			"work_unit_keys": []interface{}{stateShortName[state]},
+		}
+	}
+	s.allDelWorkUnitsBy(c, 2, options)
+}
+
+// TestDelWorkUnitsByState tests that deleting specific work units by
+// their current state works.
+func (s *PythonSuite) TestDelWorkUnitsByState(c *check.C) {
+	options := func(state jobserver.WorkUnitStatus) map[string]interface{} {
+		return map[string]interface{}{
+			"state": state,
+		}
+	}
+	s.allDelWorkUnitsBy(c, 1, options)
+}
+
+// TestDelWorkUnitsByState2 creates two work units in each state, then
+// deletes the pair by state.
+func (s *PythonSuite) TestDelWorkUnitsByState2(c *check.C) {
+	for _, state := range allStates {
+		workSpecName, expected := s.prepareSomeOfEach(c, 2)
+		delete(expected, stateShortName[state])
+		delete(expected, stateShortName2[state])
+
+		count, msg, err := s.JobServer.DelWorkUnits(workSpecName, map[string]interface{}{"state": state})
+		c.Assert(err, check.IsNil)
+		c.Check(count, check.Equals, 2)
+		c.Check(msg, check.Equals, "")
+		s.listWorkUnits(c, workSpecName, gwuEverything, expected)
+
+		_, err = s.JobServer.Clear()
+		c.Assert(err, check.IsNil)
+	}
+}
+
+// TestDelWorkUnitsByNameAndState tests that deleting specific work
+// units by specifying both their name and current state works.
+func (s *PythonSuite) TestDelWorkUnitsByNameAndState(c *check.C) {
+	options := func(state jobserver.WorkUnitStatus) map[string]interface{} {
+		return map[string]interface{}{
+			"work_unit_keys": []interface{}{stateShortName[state]},
+			"state":          state,
+		}
+	}
+	s.allDelWorkUnitsBy(c, 1, options)
+}
+
+// TestDelWorkUnitsByNameAndState2 creates two work units in each
+// state, and deletes specific ones by specifying both their name and
+// current state.
+func (s *PythonSuite) TestDelWorkUnitsByNameAndState2(c *check.C) {
+	options := func(state jobserver.WorkUnitStatus) map[string]interface{} {
+		return map[string]interface{}{
+			"work_unit_keys": []interface{}{stateShortName[state]},
+			"state":          state,
+		}
+	}
+	s.allDelWorkUnitsBy(c, 2, options)
+}
+
+// TestRegenerate verifies that getting work lets us resubmit the work
+// spec.
+func (s *PythonSuite) TestRegenerate(c *check.C) {
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnit(c, workSpecName, "one",
+		map[string]interface{}{"number": 1})
+
+	s.getSpecificWork(c, workSpecName, "one")
+	wsn := s.setWorkSpec(c, s.WorkSpec)
+	c.Check(wsn, check.Equals, workSpecName)
+	s.addWorkUnit(c, workSpecName, "two",
+		map[string]interface{}{"number": 2})
+	s.finishWorkUnit(c, workSpecName, "one", nil)
+
+	s.doOneWork(c, workSpecName, "two")
+	s.doNoWork(c)
+}
+
+// TestBinaryWorkUnit tests that arbitrary work unit keys in various
+// combinations are accepted, even if they are not valid UTF-8.
+func (s *PythonSuite) TestBinaryWorkUnit(c *check.C) {
+	workUnits := map[string]map[string]interface{}{
+		"\x00":             {"k": "\x00", "t": "single null"},
+		"\x00\x01\x02\x03": {"k": "\x00\x01\x02\x03", "t": "control chars"},
+		"\x00a\x00b":       {"k": "\x00a\x00b", "t": "UTF-16BE"},
+		"a\x00b\x00":       {"k": "a\x00b\x00", "t": "UTF-16LE"},
+		"f\xc3\xbc":        {"k": "f\xc3\xbc", "t": "UTF-8"},
+		"f\xfc":            {"k": "f\xfc", "t": "ISO-8859-1"},
+		"\xf0\x0f":         {"k": "\xf0\x0f", "t": "F00F"},
+		"\xff":             {"k": "\xff", "t": "FF"},
+		"\xff\x80":         {"k": "\xff\x80", "t": "FF80"},
+	}
+
+	// Add those work units
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnits(c, workSpecName, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
+
+	completed := map[string]struct{}{}
+	for len(completed) < len(workUnits) {
+		ok, spec, unit, data := s.getOneWork(c)
+		c.Assert(ok, check.Equals, true)
+		c.Check(spec, check.Equals, workSpecName)
+		expected, inWorkUnits := workUnits[unit]
+		_, alreadyCompleted := completed[unit]
+		c.Check(inWorkUnits, check.Equals, true)
+		if inWorkUnits {
+			c.Check(data, check.DeepEquals, expected)
+		}
+		c.Check(alreadyCompleted, check.Equals, false)
+		completed[unit] = struct{}{}
+		s.finishWorkUnit(c, spec, unit, nil)
+	}
+
+	s.doNoWork(c)
+	s.listWorkUnits(c, workSpecName, gwuDefault, noWorkUnits)
+	s.listWorkUnits(c, workSpecName, gwuFinished, workUnits)
+}
+
+// TestWorkUnitValue tests that the various supported types of data can
+// be stored in a work unit.
+func (s *PythonSuite) TestWorkUnitValue(c *check.C) {
+	aUUID, err := uuid.FromString("01234567-89ab-cdef-0123-456789abcdef")
+	c.Assert(err, check.IsNil)
+	workUnits := map[string]map[string]interface{}{
+		"k": {
+			"list":     []interface{}{1, 2, 3},
+			"tuple":    cborrpc.PythonTuple{Items: []interface{}{4, 5, 6}},
+			"mixed":    []interface{}{1, cborrpc.PythonTuple{Items: []interface{}{2, []interface{}{3, 4}}}},
+			"uuid":     aUUID,
+			"str":      []byte("foo"),
+			"unicode":  "foo",
+			"unicode2": "fü",
+		},
+	}
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+	s.addWorkUnits(c, workSpecName, workUnits)
+	s.listWorkUnits(c, workSpecName, gwuEverything, workUnits)
 }

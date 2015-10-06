@@ -143,16 +143,22 @@ func gwuStateHook(from reflect.Type, to reflect.Type, data interface{}) (interfa
 	if to.Kind() != reflect.Slice || to.Elem().Name() != "WorkUnitStatus" {
 		return data, nil
 	}
-	// If from is a tuple, return its contents
-	if tuple, ok := data.(cborrpc.PythonTuple); ok {
-		return tuple.Items, nil
+	switch value := data.(type) {
+	case cborrpc.PythonTuple:
+		// If from is a tuple, return its contents
+		return value.Items, nil
+	case WorkUnitStatus:
+		// Package it into a slice
+		return []WorkUnitStatus{value}, nil
+	case int:
+		// If from is an int, box it
+		return []WorkUnitStatus{WorkUnitStatus(value)}, nil
+	case uint64:
+		return []WorkUnitStatus{WorkUnitStatus(value)}, nil
+	default:
+		// Otherwise, hope we can deal normally
+		return data, nil
 	}
-	// If from is an int, box it
-	if single, ok := data.(int); ok {
-		return []WorkUnitStatus{WorkUnitStatus(single)}, nil
-	}
-	// Otherwise, hope we can deal normally
-	return data, nil
 }
 
 // GetWorkUnits retrieves the keys and data dictionaries for some number
@@ -161,8 +167,8 @@ func gwuStateHook(from reflect.Type, to reflect.Type, data interface{}) (interfa
 // which of GetWorkUnitsOptions are present.
 //
 // On success, the return value is a slice of cborrpc.PythonTuple
-// objects where each contains the work unit key as a string and the
-// data dictionary.
+// objects where each contains the work unit key as a byte slice and
+// the data dictionary.
 func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]interface{}) ([]interface{}, string, error) {
 	var workUnits map[string]coordinate.WorkUnit
 	gwuOptions := GetWorkUnitsOptions{
@@ -219,7 +225,7 @@ func (jobs *JobServer) GetWorkUnits(workSpecName string, options map[string]inte
 		if err != nil {
 			return nil, "", err
 		}
-		tuple := cborrpc.PythonTuple{Items: []interface{}{name, data}}
+		tuple := cborrpc.PythonTuple{Items: []interface{}{[]byte(name), data}}
 		result = append(result, tuple)
 	}
 	return result, "", nil

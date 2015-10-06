@@ -136,6 +136,21 @@ func ExtractWorkUnitOutput(output interface{}) map[string]map[string]interface{}
 		return newUnits
 	}
 
+	// Failing that, maybe it's a list of byte strings.
+	var blist [][]byte
+	config = mapstructure.DecoderConfig{Result: &blist}
+	decoder, err = mapstructure.NewDecoder(&config)
+	if err == nil {
+		err = decoder.Decode(output)
+	}
+	if err == nil {
+		newUnits = make(map[string]map[string]interface{})
+		for _, key := range blist {
+			newUnits[string(key)] = map[string]interface{}{}
+		}
+		return newUnits
+	}
+
 	// Otherwise, we don't know how to decode it
 	return nil
 }

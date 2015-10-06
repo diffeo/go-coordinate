@@ -40,10 +40,10 @@ type GetWorkOptions struct {
 // neither work nor an error.
 //
 // Each work unit is returned as a cborrpc.PythonTuple holding the
-// work spec name, work unit key, and work unit data dictionary.  If
-// options does not contain "max_jobs" or if that value is 1, returns
-// a tuple or nil, otherwise returns a slice of tuples (maybe 1 or
-// none).
+// work spec name, work unit key as a byte slice, and work unit data
+// dictionary.  If options does not contain "max_jobs" or if that
+// value is 1, returns a tuple or nil, otherwise returns a slice of
+// tuples (maybe 1 or none).
 func (jobs *JobServer) GetWork(workerID string, options map[string]interface{}) (interface{}, string, error) {
 	// This is the Big Kahuna.  The Python Coordinate server tries
 	// to be extra clever with its return value, returning None if
@@ -108,7 +108,7 @@ func getWorkTuple(attempt coordinate.Attempt) (cborrpc.PythonTuple, error) {
 	workUnit := attempt.WorkUnit()
 	return cborrpc.PythonTuple{Items: []interface{}{
 		workUnit.WorkSpec().Name(),
-		workUnit.Name(),
+		[]byte(workUnit.Name()),
 		data,
 	}}, nil
 }

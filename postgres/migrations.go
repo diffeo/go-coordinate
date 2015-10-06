@@ -2,6 +2,7 @@
 // sources:
 // migrations/20150927-core.sql
 // migrations/20151002-mingb.sql
+// migrations/20151006-work-unit-type.sql
 // DO NOT EDIT!
 
 package postgres
@@ -109,6 +110,26 @@ func migrations20151002MingbSql() (*asset, error) {
 	return a, nil
 }
 
+var _migrations20151006WorkUnitTypeSql = []byte("\x1f\x8b\x08\x00\x00\x09\x6e\x88\x00\xff\x9c\x90\x3d\x4f\xf3\x30\x14\x85\xf7\xfc\x8a\xb3\xf5\x7d\x01\x67\xae\xda\xc9\x6d\xc3\x87\x14\x0a\x4a\x1d\xa4\x4e\x55\x48\x2e\x49\x04\xb6\x83\x7d\x43\xe9\xbf\xc7\x6e\x91\x10\x88\x09\x0f\x1e\xae\xcf\xf1\xf3\xe8\x0a\x01\x71\x26\xa0\x6d\x43\x33\xf8\xd7\x97\x79\xbc\xc4\xe0\x6c\x33\xd6\x3c\xc3\x60\x3d\xb7\x8e\x7c\x0c\x25\x21\xab\xba\xde\xa3\xee\x2a\xd3\x86\x19\x77\x84\xbd\x75\xcf\xbb\xd1\xf4\x9c\x9a\x4a\x13\xf8\x30\x10\x9e\x9c\xd5\x78\x90\xc5\xf2\x5a\x16\x60\x8b\xc5\x56\x65\x32\x05\xa4\x39\x80\xde\x7b\xcf\xbd\x69\xe3\x67\xb1\x8b\xd8\xf5\xa8\x1c\xa1\xf2\x7e\xd4\xd4\xc4\xc6\x23\xa1\x54\x97\x62\x0a\x32\x75\x30\x6b\xd2\x24\xe6\xcf\x75\xdf\xba\x8a\xc3\xdb\x90\xc8\x5c\x65\x05\x94\x5c\xe4\xd9\x97\x03\x4e\xd3\xe5\x5d\x5e\xde\xae\x71\x14\xda\x64\x0a\x2b\xa9\x24\xd4\xf6\x3e\x3b\x99\x24\x38\x9e\x72\x73\xb3\xbe\x42\x6d\xcd\x1b\x39\xde\xb1\xfd\x17\xf3\x17\x98\x04\xf0\x74\xf2\x7f\xfe\x9d\xb8\xb2\x7b\xf3\x47\xe6\xe7\x22\x7e\xa5\xc6\x4d\xfd\xe4\x7e\x04\x00\x00\xff\xff\xd4\xb3\x9b\xee\x92\x01\x00\x00")
+
+func migrations20151006WorkUnitTypeSqlBytes() ([]byte, error) {
+	return bindataRead(
+		_migrations20151006WorkUnitTypeSql,
+		"migrations/20151006-work-unit-type.sql",
+	)
+}
+
+func migrations20151006WorkUnitTypeSql() (*asset, error) {
+	bytes, err := migrations20151006WorkUnitTypeSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "migrations/20151006-work-unit-type.sql", size: 402, mode: os.FileMode(420), modTime: time.Unix(1444152140, 0)}
+	a := &asset{bytes: bytes, info:  info}
+	return a, nil
+}
+
 // Asset loads and returns the asset for the given name.
 // It returns an error if the asset could not be found or
 // could not be loaded.
@@ -163,6 +184,7 @@ func AssetNames() []string {
 var _bindata = map[string]func() (*asset, error){
 	"migrations/20150927-core.sql": migrations20150927CoreSql,
 	"migrations/20151002-mingb.sql": migrations20151002MingbSql,
+	"migrations/20151006-work-unit-type.sql": migrations20151006WorkUnitTypeSql,
 }
 
 // AssetDir returns the file names below a certain
@@ -209,6 +231,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"20150927-core.sql": &bintree{migrations20150927CoreSql, map[string]*bintree{
 		}},
 		"20151002-mingb.sql": &bintree{migrations20151002MingbSql, map[string]*bintree{
+		}},
+		"20151006-work-unit-type.sql": &bintree{migrations20151006WorkUnitTypeSql, map[string]*bintree{
 		}},
 	}},
 }}

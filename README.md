@@ -79,6 +79,14 @@ Differences from Python Coordinate
 Most Python Coordinate applications should run successfully against
 this server.  Known issues are noted in the "status" section below.
 
+Work spec names must be valid Unicode strings.  Work spec definitions
+and work unit data must be Unicode-string-keyed maps.  Work unit keys,
+however, can be arbitrary byte strings.  Python (especially Python 2)
+is sloppy about byte vs. character strings and it is easy to inject
+the wrong type; if you do create a work spec with a non-UTF-8 byte
+string name, the server will eventually return it as an invalid
+Unicode-tagged string.
+
 The work spec scheduler is much simpler than in the Python
 coordinated.  The scheduler only considers work specs' `priority` and
 `weight` fields.  Work specs with no work are discarded; then work
@@ -128,13 +136,14 @@ Coordinate system.  `cborrpc` provides the underlying wire transport.
 slightly different from the Python Coordinate API; in particular, an
 Attempt object records a single worker working on a single work unit,
 allowing the history of workers and individual work units to be
-tracked.  `memory` is the in-memory implementation of this API.
-`backend` provides a command-line option to choose a backend.
+tracked.  `memory` is the in-memory implementation of this API, and
+`postgres` uses PostgreSQL.  `backend` provides a command-line option
+to choose a backend.
 
 Status
 ------
 
-(As of 5 Oct 2015)
+(As of 6 Oct 2015)
 
 The overall system is probably usable for some applications, though
 I have not done any particular real-world testing yet.
@@ -142,10 +151,8 @@ I have not done any particular real-world testing yet.
 The `coordinate summary` command, and the most basic flows that create
 work specs, add work units, get work, and complete it work.  This
 passes almost but not quite all of the Python tests.  Continuous jobs
-are believed to be broken.  Binary-string work unit keys probably also
-do not work; they must be UTF-8, especially for the PostgreSQL
-backend.  The PostgreSQL backend in particular also needs real
-concurrency testing.
+are believed to be broken.  The PostgreSQL backend in particular needs
+real concurrency testing.
 
 This implementation has no way to make outbound calls to a Coordinate
 server from a Go program.  This will likely involve creating a new
