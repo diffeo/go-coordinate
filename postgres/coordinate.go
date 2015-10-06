@@ -9,6 +9,7 @@ import (
 	// driver library, and creates the connection pool here
 	"github.com/dmaze/goordinate/cborrpc"
 	_ "github.com/lib/pq"
+	"github.com/satori/go.uuid"
 )
 
 type pgCoordinate struct {
@@ -53,6 +54,7 @@ func New(connectionString string) (coordinate.Coordinate, error) {
 	gob.Register(map[interface{}]interface{}{})
 	gob.Register([]interface{}{})
 	gob.Register(cborrpc.PythonTuple{})
+	gob.Register(uuid.UUID{})
 
 	return &pgCoordinate{
 		db: db,

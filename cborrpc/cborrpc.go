@@ -2,8 +2,11 @@
 // Coordinate daemon.
 package cborrpc
 
-import "reflect"
-import "github.com/ugorji/go/codec"
+import (
+	"github.com/satori/go.uuid"
+	"github.com/ugorji/go/codec"
+	"reflect"
+)
 
 // Request defines the fields of a CBOR-RPC request.
 type Request struct {
@@ -19,11 +22,11 @@ type Request struct {
 type Response struct {
 	// Sequential, non-unique identifier for this response.  This should
 	// always match the identifier from the corresponding Request.
-	ID     uint
+	ID uint
 	// Arbitrary response object; should be nil on error.
 	Result interface{}
 	// Error message on failure; should be empty on success.
-	Error  string
+	Error string
 }
 
 // Actual "wire format" representation for top-level CBOR-RPC messages.
@@ -49,7 +52,7 @@ func (x reqExt) WriteExt(v interface{}) (resp []byte) {
 	// Assemble the "over-the-wire" response dictionary
 	wire := wireFormat{
 		"method": []byte(request.Method),
-		"id": uint64(request.ID),
+		"id":     uint64(request.ID),
 		"params": request.Params,
 	}
 
@@ -148,7 +151,7 @@ func (x pythonTupleExt) WriteExt(v interface{}) (resp []byte) {
 	tuple := v.(PythonTuple)
 	encoder := codec.NewEncoderBytes(&resp, x.cbor)
 	encoder.MustEncode(tuple.Items)
-	return	
+	return
 }
 
 func (x pythonTupleExt) ReadExt(v interface{}, data []byte) {
@@ -171,6 +174,35 @@ func (x pythonTupleExt) UpdateExt(dest interface{}, v interface{}) {
 	*tuple = PythonTuple{items}
 }
 
+// uuidExt is a codec extension plugin to encode and decode UUID
+// objects.
+type uuidExt struct {
+	cbor *codec.CborHandle
+}
+
+func (x uuidExt) WriteExt(v interface{}) []byte {
+	panic("uuidExt.WriteExt not implemented")
+}
+
+func (x uuidExt) ReadExt(v interface{}, data []byte) {
+	panic("uuidExt.ReadExt not implemented")
+}
+
+func (x uuidExt) ConvertExt(v interface{}) interface{} {
+	uuid := v.(uuid.UUID)
+	return uuid.Bytes()
+}
+
+func (x uuidExt) UpdateExt(dest interface{}, v interface{}) {
+	bytes := v.([]byte)
+	if len(bytes) != 16 {
+		panic("encoded UUID must have 16 bytes")
+	}
+	uuidp := dest.(*uuid.UUID)
+	*uuidp = uuid.UUID{}
+	copy(uuidp[:], bytes)
+}
+
 // SetExts sets up the CBOR codec to understand the other objects in
 // this package.
 func SetExts(cbor *codec.CborHandle) error {
@@ -185,6 +217,10 @@ func SetExts(cbor *codec.CborHandle) error {
 	respExt.cbor = cbor
 	var resp Response
 	if err := cbor.SetExt(reflect.TypeOf(resp), 24, respExt); err != nil {
+		return err
+	}
+
+	if err := cbor.SetExt(reflect.TypeOf(uuid.UUID{}), 37, &uuidExt{cbor}); err != nil {
 		return err
 	}
 

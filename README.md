@@ -141,10 +141,9 @@ I have not done any particular real-world testing yet.
 
 The `coordinate summary` command, and the most basic flows that create
 work specs, add work units, get work, and complete it work.  This
-passes almost but not quite all of the Python tests.  In particular,
-there is no special handling for UUID data.  Continuous jobs are
-believed to be broken as well.  Binary-string work unit keys probably
-also do not work; they must be UTF-8, especially for the PostgreSQL
+passes almost but not quite all of the Python tests.  Continuous jobs
+are believed to be broken.  Binary-string work unit keys probably also
+do not work; they must be UTF-8, especially for the PostgreSQL
 backend.  The PostgreSQL backend in particular also needs real
 concurrency testing.
 

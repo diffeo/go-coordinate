@@ -3,6 +3,7 @@ package cborrpc
 import "testing"
 import "github.com/ugorji/go/codec"
 import "reflect"
+import "github.com/satori/go.uuid"
 
 func encoderTest(t *testing.T, name string, obj interface{}, expecteds ...[]byte) {
 	cbor := new(codec.CborHandle)
@@ -75,7 +76,7 @@ func TestRpcRequestToBytes(t *testing.T) {
 	// the Python 2 receiver for the most part doesn't care what
 	// goes back, this doesn't matter, much, which suggests we
 	// should make it consistent.
-	expecteds := [][]byte {
+	expecteds := [][]byte{
 		concat(header, method, id, params),
 		concat(header, method, params, id),
 		concat(header, id, method, params),
@@ -195,5 +196,45 @@ func TestDecodeTupleReq(t *testing.T) {
 				// TODO: check tuple.Items[1]
 			}
 		}
+	}
+}
+
+func TestEncodeUUID(t *testing.T) {
+	aUUID := uuid.NewV4()
+	expected := []byte{
+		// tag 37
+		0xD8, 0x25,
+		// byte string of length 16
+		0x50,
+	}
+	expected = append(expected, aUUID.Bytes()...)
+	encoderTest(t, "TestEncodeUUID", aUUID, expected)
+}
+
+func TestDecodeUUID(t *testing.T) {
+	cbor := new(codec.CborHandle)
+	SetExts(cbor)
+	bytes := []byte{
+		// tag 37
+		0xD8, 0x25,
+		// byte string of length 16
+		0x50,
+		0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+		0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F,
+	}
+	expected := uuid.UUID{0x00, 0x01, 0x02, 0x03, 0x04, 0x05,
+		0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
+		0x0E, 0x0F}
+	var actual uuid.UUID
+	encoder := codec.NewDecoderBytes(bytes, cbor)
+	err := encoder.Decode(&actual)
+	if err != nil {
+		t.Fatalf("Error decoding request: %v", err)
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Log("Decoding test failed")
+		t.Log("Expected: ", expected)
+		t.Log("Actual:   ", actual)
+		t.Error("")
 	}
 }
