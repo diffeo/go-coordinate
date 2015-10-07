@@ -129,6 +129,9 @@ func (w *worker) Data() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(dataGob) == 0 {
+		return nil, nil
+	}
 	result, err := gobToMap(dataGob)
 	if err != nil {
 		return nil, err

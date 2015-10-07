@@ -65,7 +65,12 @@ func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 }
 
 func (ns *namespace) DestroyWorkSpec(name string) error {
-	_, err := theDB(ns).Exec("DELETE FROM work_spec WHERE namespace_id=$1 AND name=$2", ns.id, name)
+	row := theDB(ns).QueryRow("DELETE FROM work_spec WHERE namespace_id=$1 AND name=$2 RETURNING id", ns.id, name)
+	var id int
+	err := row.Scan(&id)
+	if err == sql.ErrNoRows {
+		return coordinate.ErrNoSuchWorkSpec{Name: name}
+	}
 	return err
 }
 
@@ -134,18 +139,92 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 }
 
 func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
-	var (
-		meta           coordinate.WorkSpecMeta
-		interval       string
-		nextContinuous pq.NullTime
-	)
-	row := theDB(spec).QueryRow("SELECT priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name FROM work_spec WHERE id=$1", spec.id)
-	err := row.Scan(&meta.Priority, &meta.Weight, &meta.Paused, &meta.Continuous, &meta.CanBeContinuous, &meta.MinMemoryGb, &interval, &nextContinuous, &meta.MaxRunning, &meta.MaxAttemptsReturned, &meta.NextWorkSpecName)
-	if err == nil {
+	var meta coordinate.WorkSpecMeta
+	err := withTx(spec, func(tx *sql.Tx) error {
+		var (
+			query          string
+			interval       string
+			nextContinuous pq.NullTime
+		)
+		query = buildSelect([]string{
+			workSpecPriority,
+			workSpecWeight,
+			workSpecPaused,
+			workSpecContinuous,
+			workSpecCanBeContinuous,
+			workSpecMinMemoryGb,
+			workSpecInterval,
+			workSpecNextContinuous,
+			workSpecMaxRunning,
+			workSpecMaxAttemptsReturned,
+			workSpecNextWorkSpec,
+		}, []string{
+			workSpecTable,
+		}, []string{
+			isWorkSpec, // binds $1
+		})
+		row := tx.QueryRow(query, spec.id)
+		err := row.Scan(
+			&meta.Priority,
+			&meta.Weight,
+			&meta.Paused,
+			&meta.Continuous,
+			&meta.CanBeContinuous,
+			&meta.MinMemoryGb,
+			&interval,
+			&nextContinuous,
+			&meta.MaxRunning,
+			&meta.MaxAttemptsReturned,
+			&meta.NextWorkSpecName,
+		)
+		if err != nil {
+			return err
+		}
 		meta.NextContinuous = nullTimeToTime(nextContinuous)
 		meta.Interval, err = sqlToDuration(interval)
-	}
-	// TODO(dmaze): do a second SELECT if withCounts is true
+		if err != nil {
+			return err
+		}
+
+		// Find counts with a second query, if requested
+		if !withCounts {
+			return nil
+		}
+		query = buildSelect([]string{
+			attemptStatus,
+			"COUNT(*)",
+		}, []string{
+			workUnitAttemptJoin,
+		}, []string{
+			inThisWorkSpec, // binds $1
+		})
+		query += " GROUP BY " + attemptStatus
+		rows, err := tx.Query(query, spec.id)
+		if err != nil {
+			return err
+		}
+		return scanRows(rows, func() error {
+			var status sql.NullString
+			var count int
+			err := rows.Scan(&status, &count)
+			if err != nil {
+				return err
+			}
+			if !status.Valid {
+				meta.AvailableCount += count
+			} else {
+				switch status.String {
+				case "expired":
+					meta.AvailableCount += count
+				case "retryable":
+					meta.AvailableCount += count
+				case "pending":
+					meta.PendingCount += count
+				}
+			}
+			return nil
+		})
+	})
 	return meta, err
 }
 
@@ -157,17 +236,17 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 	query := buildSelect([]string{
 		workSpecID,
 		workSpecName,
-		"priority",
-		"weight",
-		"paused",
-		"continuous",
-		"can_be_continuous",
-		"min_memory_gb",
-		"interval",
-		"next_continuous",
-		"max_running",
-		"max_attempts_returned",
-		"next_work_spec_name",
+		workSpecPriority,
+		workSpecWeight,
+		workSpecPaused,
+		workSpecContinuous,
+		workSpecCanBeContinuous,
+		workSpecMinMemoryGb,
+		workSpecInterval,
+		workSpecNextContinuous,
+		workSpecMaxRunning,
+		workSpecMaxAttemptsReturned,
+		workSpecNextWorkSpec,
 	}, []string{
 		workSpecTable,
 	}, []string{

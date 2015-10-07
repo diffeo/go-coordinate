@@ -5,6 +5,7 @@ import (
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
 	"reflect"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -96,6 +97,44 @@ func (c attemptMatchesChecker) Check(params []interface{}, names []string) (resu
 var AttemptMatches check.Checker = &attemptMatchesChecker{
 	&check.CheckerInfo{
 		Name:   "AttemptMatches",
+		Params: []string{"obtained", "expected"},
+	},
+}
+
+// ---------------------------------------------------------------------------
+// SameTime
+
+type sameTimeChecker struct {
+	*check.CheckerInfo
+}
+
+func (c sameTimeChecker) Info() *check.CheckerInfo {
+	return c.CheckerInfo
+}
+
+func (c sameTimeChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	if len(params) != 2 {
+		return false, "incorrect number of parameters to SameTime check"
+	}
+	obtained, ok := params[0].(time.Time)
+	if !ok {
+		return false, "non-Time obtained value"
+	}
+	expected, ok := params[1].(time.Time)
+	if !ok {
+		return false, "non-Time expected value"
+	}
+	// NB: the postgres backend rounds to the microsecond
+	maxDelta := time.Duration(1) * time.Microsecond
+	delta := obtained.Sub(expected)
+	return delta < maxDelta && delta > -maxDelta, ""
+}
+
+// The SameTime checker verifies that two times are identical, or at
+// least, very very close.
+var SameTime check.Checker = &sameTimeChecker{
+	&check.CheckerInfo{
+		Name:   "SameTime",
 		Params: []string{"obtained", "expected"},
 	},
 }

@@ -62,6 +62,19 @@ func (s *Suite) TestSpecCreateDestroy(c *check.C) {
 	names, err = s.Namespace.WorkSpecNames()
 	c.Assert(err, check.IsNil)
 	c.Check(names, check.HasLen, 0)
+
+	err = s.Namespace.DestroyWorkSpec(name)
+	c.Check(err, check.DeepEquals,
+		coordinate.ErrNoSuchWorkSpec{Name: name})
+}
+
+// TestSpecErrors checks for errors on malformed work specs.
+func (s *Suite) TestSpecErrors(c *check.C) {
+	_, err := s.Namespace.SetWorkSpec(map[string]interface{}{})
+	c.Check(err, check.Equals, coordinate.ErrNoWorkSpecName)
+
+	_, err = s.Namespace.SetWorkSpec(map[string]interface{}{"name": 4})
+	c.Check(err, check.Equals, coordinate.ErrBadWorkSpecName)
 }
 
 // TestTwoWorkSpecsBasic ensures that two work specs can be created

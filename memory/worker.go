@@ -27,6 +27,7 @@ func newWorker(namespace *namespace, name string) *worker {
 		activeAttempts: make([]*attempt, 0),
 		attempts:       make([]*attempt, 0),
 		namespace:      namespace,
+		active:         true,
 	}
 }
 

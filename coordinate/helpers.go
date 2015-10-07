@@ -2,6 +2,7 @@ package coordinate
 
 import (
 	"github.com/mitchellh/mapstructure"
+	"strings"
 	"time"
 )
 
@@ -69,8 +70,22 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 	data := WorkSpecData{}
 	config := mapstructure.DecoderConfig{Result: &data}
 	decoder, err := mapstructure.NewDecoder(&config)
-	if err == nil {
-		err = decoder.Decode(workSpecDict)
+	if err != nil {
+		return
+	}
+	err = decoder.Decode(workSpecDict)
+	if err != nil {
+		// I hate checking for this specific message, but it's
+		// the only way to detect this
+		msError, ok := err.(*mapstructure.Error)
+		if ok {
+			for _, message := range msError.Errors {
+				if strings.HasPrefix(message, "'Name' expected type 'string', got") {
+					err = ErrBadWorkSpecName
+				}
+			}
+		}
+		return
 	}
 	if err == nil {
 		if data.Name == "" {

@@ -78,6 +78,7 @@ func (s *Suite) TestDefaultMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -115,6 +116,7 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -143,6 +145,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 
 	err = spec.SetData(map[string]interface{}{
@@ -171,6 +174,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -264,6 +268,7 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 
 	err = spec.SetMeta(coordinate.WorkSpecMeta{
@@ -276,6 +281,8 @@ func (s *Suite) TestSetMeta(c *check.C) {
 		MaxRunning:          10,
 		MaxAttemptsReturned: 1,
 		NextWorkSpecName:    "then",
+		AvailableCount:      100,
+		PendingCount:        50,
 	})
 	c.Assert(err, check.IsNil)
 
@@ -293,6 +300,8 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	// Cannot change following work spec
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
+	// Cannot set the counts
+	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
 }
 
@@ -326,4 +335,54 @@ func (s *Suite) TestMetaContinuous(c *check.C) {
 	// Cannot set the "continuous" flag
 	c.Check(meta.Continuous, check.Equals, false)
 	c.Check(meta.CanBeContinuous, check.Equals, false)
+}
+
+// TestMetaCounts does basic tests on the "available" and "pending" counts.
+func (s *Suite) TestMetaCounts(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+	checkCounts := func(available, pending int) {
+		meta, err := spec.Meta(true)
+		c.Assert(err, check.IsNil)
+		c.Check(meta.AvailableCount, check.Equals, available)
+		c.Check(meta.PendingCount, check.Equals, pending)
+	}
+	checkCounts(0, 0)
+
+	// Adding a work unit adds to the available count
+	_, err := spec.AddWorkUnit("one", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+	checkCounts(1, 0)
+
+	// Starting an attempt makes it pending
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	checkCounts(0, 1)
+
+	// Expiring an attempt makes it available again
+	err = attempts[0].Expire(nil)
+	c.Assert(err, check.IsNil)
+	checkCounts(1, 0)
+
+	// Starting an attempt makes it pending
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	checkCounts(0, 1)
+
+	// Marking an attempt retryable makes it pending again
+	err = attempts[0].Retry(nil)
+	c.Assert(err, check.IsNil)
+	checkCounts(1, 0)
+
+	// Starting an attempt makes it pending
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	checkCounts(0, 1)
+
+	// Finishing an attempt takes it out of the list entirely
+	err = attempts[0].Finish(nil)
+	c.Assert(err, check.IsNil)
+	checkCounts(0, 0)
 }
