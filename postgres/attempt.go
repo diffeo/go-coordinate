@@ -213,15 +213,17 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 	// TODO(dmaze): check valid state transitions
 	// TODO(dmaze): check if attempt is active if required
 	conditions := []string{
-		"id=$1",
+		isAttempt,
 	}
 	changes := []string{
 		"active=FALSE",
 		"status=$2",
+		"end_time=$3",
 	}
-	args := []interface{}{a.id, status}
+	endTime := time.Now()
+	args := []interface{}{a.id, status, endTime}
 	if data != nil {
-		changes = append(changes, "data=$3")
+		changes = append(changes, "data=$4")
 		dataGob, err := mapToGob(data)
 		if err != nil {
 			return err
@@ -414,40 +416,48 @@ func makeAttempt(tx *sql.Tx, unit *workUnit, w *worker, length time.Duration) (*
 }
 
 func (w *worker) ActiveAttempts() ([]coordinate.Attempt, error) {
-	return w.findAttempts([]string{}, []string{
-		"attempt.worker_id=$1",
-		"attempt.active=TRUE",
-	})
+	return w.findAttempts([]string{
+		byThisWorker,
+		attemptIsActive,
+	}, false)
 }
 
 func (w *worker) AllAttempts() ([]coordinate.Attempt, error) {
-	return w.findAttempts([]string{}, []string{
-		"attempt.worker_id=$1",
-	})
+	return w.findAttempts([]string{
+		byThisWorker,
+	}, false)
 }
 
 func (w *worker) ChildAttempts() ([]coordinate.Attempt, error) {
 	return w.findAttempts([]string{
-		"worker",
-	}, []string{
-		"attempt.worker_id=worker.id",
-		"worker.parent=$1",
-	})
+		attemptThisWorker,
+		attemptIsActive,
+		hasThisParent,
+	}, true)
 }
 
-func (w *worker) findAttempts(tables, conditions []string) ([]coordinate.Attempt, error) {
+func (w *worker) findAttempts(conditions []string, forOtherWorkers bool) ([]coordinate.Attempt, error) {
 	outputs := []string{
-		"attempt.id",
-		"work_unit.id",
-		"work_unit.name",
-		"work_spec.id",
-		"work_spec.name",
+		attemptID,
+		workUnitID,
+		workUnitName,
+		workSpecID,
+		workSpecName,
 	}
-	tables = append([]string{"attempt", "work_unit", "work_spec"}, tables...)
-	conditions = append([]string{
-		"attempt.work_unit_id=work_unit.id",
-		"work_unit.work_spec_id=work_spec.id",
-	}, conditions...)
+	tables := []string{
+		attemptTable,
+		workUnitTable,
+		workSpecTable,
+	}
+	conditions = append(conditions,
+		attemptThisWorkUnit,
+		workUnitInSpec,
+	)
+	if forOtherWorkers {
+		outputs = append(outputs, workerID, workerName)
+		tables = append(tables, workerTable)
+		conditions = append(conditions, attemptThisWorker)
+	}
 	query := buildSelect(outputs, tables, conditions)
 	rows, err := theDB(w).Query(query, w.id)
 	if err != nil {
@@ -458,7 +468,19 @@ func (w *worker) findAttempts(tables, conditions []string) ([]coordinate.Attempt
 		spec := workSpec{namespace: w.namespace}
 		unit := workUnit{spec: &spec}
 		a := attempt{worker: w, unit: &unit}
-		if err := rows.Scan(&a.id, &unit.id, &unit.name, &spec.id, &spec.name); err == nil {
+		theWorker := worker{namespace: w.namespace}
+		if forOtherWorkers {
+			a.worker = &theWorker
+			err = rows.Scan(&a.id,
+				&unit.id, &unit.name,
+				&spec.id, &spec.name,
+				&theWorker.id, &theWorker.name)
+		} else {
+			err = rows.Scan(&a.id,
+				&unit.id, &unit.name,
+				&spec.id, &spec.name)
+		}
+		if err == nil {
 			result = append(result, &a)
 		}
 		return err

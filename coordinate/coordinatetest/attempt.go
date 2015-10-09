@@ -3,6 +3,7 @@ package coordinatetest
 import (
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
+	"time"
 )
 
 // TestAttemptLifetime validates a basic attempt lifetime.
@@ -143,4 +144,86 @@ func (s *Suite) TestAttemptLifetime(c *check.C) {
 	if len(attempts) > 0 {
 		c.Check(attempts[0], AttemptMatches, attempt)
 	}
+}
+
+// TestAttemptMetadata validates the various bits of data associated
+// with a single attempt.
+func (s *Suite) TestAttemptMetadata(c *check.C) {
+	// Bootstrap
+	spec, worker := s.makeWorkSpecAndWorker(c)
+	_, err := spec.AddWorkUnit("a", map[string]interface{}{"from": "wu"}, 0.0)
+	c.Assert(err, check.IsNil)
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	attempt := attempts[0]
+
+	// Start checking things
+	startTime, err := attempt.StartTime()
+	start := startTime
+	c.Assert(err, check.IsNil)
+	// TODO(dmaze): better time management
+	// The next check call asserts that the reported startTime
+	// is within 1 µs of the original start time, which is exactly
+	// the sort of thing that will start mysteriously failing on
+	// a busy test host...or a pretty idle laptop.
+	// c.Check(startTime, SameTime, start)
+
+	data, err := attempt.Data()
+	c.Assert(err, check.IsNil)
+	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "wu"})
+
+	endTime, err := attempt.EndTime()
+	c.Assert(err, check.IsNil)
+	c.Check(endTime, check.Equals, time.Time{})
+
+	expirationTime, err := attempt.ExpirationTime()
+	c.Assert(err, check.IsNil)
+	c.Check(expirationTime.Sub(startTime), check.Equals, time.Duration(15)*time.Minute)
+
+	// Renew the lease, giving new work unit data
+	renewTime := time.Now()
+	err = attempt.Renew(time.Duration(5)*time.Minute,
+		map[string]interface{}{"from": "renew"})
+	c.Assert(err, check.IsNil)
+
+	startTime, err = attempt.StartTime()
+	c.Assert(err, check.IsNil)
+	c.Check(startTime, check.Equals, start) // no change from above
+
+	data, err = attempt.Data()
+	c.Assert(err, check.IsNil)
+	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "renew"})
+
+	endTime, err = attempt.EndTime()
+	c.Assert(err, check.IsNil)
+	c.Check(endTime, check.Equals, time.Time{})
+
+	expirationTime, err = attempt.ExpirationTime()
+	c.Assert(err, check.IsNil)
+	// Again absent good time management it's hard to make a strong
+	// statement here; it should be at least 5 minutes but
+	// (let's hope) less than 6
+	timeLeft := expirationTime.Sub(renewTime)
+	c.Check(timeLeft >= time.Duration(5)*time.Minute, check.Equals, true)
+	c.Check(timeLeft < time.Duration(6)*time.Minute, check.Equals, true)
+
+	// Finish the attempt
+	err = attempt.Finish(map[string]interface{}{"from": "finish"})
+	c.Assert(err, check.IsNil)
+
+	startTime, err = attempt.StartTime()
+	c.Assert(err, check.IsNil)
+	c.Check(startTime, check.Equals, start) // no change from above
+
+	data, err = attempt.Data()
+	c.Assert(err, check.IsNil)
+	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "finish"})
+
+	endTime, err = attempt.EndTime()
+	c.Assert(err, check.IsNil)
+	c.Check(endTime.After(startTime), check.Equals, true,
+		check.Commentf("start time %+v end time %+v", startTime, endTime))
+
+	// don't check expiration time here
 }

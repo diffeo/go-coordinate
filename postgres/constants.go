@@ -2,13 +2,20 @@ package postgres
 
 const (
 	// SQL table names:
+	attemptTable  = "attempt"
+	workerTable   = "worker"
 	workSpecTable = "work_spec"
 	workUnitTable = "work_unit"
-	attemptTable  = "attempt"
 
 	// SQL column names:
 	attemptID                   = attemptTable + ".id"
+	attemptWorkUnitID           = attemptTable + ".work_unit_id"
+	attemptWorkerID             = attemptTable + ".worker_id"
 	attemptStatus               = attemptTable + ".status"
+	attemptActive               = attemptTable + ".active"
+	workerID                    = workerTable + ".id"
+	workerName                  = workerTable + ".name"
+	workerParent                = workerTable + ".parent"
 	workSpecID                  = workSpecTable + ".id"
 	workSpecName                = workSpecTable + ".name"
 	workSpecNamespace           = workSpecTable + ".namespace_id"
@@ -38,9 +45,15 @@ const (
 	inThisNamespace    = workSpecNamespace + "=$1"
 	isWorkSpec         = workSpecID + "=$1"
 	inThisWorkSpec     = workUnitSpec + "=$1"
+	hasThisParent      = workerParent + "=$1"
+	isAttempt          = attemptID + "=$1"
+	byThisWorker       = attemptWorkerID + "=$1"
 	workUnitInSpec     = workUnitSpec + "=" + workSpecID
+	attemptIsActive    = attemptActive + "=TRUE"
 	attemptIsAvailable = ("(" +
 		attemptStatus + " IS NULL OR " +
 		attemptStatus + "='expired' OR " +
 		attemptStatus + "='retryable')")
+	attemptThisWorkUnit = attemptWorkUnitID + "=" + workUnitID
+	attemptThisWorker   = attemptWorkerID + "=" + workerID
 )

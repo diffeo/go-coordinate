@@ -21,6 +21,8 @@ type worker struct {
 }
 
 func newWorker(namespace *namespace, name string) *worker {
+	now := time.Now()
+	expiration := now.Add(time.Duration(15) * time.Minute)
 	return &worker{
 		name:           name,
 		children:       make(map[string]*worker),
@@ -28,6 +30,8 @@ func newWorker(namespace *namespace, name string) *worker {
 		attempts:       make([]*attempt, 0),
 		namespace:      namespace,
 		active:         true,
+		lastUpdate:     now,
+		expiration:     expiration,
 	}
 }
 
