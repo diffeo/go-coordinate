@@ -272,6 +272,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			&interval, &nextContinuous, &meta.MaxRunning,
 			&meta.MaxAttemptsReturned,
 			&meta.NextWorkSpecName)
+		spec.namespace = ns
 		specs[spec.name] = &spec
 		metas[spec.name] = &meta
 		return err

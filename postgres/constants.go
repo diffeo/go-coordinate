@@ -33,6 +33,7 @@ const (
 	workSpecNextWorkSpec        = workSpecTable + ".next_work_spec_name"
 	workUnitID                  = workUnitTable + ".id"
 	workUnitName                = workUnitTable + ".name"
+	workUnitData                = workUnitTable + ".data"
 	workUnitSpec                = workUnitTable + ".work_spec_id"
 	workUnitAttempt             = workUnitTable + ".active_attempt_id"
 
@@ -44,6 +45,7 @@ const (
 	// WHERE clause fragments:
 	inThisNamespace    = workSpecNamespace + "=$1"
 	isWorkSpec         = workSpecID + "=$1"
+	isWorkUnit         = workUnitID + "=$1"
 	inThisWorkSpec     = workUnitSpec + "=$1"
 	hasThisParent      = workerParent + "=$1"
 	isAttempt          = attemptID + "=$1"

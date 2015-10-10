@@ -137,12 +137,13 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		// too in any case
 		outputs := []string{workSpecNextWorkSpec}
 		if data == nil {
-			outputs = append(outputs, workSpecData)
+			outputs = append(outputs, workUnitData)
 		}
-		query := buildSelect(outputs, []string{workSpecTable},
-			[]string{isWorkSpec})
+		query := buildSelect(outputs,
+			[]string{workSpecTable, workUnitTable},
+			[]string{isWorkUnit, workUnitInSpec})
 
-		row := tx.QueryRow(query, a.unit.spec.id)
+		row := tx.QueryRow(query, a.unit.id)
 		var nextWorkSpec string
 		if data == nil {
 			var dataGob []byte

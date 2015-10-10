@@ -227,3 +227,111 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 
 	// don't check expiration time here
 }
+
+// TestWorkUnitChaining tests that completing work units in one work spec
+// will cause work units to appear in another, if so configured.
+func (s *Suite) TestWorkUnitChaining(c *check.C) {
+	var (
+		err      error
+		worker   coordinate.Worker
+		one, two coordinate.WorkSpec
+		units    map[string]coordinate.WorkUnit
+		attempts []coordinate.Attempt
+		data     map[string]interface{}
+		ok       bool
+	)
+
+	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "one",
+		"then": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "two",
+		"disabled": true,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	// Create and perform a work unit, with no output
+	_, err = one.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Finish(nil)
+	c.Assert(err, check.IsNil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{})
+
+	// Create and perform a work unit, with a map output
+	_, err = one.AddWorkUnit("b", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Finish(map[string]interface{}{
+		"output": map[string]interface{}{
+			"two_b": map[string]interface{}{"k": "v"},
+		},
+	})
+	c.Assert(err, check.IsNil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{"two_b"})
+
+	if _, ok = units["two_b"]; ok {
+		data, err = units["two_b"].Data()
+		c.Assert(err, check.IsNil)
+		c.Check(data, check.DeepEquals, map[string]interface{}{"k": "v"})
+	}
+
+	// Create and perform a work unit, with a slice output
+	_, err = one.AddWorkUnit("c", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Finish(map[string]interface{}{
+		"output": []string{"two_c", "two_cc"},
+	})
+	c.Assert(err, check.IsNil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc"})
+
+	if _, ok = units["two_c"]; ok {
+		data, err = units["two_c"].Data()
+		c.Assert(err, check.IsNil)
+		c.Check(data, check.DeepEquals, map[string]interface{}{})
+	}
+
+	// Put the output in the original work unit data
+	_, err = one.AddWorkUnit("d", map[string]interface{}{
+		"output": []string{"two_d"},
+	}, 0.0)
+	c.Assert(err, check.IsNil)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Finish(nil)
+	c.Assert(err, check.IsNil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc", "two_d"})
+}
