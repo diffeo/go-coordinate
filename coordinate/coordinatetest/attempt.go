@@ -335,3 +335,60 @@ func (s *Suite) TestWorkUnitChaining(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc", "two_d"})
 }
+
+// TestChainingExpiry tests that, if an attempt finishes but is no
+// longer the active attempt, then its successor work units will not
+// be created.
+func (s *Suite) TestChainingExpiry(c *check.C) {
+	var (
+		one, two coordinate.WorkSpec
+		err      error
+		worker   coordinate.Worker
+		unit     coordinate.WorkUnit
+		attempts []coordinate.Attempt
+	)
+
+	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "one",
+		"then": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "two",
+		"disabled": true,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	// Create and perform a work unit, with no output
+	unit, err = one.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	attempt := attempts[0]
+
+	// But wait!  We got preempted
+	err = unit.ClearActiveAttempt()
+	c.Assert(err, check.IsNil)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	// Now, let the original attempt finish, trying to generate
+	// more outputs
+	err = attempt.Finish(map[string]interface{}{
+		"output": []string{"unit"},
+	})
+	c.Assert(err, check.IsNil)
+
+	// Since attempt is no longer active, this shouldn't generate
+	// new outputs
+	units, err := two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, check.HasLen, 0)
+}

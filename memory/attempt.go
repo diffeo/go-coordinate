@@ -127,6 +127,9 @@ func (attempt *attempt) Finish(data map[string]interface{}) error {
 
 	// Does the work unit data include an "output" key that we
 	// understand?
+	if attempt.workUnit.activeAttempt != attempt {
+		return nil
+	}
 	if data == nil {
 		data = attempt.workUnit.data
 	}

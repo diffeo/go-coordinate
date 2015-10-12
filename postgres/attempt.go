@@ -135,7 +135,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		// that we understand?  We may need to ring back to
 		// the work unit here; we need the next work spec name
 		// too in any case
-		outputs := []string{workSpecNextWorkSpec}
+		outputs := []string{workSpecNextWorkSpec, workUnitAttempt}
 		if data == nil {
 			outputs = append(outputs, workUnitData)
 		}
@@ -144,21 +144,25 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			[]string{isWorkUnit, workUnitInSpec})
 
 		row := tx.QueryRow(query, a.unit.id)
+		var attemptID sql.NullInt64
 		var nextWorkSpec string
 		if data == nil {
 			var dataGob []byte
-			err = row.Scan(&nextWorkSpec, &dataGob)
+			err = row.Scan(&nextWorkSpec, &attemptID, &dataGob)
 			if err == nil {
 				data, err = gobToMap(dataGob)
 			}
 		} else {
-			err = row.Scan(&nextWorkSpec)
+			err = row.Scan(&nextWorkSpec, &attemptID)
 		}
 		if err != nil {
 			return err
 		}
 		if nextWorkSpec == "" {
 			return nil // nothing to do
+		}
+		if !attemptID.Valid || (attemptID.Int64 != int64(a.id)) {
+			return nil // no longer active attempt
 		}
 
 		// TODO(dmaze): This should become a join in the
@@ -368,6 +372,7 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*w
 		attemptIsAvailable,
 	})
 	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC LIMIT %v", numUnits)
+	query += " FOR UPDATE OF " + workUnitTable
 	rows, err := tx.Query(query, spec.id)
 	if err != nil {
 		return nil, err
