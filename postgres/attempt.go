@@ -313,9 +313,6 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 // Worker attempt functions
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
-	// This attempt will mirror the "memory" implementation and its
-	// current inconsistencies/quirks.
-
 	var attempts []coordinate.Attempt
 	if req.NumberOfWorkUnits < 1 {
 		req.NumberOfWorkUnits = 1

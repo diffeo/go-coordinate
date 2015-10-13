@@ -213,11 +213,9 @@ func (s *Suite) BenchmarkUnitOutput(c *check.C) {
 
 // BenchmarkConcurrentUnitOutput times work unit execution, where a first
 // work spec creates work units in a second.
-/* fails under postgres
 func (s *Suite) BenchmarkConcurrentUnitOutput(c *check.C) {
 	s.benchmarkUnitOutput(c, true)
 }
-*/
 
 func (s *Suite) benchmarkUnitOutput(c *check.C, parallel bool) {
 	// Create the work specs

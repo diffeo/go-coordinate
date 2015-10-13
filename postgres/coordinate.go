@@ -8,6 +8,7 @@ import (
 	// This Coordinate backend requires the PostgreSQL database/sql
 	// driver library, and creates the connection pool here
 	"github.com/dmaze/goordinate/cborrpc"
+	"github.com/lib/pq"
 	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
 )
@@ -87,17 +88,11 @@ func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
 		done bool
 	)
 
-	// Create the transaction
-	tx, err = theDB(c).Begin()
-	if err != nil {
-		return
-	}
-
 	// If we have a failure, roll back; and if that rollback fails
 	// and we don't yet have an error, set the error (how do we
 	// get there?)
 	defer func() {
-		if !done {
+		if tx != nil && !done {
 			err2 := tx.Rollback()
 			if err == nil {
 				err = err2
@@ -105,13 +100,45 @@ func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
 		}
 	}()
 
-	// Call the callback function
-	err = f(tx)
+	// Run in a loop, repeating the work on serialization errors
+	for {
+		// Create the transaction
+		tx, err = theDB(c).Begin()
+		if err != nil {
+			return
+		}
 
-	// If that succeeded, commit
-	if err == nil {
-		err = tx.Commit()
-		done = true
+		// TODO(dmaze): see if there is a more useful way to
+		// set this globally
+		_, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+		if err != nil {
+			return
+		}
+
+		// Call the callback function
+		err = f(tx)
+
+		// If that succeeded, commit
+		if err == nil {
+			err = tx.Commit()
+			done = true
+		}
+
+		// If we specifically got a serialization error,
+		// retry
+		if pqerr, ok := err.(*pq.Error); ok {
+			if pqerr.Code == "40001" {
+				err = tx.Rollback()
+				if err != nil {
+					return
+				}
+				tx = nil
+				err = nil
+				continue
+			}
+		}
+
+		break
 	}
 
 	// Return, rolling back if needed
