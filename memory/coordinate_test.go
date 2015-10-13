@@ -10,4 +10,6 @@ import (
 // Test is the top-level entry point to run tests.
 func Test(t *testing.T) { check.TestingT(t) }
 
-var _ = check.Suite(&coordinatetest.Suite{Coordinate: memory.New()})
+func init() {
+	check.Suite(&coordinatetest.Suite{Coordinate: memory.New()})
+}
