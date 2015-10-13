@@ -143,16 +143,13 @@ to choose a backend.
 Status
 ------
 
-(As of 6 Oct 2015)
+(As of 13 Oct 2015)
 
-The overall system is probably usable for some applications, though
-I have not done any particular real-world testing yet.
-
-The `coordinate summary` command, and the most basic flows that create
-work specs, add work units, get work, and complete it work.  This
-passes almost but not quite all of the Python tests.  Continuous jobs
-are believed to be broken.  The PostgreSQL backend in particular needs
-real concurrency testing.
+The overall system is probably usable for some applications, though I
+have not done any particular real-world testing yet.  With the
+exception of continuous jobs, the entire system should work as
+expected, including passing all of the Python tests (and their ported
+equivalents here).  The PostgreSQL backend needs performance tuning.
 
 This implementation has no way to make outbound calls to a Coordinate
 server from a Go program.  This will likely involve creating a new

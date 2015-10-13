@@ -130,33 +130,6 @@ func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, 
 }
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
-	// This is a stub implementation that returns the first work
-	// unit from the first work spec we can find that has any work
-	// units at all.  There are some interesting variations, like
-	// continuous work specs, that we need to consider, plus we
-	// actually want to write a real scheduler.
-	//
-	// The actual flow here should be:
-	//
-	// (1) Figure out which work specs can run, because req
-	//     satisfies their resource constraints (including maximum
-	//     concurrent jobs) and either they have at least one work
-	//     unit or are continuous
-	//
-	// (2) Choose one of these work specs, taking as input the
-	//     work specs' stated priority, weight, number of pending
-	//     jobs, and continuous flag
-	//
-	// (3) From the chosen work spec, choose a work unit, based
-	//     principally on the work units' stated priorities
-	//
-	// (4) Create an attempt and change the active attempt from
-	//     "none" to the new attempt
-	//
-	// (5) If (4) fails, start over
-	//
-	// Note that steps 2 and 3 are largely backend-independent
-	// and probably want to be done consistently across backends.
 	globalLock(w)
 	defer globalUnlock(w)
 
