@@ -103,6 +103,60 @@ func createWorkers(namespace coordinate.Namespace, c *check.C) []coordinate.Work
 }
 
 // ------------------------------------------------------------------------
+// Concurrent execution tests:
+
+// TestConcurrentExecution creates 100 work units and runs them
+// concurrently, testing that each gets executed only once.
+func (s *Suite) TestConcurrentExecution(c *check.C) {
+	// Create the work spec
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+	})
+	c.Assert(err, check.IsNil)
+	numUnits := 100
+	createWorkUnits(spec, numUnits, c)
+	workers := createWorkers(s.Namespace, c)
+	results := make(chan map[string]int, workerCount())
+
+	doWork := func(seq int) {
+		worker := workers[seq]
+		done := make(map[string]int)
+		for {
+			attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+			c.Assert(err, check.IsNil)
+			if len(attempts) == 0 {
+				results <- done
+				return
+			}
+			for _, attempt := range attempts {
+				done[attempt.WorkUnit().Name()] = seq
+				err = attempt.Finish(nil)
+				c.Assert(err, check.IsNil)
+			}
+		}
+	}
+	pooled(doWork, c, true)
+
+	close(results)
+	allResults := make(map[string]int)
+	for result := range results {
+		for name, seq := range result {
+			if other, dup := allResults[name]; dup {
+				c.Errorf("work unit %v done by both %v and %v\n", name, other, seq)
+			} else {
+				allResults[name] = seq
+			}
+		}
+	}
+	for i := 0; i < numUnits; i++ {
+		name := fmt.Sprintf("u%v", i)
+		if _, present := allResults[name]; !present {
+			c.Errorf("work unit %v not done by anybody\n", name)
+		}
+	}
+}
+
+// ------------------------------------------------------------------------
 // Actual benchmarks:
 
 // BenchmarkWorkUnitCreation times simply creating a significant
