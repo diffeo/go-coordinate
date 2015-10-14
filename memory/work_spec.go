@@ -104,13 +104,28 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 	globalLock(spec)
 	defer globalUnlock(spec)
 
-	unit := new(workUnit)
-	unit.name = name
-	unit.data = data
-	unit.priority = priority
-	unit.workSpec = spec
-	spec.workUnits[name] = unit
-	spec.available.Add(unit)
+	unit, exists := spec.workUnits[name]
+	if exists {
+		unit.data = data
+		unit.priority = priority
+		switch unit.status() {
+		case coordinate.AvailableUnit, coordinate.PendingUnit:
+			// do nothing
+		default:
+			// drop the existing (completed) attempt and
+			// make the work unit be available again
+			unit.activeAttempt = nil
+			spec.available.Add(unit)
+		}
+	} else {
+		unit = new(workUnit)
+		unit.name = name
+		unit.data = data
+		unit.priority = priority
+		unit.workSpec = spec
+		spec.workUnits[name] = unit
+		spec.available.Add(unit)
+	}
 	return unit, nil
 }
 

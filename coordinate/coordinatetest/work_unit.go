@@ -444,3 +444,28 @@ func (s *Suite) TestWorkUnitData(c *check.C) {
 	c.Check(data["name"], check.Equals, "b")
 	c.Check(data["value"], check.Equals, 2)
 }
+
+// TestRecreateWorkUnits checks that creating work units that already
+// exist works successfully.
+func (s *Suite) TestRecreateWorkUnits(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+	units, err := makeWorkUnits(spec, worker)
+	c.Assert(err, check.IsNil)
+
+	for name := range units {
+		unit, err := spec.AddWorkUnit(name, map[string]interface{}{}, 0.0)
+		c.Assert(err, check.IsNil,
+			check.Commentf("name = %v", name))
+		// Unless the unit was previously pending, it should be
+		// available now
+		status, err := unit.Status()
+		c.Assert(err, check.IsNil,
+			check.Commentf("name = %v", name))
+		expected := coordinate.AvailableUnit
+		if name == "pending" {
+			expected = coordinate.PendingUnit
+		}
+		c.Check(status, check.Equals, expected,
+			check.Commentf("name = %v", name))
+	}
+}

@@ -36,6 +36,7 @@ const (
 	workUnitData                = workUnitTable + ".data"
 	workUnitSpec                = workUnitTable + ".work_spec_id"
 	workUnitAttempt             = workUnitTable + ".active_attempt_id"
+	workUnitPriority            = workUnitTable + ".priority"
 
 	// This join selects all work units and attempts, including
 	// work units with no active attempt
