@@ -362,14 +362,23 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*w
 	query := buildSelect([]string{
 		workUnitID,
 		workUnitName,
+		workUnitAttempt,
 	}, []string{
-		workUnitAttemptJoin,
+		workUnitTable,
 	}, []string{
 		inThisWorkSpec,
+	})
+	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC")
+	query = buildSelect([]string{
+		"wu.id",
+		"wu.name",
+	}, []string{
+		"(" + query + ") AS wu LEFT OUTER JOIN " + attemptTable + " ON wu.active_attempt_id=attempt.id",
+	}, []string{
 		attemptIsAvailable,
 	})
-	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC LIMIT %v", numUnits)
-	query += " FOR UPDATE OF " + workUnitTable
+	query += fmt.Sprintf(" LIMIT %v", numUnits)
+	query += " FOR UPDATE OF wu"
 	rows, err := tx.Query(query, spec.id)
 	if err != nil {
 		return nil, err

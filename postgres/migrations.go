@@ -3,6 +3,7 @@
 // migrations/20150927-core.sql
 // migrations/20151002-mingb.sql
 // migrations/20151006-work-unit-type.sql
+// migrations/20151013-index.sql
 // DO NOT EDIT!
 
 package postgres
@@ -130,6 +131,26 @@ func migrations20151006WorkUnitTypeSql() (*asset, error) {
 	return a, nil
 }
 
+var _migrations20151013IndexSql = []byte("\x1f\x8b\x08\x00\x00\x09\x6e\x88\x00\xff\x74\xcc\xbd\x0e\x82\x30\x14\xc5\xf1\xbd\x4f\x71\x46\xbf\xfa\x02\x30\x11\xda\xc1\x05\x0c\x68\xe2\x46\x88\x34\x4d\xa3\xed\xad\xb7\x25\xc4\xb7\x57\x26\xe3\xe0\x72\x86\x93\x7f\x7e\x52\x42\xee\x24\x3c\x4d\xa6\x40\x7a\x3e\xca\x75\x64\x64\x9a\xe6\x5b\x2e\x10\x29\x65\xcb\x26\xad\x91\xf8\xb4\x7b\xef\x2c\x8f\xd9\xe0\x12\x45\xdd\xe9\xea\xac\x71\x6c\x94\xbe\x62\x21\xbe\x0f\x73\x70\x79\x20\x9e\x0c\xbb\x60\xd1\x36\xdf\x77\x13\xd9\x11\xbb\xfc\x82\xd2\x7d\x7d\x40\x18\xbd\x41\xd5\xd7\xdb\x52\xfc\xb0\x8a\x96\x20\x54\xd7\x9e\xfe\xb2\xa5\x78\x07\x00\x00\xff\xff\x3f\x3c\x19\x8a\xb3\x00\x00\x00")
+
+func migrations20151013IndexSqlBytes() ([]byte, error) {
+	return bindataRead(
+		_migrations20151013IndexSql,
+		"migrations/20151013-index.sql",
+	)
+}
+
+func migrations20151013IndexSql() (*asset, error) {
+	bytes, err := migrations20151013IndexSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "migrations/20151013-index.sql", size: 179, mode: os.FileMode(420), modTime: time.Unix(1444782480, 0)}
+	a := &asset{bytes: bytes, info:  info}
+	return a, nil
+}
+
 // Asset loads and returns the asset for the given name.
 // It returns an error if the asset could not be found or
 // could not be loaded.
@@ -185,6 +206,7 @@ var _bindata = map[string]func() (*asset, error){
 	"migrations/20150927-core.sql": migrations20150927CoreSql,
 	"migrations/20151002-mingb.sql": migrations20151002MingbSql,
 	"migrations/20151006-work-unit-type.sql": migrations20151006WorkUnitTypeSql,
+	"migrations/20151013-index.sql": migrations20151013IndexSql,
 }
 
 // AssetDir returns the file names below a certain
@@ -233,6 +255,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"20151002-mingb.sql": &bintree{migrations20151002MingbSql, map[string]*bintree{
 		}},
 		"20151006-work-unit-type.sql": &bintree{migrations20151006WorkUnitTypeSql, map[string]*bintree{
+		}},
+		"20151013-index.sql": &bintree{migrations20151013IndexSql, map[string]*bintree{
 		}},
 	}},
 }}
