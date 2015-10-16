@@ -217,6 +217,8 @@ func (a *attempt) Retry(data map[string]interface{}) error {
 func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status string) error {
 	// TODO(dmaze): check valid state transitions
 	// TODO(dmaze): check if attempt is active if required
+
+	// Mark the attempt as completed
 	conditions := []string{
 		isAttempt,
 	}
@@ -237,6 +239,21 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 	}
 	query := buildUpdate("attempt", changes, conditions)
 	_, err := tx.Exec(query, args...)
+	if err != nil {
+		return err
+	}
+
+	// If it was the active attempt, and this is a non-terminal
+	// resolution, also reset that
+	if status == "retryable" || status == "expired" {
+		query = buildUpdate(workUnitTable, []string{
+			"active_attempt_id=NULL",
+		}, []string{
+			"active_attempt_id=$1",
+		})
+		_, err = tx.Exec(query, a.id)
+	}
+
 	return err
 }
 
@@ -362,23 +379,15 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*w
 	query := buildSelect([]string{
 		workUnitID,
 		workUnitName,
-		workUnitAttempt,
 	}, []string{
 		workUnitTable,
 	}, []string{
 		inThisWorkSpec,
+		workUnitAttempt + " IS NULL",
 	})
 	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC")
-	query = buildSelect([]string{
-		"wu.id",
-		"wu.name",
-	}, []string{
-		"(" + query + ") AS wu LEFT OUTER JOIN " + attemptTable + " ON wu.active_attempt_id=attempt.id",
-	}, []string{
-		attemptIsAvailable,
-	})
 	query += fmt.Sprintf(" LIMIT %v", numUnits)
-	query += " FOR UPDATE OF wu"
+	query += " FOR UPDATE OF work_unit"
 	rows, err := tx.Query(query, spec.id)
 	if err != nil {
 		return nil, err
