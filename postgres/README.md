@@ -35,6 +35,14 @@ As of this writing, all required tables will be created (and updated
 to the current version) on first startup.  There is not yet a
 provision to remove existing tables.
 
+Under load, the database may print out log messages
+
+    ERROR:  could not serialize access due to concurrent update
+
+with corresponding SQL statements.  The transaction-handling code in
+this module traps this error and correctly retries transactions.  This
+error can be safely ignored.
+
 Migrations
 ----------
 

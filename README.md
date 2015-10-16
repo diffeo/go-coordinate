@@ -149,7 +149,7 @@ The overall system is probably usable for some applications, though I
 have not done any particular real-world testing yet.  With the
 exception of continuous jobs, the entire system should work as
 expected, including passing all of the Python tests (and their ported
-equivalents here).  The PostgreSQL backend needs performance tuning.
+equivalents here).
 
 This implementation has no way to make outbound calls to a Coordinate
 server from a Go program.  This will likely involve creating a new

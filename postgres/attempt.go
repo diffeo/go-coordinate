@@ -330,32 +330,81 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 // Worker attempt functions
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
-	var attempts []coordinate.Attempt
-	if req.NumberOfWorkUnits < 1 {
-		req.NumberOfWorkUnits = 1
+	var (
+		attempts []coordinate.Attempt
+		specs    map[string]*workSpec
+		metas    map[string]*coordinate.WorkSpecMeta
+		name     string
+		err      error
+		spec     *workSpec
+		meta     *coordinate.WorkSpecMeta
+	)
+
+	// Collect the set of candidate work specs and metadata outside
+	// the main transaction.  This is pretty expensive to collect
+	// and we want to avoid retrying it if possible.
+	//
+	// There is a possible race condition on a bad day.  It is
+	// possible that this returns work specs with positive
+	// available units, but while we're deciding what to do,
+	// another worker picks those up.  That means the scheduler
+	// could pick something but we then fail to get any work from
+	// it.
+	for {
+		err = withTx(w, func(tx *sql.Tx) (err error) {
+			specs, metas, err = w.namespace.allMetas(tx, true)
+			return
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		// Now pick something (this is stateless, but see TODO above)
+		// (If this picks nothing, we're done)
+		name, err = coordinate.SimplifiedScheduler(metas, req.AvailableGb)
+		if err == coordinate.ErrNoWork {
+			return attempts, nil
+		} else if err != nil {
+			return nil, err
+		}
+		spec = specs[name]
+		meta = metas[name]
+
+		// Then get some attempts
+		attempts, err = w.requestAttemptsForSpec(req, spec, meta)
+		if err != nil {
+			return nil, err
+		}
+
+		// If that returned non-zero attempts, we're done
+		if len(attempts) > 0 {
+			return attempts, nil
+		}
+		// Otherwise reloop
+	}
+}
+
+func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *workSpec, meta *coordinate.WorkSpecMeta) ([]coordinate.Attempt, error) {
+	var (
+		attempts []coordinate.Attempt
+		count    int
+		err      error
+	)
+
+	// Adjust the work unit count based on what's possible here
+	count = req.NumberOfWorkUnits
+	if count < 1 {
+		count = 1
+	}
+	if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
+		count = meta.MaxAttemptsReturned
+	}
+	if meta.MaxRunning > 0 && count > meta.PendingCount-meta.MaxRunning {
+		count = meta.PendingCount - meta.MaxRunning
 	}
 
-	err := withTx(w, func(tx *sql.Tx) error {
-		specs, metas, err := w.namespace.allMetas(tx, true)
-		if err != nil {
-			return err
-		}
-		name, err := coordinate.SimplifiedScheduler(metas, req.AvailableGb)
-		if err == coordinate.ErrNoWork {
-			return nil
-		} else if err != nil {
-			return err
-		}
-		spec := specs[name]
-		meta := metas[name]
-		// Adjust the work unit count based on what's possible here
-		count := req.NumberOfWorkUnits
-		if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
-			count = meta.MaxAttemptsReturned
-		}
-		if meta.MaxRunning > 0 && count > meta.PendingCount-meta.MaxRunning {
-			count = meta.PendingCount - meta.MaxRunning
-		}
+	// Now choose units and create attempts
+	err = withTx(w, func(tx *sql.Tx) error {
 		units, err := w.chooseWorkUnits(tx, spec, count)
 		if err != nil {
 			return err
