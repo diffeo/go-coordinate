@@ -291,8 +291,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		}, []string{
 			inThisNamespace, // binds $1
 			workUnitInSpec,
-			// We ignore finished/failed status; is it
-			// worthwhile to ignore those here?
+			"(" + attemptStatus + " IS NULL OR " + attemptStatus + "='pending')",
 		})
 		query += " GROUP BY " + workSpecName + ", " + attemptStatus
 		rows, err = tx.Query(query, ns.id)
