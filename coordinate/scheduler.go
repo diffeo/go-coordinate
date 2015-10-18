@@ -3,7 +3,47 @@ package coordinate
 import (
 	"errors"
 	"math/rand"
+	"time"
 )
+
+// CanStartContinuous decides whether this work spec can start a new
+// continuous work unit.  For this to be true, the metadata must indicate
+// that the work spec can generate continuous work units at all; it must
+// have no other incomplete work units; and the next-continuous time
+// must have passed.
+func (meta *WorkSpecMeta) CanStartContinuous() bool {
+	if !meta.Continuous {
+		return false
+	}
+	if meta.AvailableCount > 0 || meta.PendingCount > 0 {
+		return false
+	}
+	now := time.Now()
+	if now.Before(meta.NextContinuous) {
+		return false
+	}
+	return true
+}
+
+// CanDoWork decides whether this work spec can do any work at all.
+// This generally means the work spec is not paused and has positive
+// weight, and either it has at least one available work unit or it is
+// continuous, and it has not hit a max-running constraint.
+func (meta *WorkSpecMeta) CanDoWork() bool {
+	if meta.Paused || meta.Weight <= 0 {
+		return false
+	}
+	if meta.MaxRunning > 0 && meta.PendingCount >= meta.MaxRunning {
+		return false
+	}
+	if meta.AvailableCount > 0 {
+		return true
+	}
+	if meta.CanStartContinuous() {
+		return true
+	}
+	return false
+}
 
 // SimplifiedScheduler chooses a work spec to do work from a mapping
 // of work spec metadata, including counts.  It works as follows:
@@ -32,11 +72,7 @@ func SimplifiedScheduler(metas map[string]*WorkSpecMeta, availableGb float64) (s
 	// Prune the work spec list
 	for name, meta := range metas {
 		// Filter on core metadata
-		if meta.Paused ||
-			meta.Weight == 0 ||
-			(meta.MaxRunning > 0 && meta.PendingCount >= meta.MaxRunning) ||
-			(!meta.Continuous && meta.AvailableCount == 0) ||
-			(meta.Continuous && meta.AvailableCount == 0 && meta.PendingCount > 0) {
+		if !meta.CanDoWork() {
 			continue
 		}
 		// Filter on priority

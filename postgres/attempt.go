@@ -409,6 +409,12 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		if err != nil {
 			return err
 		}
+		if len(units) == 0 && meta.CanStartContinuous() {
+			units, err = w.createContinuousUnits(tx, spec, meta)
+		}
+		if err != nil {
+			return err
+		}
 		length := time.Duration(15) * time.Minute
 		for _, unit := range units {
 			a, err := makeAttempt(tx, unit, w, length)
@@ -453,6 +459,50 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*w
 		return nil, err
 	}
 	return result, nil
+}
+
+// createContinuousUnits tries to create exactly one continuous work
+// unit, and returns it.
+func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta) ([]*workUnit, error) {
+	// We will want to ensure that only one worker is attempting
+	// to create this work unit, and we will ultimately want to
+	// update the next-continuous time
+	row := tx.QueryRow(buildSelect([]string{workSpecID},
+		[]string{workSpecTable},
+		[]string{isWorkSpec})+" FOR UPDATE",
+		spec.id)
+	var anID int
+	err := row.Scan(&anID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the work unit
+	now := time.Now()
+	seconds := now.Unix()
+	nano := now.Nanosecond()
+	milli := nano / 1000000
+	name := fmt.Sprintf("%d.%03d", seconds, milli)
+	dataGob, err := mapToGob(map[string]interface{}{})
+	if err != nil {
+		return nil, err
+	}
+	unit, err := spec.addWorkUnit(tx, name, dataGob, 0.0)
+	if err != nil {
+		return nil, err
+	}
+
+	// Update the next-continuous time for the work spec.
+	_, err = tx.Exec(buildUpdate(workSpecTable,
+		[]string{"next_continuous=$2"},
+		[]string{isWorkSpec}),
+		spec.id, now.Add(meta.Interval))
+	if err != nil {
+		return nil, err
+	}
+
+	// We have the single work unit we want to do.
+	return []*workUnit{unit}, nil
 }
 
 func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, length time.Duration) (coordinate.Attempt, error) {

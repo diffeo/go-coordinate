@@ -469,3 +469,47 @@ func (s *Suite) TestRecreateWorkUnits(c *check.C) {
 			check.Commentf("name = %v", name))
 	}
 }
+
+// TestContinuous creates a continuous work spec but no work units for it.
+// Requesting attempts should create a new work unit for it.
+func (s *Suite) TestContinuous(c *check.C) {
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":       "spec",
+		"continuous": true,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err := s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	makeAttempt := func(expected int) {
+		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+		c.Assert(err, check.IsNil)
+		c.Check(attempts, check.HasLen, expected)
+		for _, attempt := range attempts {
+			err = attempt.Finish(nil)
+			c.Assert(err, check.IsNil)
+		}
+	}
+
+	// While we haven't added any work units yet, since the work
+	// spec is continuous, we should have something
+	makeAttempt(1)
+
+	// If we use SetMeta to turn continuous mode off and on, it
+	// should affect whether work units come back
+	meta, err := spec.Meta(false)
+	c.Assert(err, check.IsNil)
+	meta.Continuous = false
+	err = spec.SetMeta(meta)
+	c.Assert(err, check.IsNil)
+	makeAttempt(0)
+
+	meta.Continuous = true
+	err = spec.SetMeta(meta)
+	c.Assert(err, check.IsNil)
+	makeAttempt(1)
+
+	// TODO(dmaze): Get a better handle on time, and test
+	// interval/next-continuous
+}

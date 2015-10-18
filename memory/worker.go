@@ -2,6 +2,7 @@ package memory
 
 import (
 	"errors"
+	"fmt"
 	"github.com/dmaze/goordinate/coordinate"
 	"time"
 )
@@ -159,11 +160,12 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		count = meta.PendingCount - meta.MaxRunning
 	}
 	for len(attempts) < count {
-		attempt := w.getWorkFromSpec(spec)
+		attempt := w.getWorkFromSpec(spec, meta)
 		if attempt == nil {
 			break
 		}
 		attempts = append(attempts, attempt)
+		meta.PendingCount++
 	}
 	return attempts, nil
 }
@@ -172,12 +174,33 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 // It could create a work unit if spec is a continuous spec with no
 // available units.  It ignores other constraints, such as whether the
 // work spec is paused.
-func (w *worker) getWorkFromSpec(spec *workSpec) *attempt {
-	if len(spec.available) == 0 {
+func (w *worker) getWorkFromSpec(spec *workSpec, meta *coordinate.WorkSpecMeta) *attempt {
+	var unit *workUnit
+	if len(spec.available) != 0 {
+		unit = spec.available.Next()
+	} else if meta.CanStartContinuous() {
+		// Make a brand new work unit.  Its key is the string
+		// form of a time_t.
+		now := time.Now()
+		seconds := now.Unix()
+		nano := now.Nanosecond()
+		milli := nano / 1000000
+		name := fmt.Sprintf("%d.%03d", seconds, milli)
+		var exists bool
+		unit, exists = spec.workUnits[name]
+		if !exists {
+			unit = &workUnit{
+				name:     name,
+				data:     map[string]interface{}{},
+				workSpec: spec,
+			}
+			spec.workUnits[name] = unit
+		}
+		spec.meta.NextContinuous = now.Add(meta.Interval)
+	} else {
 		return nil
 	}
-	workUnit := spec.available.Next()
-	return w.makeAttempt(workUnit, time.Duration(0))
+	return w.makeAttempt(unit, time.Duration(0))
 }
 
 func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, duration time.Duration) (coordinate.Attempt, error) {

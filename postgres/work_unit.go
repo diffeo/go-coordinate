@@ -14,48 +14,54 @@ type workUnit struct {
 }
 
 func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
-	unit := workUnit{spec: spec, name: name}
+	var unit *workUnit
 	dataGob, err := mapToGob(data)
 	if err != nil {
 		return nil, err
 	}
 	err = withTx(spec, func(tx *sql.Tx) error {
-		// Does the unit already exist?
-		query := buildSelect([]string{
-			workUnitID,
-			attemptStatus,
-		}, []string{
-			workUnitAttemptJoin,
-		}, []string{
-			inThisWorkSpec,
-			workUnitName + "=$2",
-		}) + " FOR UPDATE OF " + workUnitTable
-		row := tx.QueryRow(query, spec.id, name)
-		var status sql.NullString
-		err := row.Scan(&unit.id, &status)
-		if err == nil {
-			// The unit already exists and we've found its data
-			isPending := status.Valid && (status.String == "pending")
-			// We need to update its data and priority, and
-			// (if not pending) reset its active attempt
-			changes := []string{
-				"data=$2",
-				"priority=$3",
-			}
-			if !isPending {
-				changes = append(changes, "active_attempt_id=NULL")
-			}
-			query = buildUpdate(workUnitTable, changes, []string{isWorkUnit})
-			_, err = tx.Exec(query, unit.id, dataGob, priority)
-		} else if err == sql.ErrNoRows {
-			// The work unit doesn't exist, yet
-			row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataGob, priority)
-			err = row.Scan(&unit.id)
-		}
+		unit, err = spec.addWorkUnit(tx, name, dataGob, priority)
 		return err
 	})
-	if err != nil {
-		return nil, err
+	return unit, err
+}
+
+// addWorkUnit does the work of AddWorkUnit, assuming a transaction
+// context and that the data dictionary has already been encoded.
+func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataGob []byte, priority float64) (*workUnit, error) {
+	unit := workUnit{spec: spec, name: name}
+
+	// Does the unit already exist?
+	query := buildSelect([]string{
+		workUnitID,
+		attemptStatus,
+	}, []string{
+		workUnitAttemptJoin,
+	}, []string{
+		inThisWorkSpec,
+		workUnitName + "=$2",
+	}) + " FOR UPDATE OF " + workUnitTable
+	row := tx.QueryRow(query, spec.id, name)
+	var status sql.NullString
+	err := row.Scan(&unit.id, &status)
+	if err == nil {
+		// The unit already exists and we've found its data
+		isPending := status.Valid && (status.String == "pending")
+		// We need to update its data and priority, and
+		// (if not pending) reset its active attempt
+		changes := []string{
+			"data=$2",
+			"priority=$3",
+		}
+		if !isPending {
+			changes = append(changes, "active_attempt_id=NULL")
+		}
+		query = buildUpdate(workUnitTable, changes, []string{isWorkUnit})
+		_, err = tx.Exec(query, unit.id, dataGob, priority)
+	} else if err == sql.ErrNoRows {
+		// The work unit doesn't exist, yet
+		row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataGob, priority)
+		err = row.Scan(&unit.id)
 	}
 	return &unit, nil
 }

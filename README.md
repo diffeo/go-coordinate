@@ -143,13 +143,11 @@ to choose a backend.
 Status
 ------
 
-(As of 13 Oct 2015)
+(As of 18 Oct 2015)
 
-The overall system is probably usable for some applications, though I
-have not done any particular real-world testing yet.  With the
-exception of continuous jobs, the entire system should work as
-expected, including passing all of the Python tests (and their ported
-equivalents here).
+The overall system is expected to be complete, though I have not done
+any particular real-world testing yet.  All of the Python tests (and
+their ported equivalents here) pass.
 
 This implementation has no way to make outbound calls to a Coordinate
 server from a Go program.  This will likely involve creating a new
