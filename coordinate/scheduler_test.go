@@ -124,6 +124,19 @@ func (s *SimplifiedSuite) TestOneSpec(c *check.C) {
 	c.Check(counts["one"], check.Equals, trials)
 }
 
+// TestZeroWeight verifies that the simplified scheduler does the
+// right thing if it only has work specs with zero weight.
+func (s *SimplifiedSuite) TestZeroWeight(c *check.C) {
+	metas := map[string]*WorkSpecMeta{
+		"one": &WorkSpecMeta{
+			Weight:         0,
+			AvailableCount: 1000,
+		},
+	}
+	_, err := SimplifiedScheduler(metas, 1)
+	c.Check(err, check.Equals, ErrNoWork)
+}
+
 // TestTwoSpecsOnePaused verifies that the simplified scheduler does
 // not return a paused work spec.
 func (s *SimplifiedSuite) TestTwoSpecsOnePaused(c *check.C) {

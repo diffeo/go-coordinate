@@ -33,6 +33,7 @@ func SimplifiedScheduler(metas map[string]*WorkSpecMeta, availableGb float64) (s
 	for name, meta := range metas {
 		// Filter on core metadata
 		if meta.Paused ||
+			meta.Weight == 0 ||
 			(meta.MaxRunning > 0 && meta.PendingCount >= meta.MaxRunning) ||
 			(!meta.Continuous && meta.AvailableCount == 0) ||
 			(meta.Continuous && meta.AvailableCount == 0 && meta.PendingCount > 0) {
