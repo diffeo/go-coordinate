@@ -24,4 +24,8 @@ type JobServer struct {
 	// Namespace is the Coordinate Namespace interface this works
 	// against.
 	Namespace coordinate.Namespace
+
+	// GlobalConfig is the configuration that is returned by the
+	// GetConfig RPC call.
+	GlobalConfig map[string]interface{}
 }

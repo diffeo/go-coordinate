@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"reflect"
 	"runtime"
@@ -22,14 +23,26 @@ import (
 	"github.com/dmaze/goordinate/coordinate"
 	"github.com/dmaze/goordinate/jobserver"
 	"github.com/ugorji/go/codec"
+	"gopkg.in/yaml.v2"
 )
 
 func main() {
+	var err error
+
 	var namespace coordinate.Namespace
 	bind := flag.String("bind", ":5932", "[ip]:port to listen on")
 	backend := backend.Backend{Implementation: "memory", Address: ""}
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
+	config := flag.String("config", "", "global configuration YAML file")
 	flag.Parse()
+
+	var gConfig map[string]interface{}
+	if *config != "" {
+		gConfig, err = loadConfigYaml(*config)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	cbor := new(codec.CborHandle)
 	coordinate, err := backend.Coordinate()
@@ -42,7 +55,10 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	jobd := &jobserver.JobServer{Namespace: namespace}
+	jobd := &jobserver.JobServer{
+		Namespace:    namespace,
+		GlobalConfig: gConfig,
+	}
 
 	ln, err := net.Listen("tcp", *bind)
 	if err != nil {
@@ -57,6 +73,17 @@ func main() {
 		}
 		go handleConnection(conn, jobd, cbor)
 	}
+}
+
+func loadConfigYaml(filename string) (map[string]interface{}, error) {
+	var result map[string]interface{}
+	var err error
+	var bytes []byte
+	bytes, err = ioutil.ReadFile(filename)
+	if err == nil {
+		err = yaml.Unmarshal(bytes, &result)
+	}
+	return result, err
 }
 
 // Convert a "snake case" name, like 'foo_bar_baz', to a "camel case" name

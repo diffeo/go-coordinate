@@ -200,5 +200,8 @@ func attemptMap(attempt coordinate.Attempt) (map[string]interface{}, error) {
 // has no way to set a global configuration map and this implementation
 // doesn't have one on its own, so this method fails.
 func (jobs *JobServer) GetConfig() (map[string]interface{}, string, error) {
+	if jobs.GlobalConfig != nil {
+		return jobs.GlobalConfig, "", nil
+	}
 	return nil, "", errors.New("no config to get")
 }
