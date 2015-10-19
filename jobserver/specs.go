@@ -234,3 +234,9 @@ func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (result map[string]i
 	}
 	return
 }
+
+// Now returns the current Unix time as seen by the server.  It can be
+// used as a simple aliveness test for the server.
+func (jobs *JobServer) Now() (int64, error) {
+	return time.Now().Unix(), nil
+}
