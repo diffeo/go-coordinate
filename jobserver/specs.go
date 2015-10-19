@@ -41,7 +41,7 @@ func (jobs *JobServer) ListWorkSpecs(options map[string]interface{}) (result []m
 				workSpec, err = jobs.Namespace.WorkSpec(name)
 			}
 			if err == nil {
-				data, err = workSpec.Data()
+				data, err = getWorkSpecData(workSpec)
 			}
 			if err == nil {
 				result[i] = data
@@ -104,10 +104,31 @@ func (jobs *JobServer) Clear() (count int, err error) {
 func (jobs *JobServer) GetWorkSpec(workSpecName string) (data map[string]interface{}, err error) {
 	var spec coordinate.WorkSpec
 	spec, err = jobs.Namespace.WorkSpec(workSpecName)
-	if err == nil {
-		data, err = spec.Data()
+	if err != nil {
+		return nil, err
 	}
-	return
+	return getWorkSpecData(spec)
+}
+
+func getWorkSpecData(spec coordinate.WorkSpec) (map[string]interface{}, error) {
+	data, err := spec.Data()
+	if err != nil {
+		return nil, err
+	}
+	byteify := func(key string) {
+		value, present := data[key]
+		if !present {
+			return
+		}
+		string, ok := value.(string)
+		if !ok {
+			return
+		}
+		data[key] = []byte(string)
+	}
+	byteify("module")
+	byteify("run_function")
+	return data, nil
 }
 
 // WorkSpecStatus is a value passed as a "status" option to

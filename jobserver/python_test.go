@@ -652,13 +652,13 @@ func (s *PythonSuite) TestGetChildUnitsBasic(c *check.C) {
 	s.addWorkUnit(c, workSpecName, "a", map[string]interface{}{"k": "v"})
 
 	// register parent worker
-	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", 0, 6000, nil, "")
+	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", "run", 6000, nil, "")
 	c.Assert(err, check.IsNil)
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
 
 	// register child worker
-	ok, msg, err = s.JobServer.WorkerHeartbeat("child", 0, 6000, nil, "parent")
+	ok, msg, err = s.JobServer.WorkerHeartbeat("child", "run", 6000, nil, "parent")
 	c.Assert(err, check.IsNil)
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
@@ -695,13 +695,13 @@ func (s *PythonSuite) TestGetChildUnitsMulti(c *check.C) {
 	s.addWorkUnit(c, workSpecName, "b", map[string]interface{}{"k": "v"})
 
 	// register parent worker
-	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", 0, 6000, nil, "")
+	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", "run", 6000, nil, "")
 	c.Assert(err, check.IsNil)
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
 
 	// register child worker
-	ok, msg, err = s.JobServer.WorkerHeartbeat("child", 0, 6000, nil, "parent")
+	ok, msg, err = s.JobServer.WorkerHeartbeat("child", "run", 6000, nil, "parent")
 	c.Assert(err, check.IsNil)
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
