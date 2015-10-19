@@ -95,6 +95,17 @@ func (s *Suite) TestEmptyTupleToBytes(c *check.C) {
 	s.encoderTest(c, tuple, expected)
 }
 
+func (s *Suite) TestReallyEmptyTupleToBytes(c *check.C) {
+	tuple := PythonTuple{}
+	expected := []byte{
+		// tag 128
+		0xD8, 0x80,
+		// array of length 0
+		0x80,
+	}
+	s.encoderTest(c, tuple, expected)
+}
+
 func (s *Suite) TestListOfTupleToBytes(c *check.C) {
 	tuple := PythonTuple{[]interface{}{}}
 	list := []PythonTuple{tuple}

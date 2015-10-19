@@ -158,7 +158,11 @@ type pythonTupleExt struct {
 func (x pythonTupleExt) WriteExt(v interface{}) (resp []byte) {
 	tuple := v.(PythonTuple)
 	encoder := codec.NewEncoderBytes(&resp, x.cbor)
-	encoder.MustEncode(tuple.Items)
+	items := tuple.Items
+	if items == nil {
+		items = []interface{}{}
+	}
+	encoder.MustEncode(items)
 	return
 }
 
@@ -169,11 +173,16 @@ func (x pythonTupleExt) ReadExt(v interface{}, data []byte) {
 }
 
 func (x pythonTupleExt) ConvertExt(v interface{}) interface{} {
-	if ptuple, ok := v.(*PythonTuple); ok {
+	var ptuple *PythonTuple
+	ptuple, ok := v.(*PythonTuple)
+	if !ok {
+		tuple := v.(PythonTuple)
+		ptuple = &tuple
+	}
+	if ptuple.Items != nil {
 		return ptuple.Items
 	}
-	tuple := v.(PythonTuple)
-	return tuple.Items
+	return []interface{}{}
 }
 
 func (x pythonTupleExt) UpdateExt(dest interface{}, v interface{}) {
