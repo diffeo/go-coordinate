@@ -65,12 +65,13 @@ func (jobs *JobServer) ListWorkerModes() (map[string]string, error) {
 // GetWorkerInfo returns the data dictionary sent with the last
 // WorkerHeartbeat call for this worker, plus the key "age_seconds" as
 // the time since that last heartbeat.
-func (jobs *JobServer) GetWorkerInfo(workerID string) (map[string]interface{}, error) {
+func (jobs *JobServer) GetWorkerInfo(workerID string) (map[string]interface{}, string, error) {
 	worker, err := jobs.Namespace.Worker(workerID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return worker.Data()
+	data, err := worker.Data()
+	return data, "", err
 }
 
 // ModeCounts counts the number of workers in each reported mode.  It
