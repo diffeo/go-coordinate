@@ -190,7 +190,7 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 
 	// If we are expecting to return a string message, and there
 	// is no error, remap an empty string to nil
-	if returnsString {
+	if returnsString && len(returns) > 0 {
 		msg := returns[len(returns)-1].String()
 		if msg == "" {
 			returns[len(returns)-1] = reflect.ValueOf(nil)
