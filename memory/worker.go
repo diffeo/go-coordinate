@@ -156,8 +156,8 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	if meta.MaxAttemptsReturned > 0 && count > meta.MaxAttemptsReturned {
 		count = meta.MaxAttemptsReturned
 	}
-	if meta.MaxRunning > 0 && count > meta.PendingCount-meta.MaxRunning {
-		count = meta.PendingCount - meta.MaxRunning
+	if meta.MaxRunning > 0 && count > meta.MaxRunning-meta.PendingCount {
+		count = meta.MaxRunning - meta.PendingCount
 	}
 	for len(attempts) < count {
 		attempt := w.getWorkFromSpec(spec, meta)

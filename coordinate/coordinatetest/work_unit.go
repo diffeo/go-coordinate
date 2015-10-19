@@ -1,6 +1,7 @@
 package coordinatetest
 
 import (
+	"fmt"
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
 	"time"
@@ -512,4 +513,45 @@ func (s *Suite) TestContinuous(c *check.C) {
 
 	// TODO(dmaze): Get a better handle on time, and test
 	// interval/next-continuous
+}
+
+func (s *Suite) TestMaxRunning(c *check.C) {
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":        "spec",
+		"max_running": 1,
+	})
+	c.Assert(err, check.IsNil)
+
+	for i := 0; i < 10; i++ {
+		_, err = spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, 0.0)
+		c.Assert(err, check.IsNil)
+	}
+
+	worker, err := s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	// First call, nothing is pending, so we should get one back
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+
+	// While that is still running, do another request; since we
+	// have hit max_running we should get nothing back
+	a2, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(a2, check.HasLen, 0)
+
+	// Finish the first batch of attempts
+	for _, attempt := range attempts {
+		err = attempt.Finish(nil)
+		c.Assert(err, check.IsNil)
+	}
+
+	// Now nothing is pending and we can ask for more; even if we
+	// ask for 20 we only get one
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		NumberOfWorkUnits: 20,
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
 }
