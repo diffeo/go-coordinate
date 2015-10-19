@@ -119,7 +119,7 @@ func (s *Suite) TestWorkerMetadata(c *check.C) {
 
 	mode, err := worker.Mode()
 	c.Assert(err, check.IsNil)
-	c.Check(mode, check.Equals, 0)
+	c.Check(mode, check.Equals, "")
 
 	data, err := worker.Data()
 	c.Assert(err, check.IsNil)
@@ -138,7 +138,7 @@ func (s *Suite) TestWorkerMetadata(c *check.C) {
 	whenIsThen := whenIsNow.Add(time.Duration(15) * time.Minute)
 	// ("We passed 'then', sir."  "When?"  "Just now.")
 	theData := map[string]interface{}{"key": "value"}
-	theMode := 17
+	theMode := "run"
 
 	err = worker.Update(theData, whenIsNow, whenIsThen, theMode)
 	c.Assert(err, check.IsNil)

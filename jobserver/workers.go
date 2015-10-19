@@ -12,7 +12,7 @@ import (
 // expireSeconds have passed.
 func (jobs *JobServer) WorkerHeartbeat(
 	workerID string,
-	mode int,
+	mode string,
 	expireSeconds float64,
 	data map[string]interface{},
 	parent string,
@@ -46,8 +46,8 @@ func (jobs *JobServer) WorkerUnregister(workerID string) (bool, string, error) {
 // ListWorkerModes returns a map where the keys are worker IDs and the
 // values are the mode value passed to the most recent call to
 // WorkerHeartbeat for that worker..
-func (jobs *JobServer) ListWorkerModes() (map[string]int, error) {
-	result := make(map[string]int)
+func (jobs *JobServer) ListWorkerModes() (map[string]string, error) {
+	result := make(map[string]string)
 	workers, err := jobs.Namespace.Workers()
 	if err != nil {
 		return nil, err
@@ -76,8 +76,8 @@ func (jobs *JobServer) GetWorkerInfo(workerID string) (map[string]interface{}, e
 // ModeCounts counts the number of workers in each reported mode.  It
 // is the same as aggregating the result of ListWorkerModes by their
 // mode value, and producing a map from mode value to worker count.
-func (jobs *JobServer) ModeCounts() (map[int]int, error) {
-	result := make(map[int]int)
+func (jobs *JobServer) ModeCounts() (map[string]int, error) {
+	result := make(map[string]int)
 	workers, err := jobs.Namespace.Workers()
 	if err != nil {
 		return nil, err

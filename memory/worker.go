@@ -15,7 +15,7 @@ type worker struct {
 	active         bool
 	expiration     time.Time
 	lastUpdate     time.Time
-	mode           int
+	mode           string
 	activeAttempts []*attempt
 	attempts       []*attempt
 	namespace      *namespace
@@ -95,7 +95,7 @@ func (w *worker) Deactivate() error {
 	return nil
 }
 
-func (w *worker) Mode() (int, error) {
+func (w *worker) Mode() (string, error) {
 	globalLock(w)
 	defer globalUnlock(w)
 	return w.mode, nil
@@ -119,7 +119,7 @@ func (w *worker) LastUpdate() (time.Time, error) {
 	return w.lastUpdate, nil
 }
 
-func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, mode int) error {
+func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, mode string) error {
 	globalLock(w)
 	defer globalUnlock(w)
 	w.active = true

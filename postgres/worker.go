@@ -20,7 +20,7 @@ func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 		if err == sql.ErrNoRows {
 			now := time.Now()
 			expiration := now.Add(time.Duration(15) * time.Minute)
-			row = tx.QueryRow("INSERT INTO worker(namespace_id, name, active, mode, data, expiration, last_update) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", ns.id, name, true, 0, []byte{}, expiration, now)
+			row = tx.QueryRow("INSERT INTO worker(namespace_id, name, active, mode, data, expiration, last_update) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", ns.id, name, true, "", []byte{}, expiration, now)
 			err = row.Scan(&worker.id)
 		}
 		return err
@@ -116,7 +116,7 @@ func (w *worker) Deactivate() error {
 	})
 }
 
-func (w *worker) Mode() (result int, err error) {
+func (w *worker) Mode() (result string, err error) {
 	row := theDB(w).QueryRow("SELECT mode FROM worker WHERE id=$1", w.id)
 	err = row.Scan(&result)
 	return
@@ -151,7 +151,7 @@ func (w *worker) LastUpdate() (result time.Time, err error) {
 	return
 }
 
-func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, mode int) error {
+func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, mode string) error {
 	dataGob, err := mapToGob(data)
 	if err != nil {
 		return err

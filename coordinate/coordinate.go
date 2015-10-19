@@ -439,7 +439,7 @@ type Worker interface {
 	Deactivate() error
 
 	// Mode gets the mode reported in the last call to Update().
-	Mode() (int, error)
+	Mode() (string, error)
 
 	// Data gets the data dictionary passed to the last call to
 	// Update().
@@ -456,7 +456,7 @@ type Worker interface {
 	// active.  The data, current and expiration times, and modes
 	// are recorded for future calls to Data(), LastUpdate(),
 	// Expiration(), and Mode(), respectively.
-	Update(data map[string]interface{}, now, expiration time.Time, mode int) error
+	Update(data map[string]interface{}, now, expiration time.Time, mode string) error
 
 	// RequestAttempts tries to allocate new work to this worker.
 	// With a zero-valued AttemptRequest, this will return at most
