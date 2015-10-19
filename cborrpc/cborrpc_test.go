@@ -1,32 +1,29 @@
 package cborrpc
 
-import "testing"
-import "github.com/ugorji/go/codec"
-import "reflect"
-import "github.com/satori/go.uuid"
+import (
+	"github.com/satori/go.uuid"
+	"github.com/ugorji/go/codec"
+	"gopkg.in/check.v1"
+	"reflect"
+	"testing"
+)
 
-func encoderTest(t *testing.T, name string, obj interface{}, expecteds ...[]byte) {
-	cbor := new(codec.CborHandle)
-	SetExts(cbor)
+type Suite struct {
+	cbor *codec.CborHandle
+}
+
+func (s *Suite) SetUpTest(c *check.C) {
+	s.cbor = new(codec.CborHandle)
+	err := SetExts(s.cbor)
+	c.Assert(err, check.IsNil)
+}
+
+func (s *Suite) encoderTest(c *check.C, obj interface{}, expecteds ...[]byte) {
 	var actual []byte
-	encoder := codec.NewEncoderBytes(&actual, cbor)
+	encoder := codec.NewEncoderBytes(&actual, s.cbor)
 	err := encoder.Encode(obj)
-	if err != nil {
-		t.Fatalf("%v: error encoding request: %v", name, err)
-	}
-	good := false
-	for _, expected := range expecteds {
-		if reflect.DeepEqual(expected, actual) {
-			good = true
-			break
-		}
-	}
-	if !good {
-		t.Logf("%v: encoding test failed", name)
-		t.Logf("Expected: %v", expecteds[0])
-		t.Logf("Actual:   %v", actual)
-		t.Error("")
-	}
+	c.Assert(err, check.IsNil)
+	c.Check(actual, DeepEqualAny, expecteds)
 }
 
 func concat(slices ...[]byte) (result []byte) {
@@ -36,7 +33,7 @@ func concat(slices ...[]byte) (result []byte) {
 	return
 }
 
-func TestRpcRequestToBytes(t *testing.T) {
+func (s *Suite) TestRpcRequestToBytes(c *check.C) {
 	req := Request{
 		Method: "test",
 		ID:     1,
@@ -45,20 +42,20 @@ func TestRpcRequestToBytes(t *testing.T) {
 	// Since this is a map with 3 elements, there are 6 possible
 	// orderings of iterating through it.  The map element pairs are
 	method := []byte{
-		// string "method"
-		0x66, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64,
+		// byte string "method"
+		0x46, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64,
 		// bytes "test"
 		0x44, 0x74, 0x65, 0x73, 0x74,
 	}
 	id := []byte{
-		// string "id"
-		0x62, 0x69, 0x64,
+		// byte string "id"
+		0x42, 0x69, 0x64,
 		// positive integer 1
 		0x01,
 	}
 	params := []byte{
-		// string "params"
-		0x66, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73,
+		// byte string "params"
+		0x46, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73,
 		// array of length 0
 		0x80,
 	}
@@ -84,10 +81,10 @@ func TestRpcRequestToBytes(t *testing.T) {
 		concat(header, params, method, id),
 		concat(header, params, id, method),
 	}
-	encoderTest(t, "TestRpcRequestToBytes", req, expecteds...)
+	s.encoderTest(c, req, expecteds...)
 }
 
-func TestEmptyTupleToBytes(t *testing.T) {
+func (s *Suite) TestEmptyTupleToBytes(c *check.C) {
 	tuple := PythonTuple{[]interface{}{}}
 	expected := []byte{
 		// tag 128
@@ -95,10 +92,10 @@ func TestEmptyTupleToBytes(t *testing.T) {
 		// array of length 0
 		0x80,
 	}
-	encoderTest(t, "TestEmptyTupleToBytes", tuple, expected)
+	s.encoderTest(c, tuple, expected)
 }
 
-func TestListOfTupleToBytes(t *testing.T) {
+func (s *Suite) TestListOfTupleToBytes(c *check.C) {
 	tuple := PythonTuple{[]interface{}{}}
 	list := []PythonTuple{tuple}
 	expected := []byte{
@@ -109,13 +106,10 @@ func TestListOfTupleToBytes(t *testing.T) {
 		// array of length 0
 		0x80,
 	}
-	encoderTest(t, "TestListOfTupleToBytes", list, expected)
+	s.encoderTest(c, list, expected)
 }
 
-func TestBytesToEmptyTuple(t *testing.T) {
-	cbor := new(codec.CborHandle)
-	SetExts(cbor)
-
+func (s *Suite) TestBytesToEmptyTuple(c *check.C) {
 	bytes := []byte{
 		// tag 128
 		0xD8, 0x80,
@@ -124,22 +118,13 @@ func TestBytesToEmptyTuple(t *testing.T) {
 	}
 	expected := PythonTuple{[]interface{}{}}
 	var actual PythonTuple
-	encoder := codec.NewDecoderBytes(bytes, cbor)
+	encoder := codec.NewDecoderBytes(bytes, s.cbor)
 	err := encoder.Decode(&actual)
-	if err != nil {
-		t.Fatalf("Error decoding request: %v", err)
-	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Log("Decoding test failed")
-		t.Log("Expected: ", expected)
-		t.Log("Actual:   ", actual)
-		t.Error("")
-	}
+	c.Assert(err, check.IsNil)
+	c.Check(actual, check.DeepEquals, expected)
 }
 
-func TestDecodeTupleReq(t *testing.T) {
-	cbor := new(codec.CborHandle)
-	SetExts(cbor)
+func (s *Suite) TestDecodeTupleReq(c *check.C) {
 	bytes := []byte{
 		// tag 24
 		0xD8, 0x18,
@@ -147,16 +132,16 @@ func TestDecodeTupleReq(t *testing.T) {
 		0x58, 0x1F,
 		// map of 3 pairs
 		0xA3,
-		// string "method"
-		0x66, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64,
+		// byte string "method"
+		0x46, 0x6d, 0x65, 0x74, 0x68, 0x6f, 0x64,
 		// bytes "test"
 		0x44, 0x74, 0x65, 0x73, 0x74,
-		// string "id"
-		0x62, 0x69, 0x64,
+		// byte string "id"
+		0x42, 0x69, 0x64,
 		// positive integer 1
 		0x01,
-		// string "params"
-		0x66, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73,
+		// byte string "params"
+		0x46, 0x70, 0x61, 0x72, 0x61, 0x6D, 0x73,
 		// array of length 1
 		0x81,
 		// tag 128
@@ -168,38 +153,19 @@ func TestDecodeTupleReq(t *testing.T) {
 		// map of 0 pairs
 		0xA0,
 	}
-	encoder := codec.NewDecoderBytes(bytes, cbor)
+	encoder := codec.NewDecoderBytes(bytes, s.cbor)
 	var req Request
 	err := encoder.Decode(&req)
-	if err != nil {
-		t.Fatalf("Error decoding request: %v", err)
-	}
-	if req.Method != "test" {
-		t.Errorf("Incorrect method %v, expected test", req.Method)
-	}
-	if req.ID != 1 {
-		t.Errorf("Incorrect ID %v, expected 1", req.ID)
-	}
-	if len(req.Params) != 1 {
-		t.Errorf("Incorrect number of params %v, expected 1", len(req.Params))
-	} else {
-		tuple, ok := req.Params[0].(PythonTuple)
-		if !ok {
-			t.Errorf("Incorrect param 1 %v, not tuple", req.Params[0])
-		} else {
-			if len(tuple.Items) != 2 {
-				t.Errorf("Incorrect tuple length %v, not 2", len(tuple.Items))
-			} else {
-				if tuple.Items[0] != "k" {
-					t.Errorf("Incorrect tuple item 0 %v, not 'k'", tuple.Items[0])
-				}
-				// TODO: check tuple.Items[1]
-			}
-		}
+	c.Assert(err, check.IsNil)
+	c.Check(req.Method, check.Equals, "test")
+	c.Check(req.ID, check.Equals, uint(1))
+	c.Check(req.Params, check.HasLen, 1)
+	if len(req.Params) > 0 {
+		c.Check(req.Params[0], check.DeepEquals, PythonTuple{Items: []interface{}{"k", map[interface{}]interface{}{}}})
 	}
 }
 
-func TestEncodeUUID(t *testing.T) {
+func (s *Suite) TestEncodeUUID(c *check.C) {
 	aUUID := uuid.NewV4()
 	expected := []byte{
 		// tag 37
@@ -208,12 +174,10 @@ func TestEncodeUUID(t *testing.T) {
 		0x50,
 	}
 	expected = append(expected, aUUID.Bytes()...)
-	encoderTest(t, "TestEncodeUUID", aUUID, expected)
+	s.encoderTest(c, aUUID, expected)
 }
 
-func TestDecodeUUID(t *testing.T) {
-	cbor := new(codec.CborHandle)
-	SetExts(cbor)
+func (s *Suite) TestDecodeUUID(c *check.C) {
 	bytes := []byte{
 		// tag 37
 		0xD8, 0x25,
@@ -226,15 +190,52 @@ func TestDecodeUUID(t *testing.T) {
 		0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
 		0x0E, 0x0F}
 	var actual uuid.UUID
-	encoder := codec.NewDecoderBytes(bytes, cbor)
+	encoder := codec.NewDecoderBytes(bytes, s.cbor)
 	err := encoder.Decode(&actual)
-	if err != nil {
-		t.Fatalf("Error decoding request: %v", err)
+	c.Assert(err, check.IsNil)
+	c.Check(actual, check.DeepEquals, expected)
+}
+
+// deepEqualAny is a gocheck checker that passes if the provided value
+// is reflect.DeepEqual any of a provided set of expected values.
+type deepEqualAny struct {
+	*check.CheckerInfo
+}
+
+func (checker *deepEqualAny) Info() *check.CheckerInfo {
+	return checker.CheckerInfo
+}
+
+func (checker *deepEqualAny) Check(params []interface{}, names []string) (bool, string) {
+	obtained := params[0]
+	// We can't blindly cast params[1] to a []interface{}; we need
+	// to do an intermediate reflect
+	expecteds := reflect.ValueOf(params[1])
+	if expecteds.Kind() != reflect.Slice {
+		return false, "DeepEqualAny needs a slice of expecteds"
 	}
-	if !reflect.DeepEqual(actual, expected) {
-		t.Log("Decoding test failed")
-		t.Log("Expected: ", expected)
-		t.Log("Actual:   ", actual)
-		t.Error("")
+	for i := 0; i < expecteds.Len(); i++ {
+		expected := expecteds.Index(i).Interface()
+		if reflect.DeepEqual(obtained, expected) {
+			return true, ""
+		}
 	}
+	return false, ""
+}
+
+var DeepEqualAny check.Checker = &deepEqualAny{
+	&check.CheckerInfo{
+		Name:   "DeepEqualAny",
+		Params: []string{"obtained", "expecteds"},
+	},
+}
+
+// gocheck boilerplate
+
+func Test(t *testing.T) {
+	check.TestingT(t)
+}
+
+func init() {
+	check.Suite(&Suite{})
 }

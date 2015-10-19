@@ -30,7 +30,11 @@ type Response struct {
 }
 
 // Actual "wire format" representation for top-level CBOR-RPC messages.
-type wireFormat map[string]interface{}
+type wireFormat []interface{}
+
+// MapBySlice is a marker for the codec library to indicate this is
+// actually a map.
+func (w wireFormat) MapBySlice() {}
 
 // (NB: the read end of this is pretty close to mapstructure's intended
 // use case, including the sloppy bytes/chars in the wire format because
@@ -51,9 +55,12 @@ func (x reqExt) WriteExt(v interface{}) (resp []byte) {
 
 	// Assemble the "over-the-wire" response dictionary
 	wire := wireFormat{
-		"method": []byte(request.Method),
-		"id":     uint64(request.ID),
-		"params": request.Params,
+		[]byte("method"),
+		[]byte(request.Method),
+		[]byte("id"),
+		uint64(request.ID),
+		[]byte("params"),
+		request.Params,
 	}
 
 	// Convert it to CBOR bytes
@@ -65,7 +72,7 @@ func (x reqExt) WriteExt(v interface{}) (resp []byte) {
 // Decode a byte string into a Request.
 func (x reqExt) ReadExt(v interface{}, data []byte) {
 	decoder := codec.NewDecoderBytes(data, x.cbor)
-	var wire wireFormat
+	var wire map[string]interface{}
 	decoder.MustDecode(&wire)
 
 	result := v.(*Request)
@@ -95,15 +102,16 @@ func (x respExt) WriteExt(v interface{}) (resp []byte) {
 
 	// Assemble the "over-the-wire" response dictionary
 	wire := wireFormat{
-		"id": uint64(response.ID),
+		[]byte("id"),
+		uint64(response.ID),
 	}
 	if response.Result != nil {
-		wire["result"] = response.Result
+		wire = append(wire, []byte("result"), response.Result)
 	}
 	if response.Error != "" {
 		errorDict := make(map[string]string)
 		errorDict["message"] = response.Error
-		wire["error"] = errorDict
+		wire = append(wire, []byte("error"), errorDict)
 	}
 
 	// Convert it to CBOR bytes
@@ -115,7 +123,7 @@ func (x respExt) WriteExt(v interface{}) (resp []byte) {
 // Decode a byte string into a Response.
 func (x respExt) ReadExt(v interface{}, data []byte) {
 	decoder := codec.NewDecoderBytes(data, x.cbor)
-	var wire wireFormat
+	var wire map[string]interface{}
 	decoder.MustDecode(&wire)
 	response := v.(*Response)
 	response.ID = uint(wire["id"].(uint64))
