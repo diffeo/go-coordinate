@@ -162,6 +162,9 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 	}, []string{
 		"id IN (" + cte + ")",
 	})
+	if q.Limit > 0 {
+		query += fmt.Sprintf(" ORDER BY name ASC LIMIT %v", q.Limit)
+	}
 	rows, err := theDB(spec).Query(query, args...)
 	if err != nil {
 		return nil, err
