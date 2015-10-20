@@ -283,7 +283,9 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 				return nil, "", err
 			}
 			result[status]++
-			prev = name
+			if name > prev {
+				prev = name
+			}
 		}
 		if len(workUnits) == 0 {
 			break
