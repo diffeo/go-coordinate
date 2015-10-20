@@ -40,6 +40,21 @@ var ErrWrongBackend = errors.New("Cannot combine coordinate objects from differe
 // do.
 var ErrNoWork = errors.New("No work to do")
 
+// ErrWorkUnitNotList is returned from ExtractAddWorkUnitItem if a
+// work unit as specified in a work unit's "output" field is not a
+// list.
+var ErrWorkUnitNotList = errors.New("work unit not a list")
+
+// ErrWorkUnitTooShort is returned from ExtractAddWorkUnitItem if a
+// work unit as specified in a work unit's "output" field has fewer
+// than 2 items in its list.
+var ErrWorkUnitTooShort = errors.New("too few parameters to work unit")
+
+// ErrBadPriority is returned from ExtractAddWorkUnitItem if a
+// metadata dictionary is supplied and it has a "priority" key but
+// that is not a number.
+var ErrBadPriority = errors.New("priority must be a number")
+
 // ErrNoSuchWorkSpec is returned by Namespace.WorkSpec() and similar
 // functions that want to look up a work spec, but cannot find it.
 type ErrNoSuchWorkSpec struct {

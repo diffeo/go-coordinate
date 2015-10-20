@@ -1,6 +1,7 @@
 package coordinatetest
 
 import (
+	"github.com/dmaze/goordinate/cborrpc"
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
 	"time"
@@ -334,6 +335,72 @@ func (s *Suite) TestWorkUnitChaining(c *check.C) {
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
 	c.Assert(err, check.IsNil)
 	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc", "two_d"})
+}
+
+// TestChainingMixed uses a combination of strings and tuples in its
+// "output" data.
+func (s *Suite) TestChainingMixed(c *check.C) {
+	var (
+		one, two coordinate.WorkSpec
+		worker   coordinate.Worker
+		attempts []coordinate.Attempt
+		units    map[string]coordinate.WorkUnit
+		unit     coordinate.WorkUnit
+		data     map[string]interface{}
+		priority float64
+		ok       bool
+		err      error
+	)
+
+	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "one",
+		"then": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	_, err = one.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Finish(map[string]interface{}{
+		"output": []interface{}{
+			"key",
+			cborrpc.PythonTuple{Items: []interface{}{
+				"key",
+				map[string]interface{}{
+					"data": "x",
+				},
+				map[string]interface{}{
+					"priority": 10.0,
+				},
+			}},
+		},
+	})
+	c.Assert(err, check.IsNil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{"key"})
+	if unit, ok = units["key"]; ok {
+		data, err = unit.Data()
+		c.Assert(err, check.IsNil)
+		c.Check(data, check.DeepEquals, map[string]interface{}{"data": "x"})
+
+		priority, err = unit.Priority()
+		c.Assert(err, check.IsNil)
+		c.Check(priority, check.Equals, 10.0)
+	}
 }
 
 // TestChainingExpiry tests that, if an attempt finishes but is no

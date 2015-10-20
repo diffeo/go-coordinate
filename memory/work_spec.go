@@ -129,11 +129,12 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 	return unit, nil
 }
 
-func (spec *workSpec) addWorkUnits(units map[string]map[string]interface{}) {
-	for name, data := range units {
+func (spec *workSpec) addWorkUnits(units map[string]coordinate.AddWorkUnitItem) {
+	for name, item := range units {
 		unit := workUnit{
 			name:     name,
-			data:     data,
+			data:     item.Data,
+			priority: item.Priority,
 			workSpec: spec,
 		}
 		spec.workUnits[name] = &unit

@@ -186,13 +186,13 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		if units == nil {
 			return nil // nothing to do
 		}
-		for name, data := range units {
+		for name, item := range units {
 			var dataGob []byte
-			dataGob, err = mapToGob(data)
+			dataGob, err = mapToGob(item.Data)
 			if err != nil {
 				return err
 			}
-			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataGob, 0)
+			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataGob, item.Priority)
 			if err != nil {
 				return err
 			}

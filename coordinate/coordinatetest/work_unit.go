@@ -515,6 +515,8 @@ func (s *Suite) TestContinuous(c *check.C) {
 	// interval/next-continuous
 }
 
+// TestMaxRunning tests that setting the max_running limit on a work spec
+// does result in work coming back.
 func (s *Suite) TestMaxRunning(c *check.C) {
 	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":        "spec",

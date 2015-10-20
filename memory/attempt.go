@@ -133,7 +133,7 @@ func (attempt *attempt) Finish(data map[string]interface{}) error {
 	if data == nil {
 		data = attempt.workUnit.data
 	}
-	var newUnits map[string]map[string]interface{}
+	var newUnits map[string]coordinate.AddWorkUnitItem
 	var nextWorkSpec *workSpec
 	output, ok := data["output"]
 	if ok {
