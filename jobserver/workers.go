@@ -185,14 +185,12 @@ func attemptMap(attempt coordinate.Attempt) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	now := time.Now()
-	timeLeft := expires.Sub(now)
 	result := map[string]interface{}{
 		"work_spec_name": workUnit.WorkSpec().Name(),
 		"work_unit_key":  []byte(workUnit.Name()),
 		"work_unit_data": data,
 		"worker_id":      attempt.Worker().Name(),
-		"expires":        timeLeft.Seconds(),
+		"expires":        expires.Unix(),
 	}
 	return result, nil
 }
