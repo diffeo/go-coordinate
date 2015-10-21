@@ -138,3 +138,43 @@ var SameTime check.Checker = &sameTimeChecker{
 		Params: []string{"obtained", "expected"},
 	},
 }
+
+// ---------------------------------------------------------------------------
+// Like
+
+type likeChecker struct {
+	*check.CheckerInfo
+}
+
+func (c likeChecker) Info() *check.CheckerInfo {
+	return c.CheckerInfo
+}
+
+func (c likeChecker) Check(params []interface{}, names []string) (result bool, error string) {
+	if len(params) != 2 {
+		return false, "incorrect number of parameters to Like check"
+	}
+	obtained := params[0]
+	expected := params[1]
+	obtainedV := reflect.ValueOf(obtained)
+	expectedV := reflect.ValueOf(expected)
+	obtainedT := obtainedV.Type()
+	expectedT := expectedV.Type()
+
+	if !obtainedT.ConvertibleTo(expectedT) {
+		return false, "wrong type"
+	}
+
+	convertedV := obtainedV.Convert(expectedT)
+	converted := convertedV.Interface()
+	return converted == expected, ""
+}
+
+// The SameTime checker verifies that two objects are equal, once the
+// obtained value has been cast to the type of the expected value.
+var Like check.Checker = &likeChecker{
+	&check.CheckerInfo{
+		Name:   "Like",
+		Params: []string{"obtained", "expected"},
+	},
+}

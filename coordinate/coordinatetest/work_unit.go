@@ -435,7 +435,7 @@ func (s *Suite) TestWorkUnitData(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(data, check.HasLen, 2)
 	c.Check(data["name"], check.Equals, "a")
-	c.Check(data["value"], check.Equals, 1)
+	c.Check(data["value"], Like, 1)
 
 	unit, err = spec.WorkUnit("b")
 	c.Assert(err, check.IsNil)
@@ -443,7 +443,7 @@ func (s *Suite) TestWorkUnitData(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(data, check.HasLen, 2)
 	c.Check(data["name"], check.Equals, "b")
-	c.Check(data["value"], check.Equals, 2)
+	c.Check(data["value"], Like, 2)
 }
 
 // TestRecreateWorkUnits checks that creating work units that already

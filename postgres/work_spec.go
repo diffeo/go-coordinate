@@ -30,14 +30,14 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 		if err == nil {
 			err = spec.setData(tx, data, meta)
 		} else if err == sql.ErrNoRows {
-			var dataGob []byte
-			dataGob, err = mapToGob(data)
+			var dataBytes []byte
+			dataBytes, err = mapToBytes(data)
 			if err != nil {
 				return err
 			}
 			interval := durationToSQL(meta.Interval)
 			nextContinuous := timeToNullTime(meta.NextContinuous)
-			row = tx.QueryRow("INSERT INTO work_spec(namespace_id, name, data, priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id", ns.id, name, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
+			row = tx.QueryRow("INSERT INTO work_spec(namespace_id, name, data, priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15) RETURNING id", ns.id, name, dataBytes, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
 			err = row.Scan(&spec.id)
 		}
 		return err
@@ -101,12 +101,12 @@ func (spec *workSpec) Name() string {
 
 func (spec *workSpec) Data() (map[string]interface{}, error) {
 	row := theDB(spec).QueryRow("SELECT data FROM work_spec WHERE id=$1", spec.id)
-	var dataGob []byte
-	err := row.Scan(&dataGob)
+	var dataBytes []byte
+	err := row.Scan(&dataBytes)
 	if err != nil {
 		return nil, err
 	}
-	data, err := gobToMap(dataGob)
+	data, err := bytesToMap(dataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -127,14 +127,14 @@ func (spec *workSpec) SetData(data map[string]interface{}) error {
 }
 
 func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coordinate.WorkSpecMeta) error {
-	dataGob, err := mapToGob(data)
+	dataBytes, err := mapToBytes(data)
 	if err != nil {
 		return err
 	}
 
 	interval := durationToSQL(meta.Interval)
 	nextContinuous := timeToNullTime(meta.NextContinuous)
-	_, err = tx.Exec("UPDATE work_spec SET data=$2, priority=$3, weight=$4, paused=$5, continuous=$6, can_be_continuous=$7, min_memory_gb=$8, interval=$9, next_continuous=$10, max_running=$11, max_attempts_returned=$12, next_work_spec_name=$13, next_work_spec_preempts=$14 WHERE id=$1", spec.id, dataGob, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
+	_, err = tx.Exec("UPDATE work_spec SET data=$2, priority=$3, weight=$4, paused=$5, continuous=$6, can_be_continuous=$7, min_memory_gb=$8, interval=$9, next_continuous=$10, max_running=$11, max_attempts_returned=$12, next_work_spec_name=$13, next_work_spec_preempts=$14 WHERE id=$1", spec.id, dataBytes, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false)
 	return err
 }
 

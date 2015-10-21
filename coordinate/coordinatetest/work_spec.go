@@ -31,7 +31,7 @@ func (s *Suite) TestChangeSpecData(c *check.C) {
 	data, err = spec.Data()
 	c.Assert(err, check.IsNil)
 	c.Check(data["name"], check.Equals, "spec")
-	c.Check(data["min_gb"], check.Equals, 2)
+	c.Check(data["min_gb"], Like, 2)
 	c.Check(data["foo"], check.Equals, "bar")
 
 	err = spec.SetData(map[string]interface{}{})
@@ -48,8 +48,40 @@ func (s *Suite) TestChangeSpecData(c *check.C) {
 	data, err = spec.Data()
 	c.Assert(err, check.IsNil)
 	c.Check(data["name"], check.Equals, "spec")
-	c.Check(data["min_gb"], check.Equals, 2)
+	c.Check(data["min_gb"], Like, 2)
 	c.Check(data["foo"], check.Equals, "bar")
+}
+
+// TestDataEmptyList verifies that an empty list gets preserved in the
+// work spec data, and not remapped to nil.
+func (s *Suite) TestDataEmptyList(c *check.C) {
+	emptyList := []string{}
+	c.Assert(emptyList, check.NotNil)
+	c.Assert(emptyList, check.HasLen, 0)
+
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+		"config": map[string]interface{}{
+			"empty_list": emptyList,
+		},
+	})
+	c.Assert(err, check.IsNil)
+
+	data, err := spec.Data()
+	c.Assert(err, check.IsNil)
+	c.Assert(data, check.NotNil)
+	c.Assert(data["config"], check.NotNil)
+	var found interface{}
+	switch config := data["config"].(type) {
+	case map[string]interface{}:
+		found = config["empty_list"]
+	case map[interface{}]interface{}:
+		found = config["empty_list"]
+	default:
+		c.FailNow()
+	}
+	c.Check(found, check.NotNil)
+	c.Check(found, check.HasLen, 0)
 }
 
 // TestDefaultMeta tests that WorkSpec.Meta gets the correct defaults,

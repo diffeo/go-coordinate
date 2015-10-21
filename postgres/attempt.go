@@ -49,22 +49,22 @@ func (a *attempt) Status() (coordinate.AttemptStatus, error) {
 func (a *attempt) Data() (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := withTx(a, func(tx *sql.Tx) error {
-		var dataGob []byte
+		var dataBytes []byte
 		row := tx.QueryRow("SELECT data FROM attempt WHERE id=$1", a.id)
-		err := row.Scan(&dataGob)
+		err := row.Scan(&dataBytes)
 		if err != nil {
 			return err
 		}
-		if dataGob == nil {
+		if dataBytes == nil {
 			// null data in the attempt; get the unmodified
 			// work unit data
 			row = tx.QueryRow("SELECT data FROM work_unit WHERE id=$1", a.unit.id)
-			err = row.Scan(&dataGob)
+			err = row.Scan(&dataBytes)
 			if err != nil {
 				return err
 			}
 		}
-		result, err = gobToMap(dataGob)
+		result, err = bytesToMap(dataBytes)
 		return err
 	})
 	if err != nil {
@@ -106,12 +106,12 @@ func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{
 	}
 	args := []interface{}{a.id, expiration}
 	if data != nil {
-		dataGob, err := mapToGob(data)
+		dataBytes, err := mapToBytes(data)
 		if err != nil {
 			return err
 		}
 		changes = append(changes, "data=$3")
-		args = append(args, dataGob)
+		args = append(args, dataBytes)
 	}
 	query := buildUpdate("attempt", changes, conditions)
 	_, err := theDB(a).Exec(query, args...)
@@ -147,10 +147,10 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		var attemptID sql.NullInt64
 		var nextWorkSpec string
 		if data == nil {
-			var dataGob []byte
-			err = row.Scan(&nextWorkSpec, &attemptID, &dataGob)
+			var dataBytes []byte
+			err = row.Scan(&nextWorkSpec, &attemptID, &dataBytes)
 			if err == nil {
-				data, err = gobToMap(dataGob)
+				data, err = bytesToMap(dataBytes)
 			}
 		} else {
 			err = row.Scan(&nextWorkSpec, &attemptID)
@@ -187,12 +187,12 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			return nil // nothing to do
 		}
 		for name, item := range units {
-			var dataGob []byte
-			dataGob, err = mapToGob(item.Data)
+			var dataBytes []byte
+			dataBytes, err = mapToBytes(item.Data)
 			if err != nil {
 				return err
 			}
-			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataGob, item.Priority)
+			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataBytes, item.Priority)
 			if err != nil {
 				return err
 			}
@@ -231,11 +231,11 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 	args := []interface{}{a.id, status, endTime}
 	if data != nil {
 		changes = append(changes, "data=$4")
-		dataGob, err := mapToGob(data)
+		dataBytes, err := mapToBytes(data)
 		if err != nil {
 			return err
 		}
-		args = append(args, dataGob)
+		args = append(args, dataBytes)
 	}
 	query := buildUpdate("attempt", changes, conditions)
 	_, err := tx.Exec(query, args...)
@@ -483,11 +483,11 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	nano := now.Nanosecond()
 	milli := nano / 1000000
 	name := fmt.Sprintf("%d.%03d", seconds, milli)
-	dataGob, err := mapToGob(map[string]interface{}{})
+	dataBytes, err := mapToBytes(map[string]interface{}{})
 	if err != nil {
 		return nil, err
 	}
-	unit, err := spec.addWorkUnit(tx, name, dataGob, 0.0)
+	unit, err := spec.addWorkUnit(tx, name, dataBytes, 0.0)
 	if err != nil {
 		return nil, err
 	}

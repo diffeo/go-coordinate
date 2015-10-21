@@ -101,15 +101,23 @@ directly affect the `work_unit` table, including functions like
 
 Semi-structured data --- work spec definitions, work unit data, and
 per-attempt updated work unit data --- are stored as
-[gob](http://godoc.org/pkg/encoding/gob) data in `BYTEA` columns.  The
-extracted work spec metadata is stored in its own columns in the
-`work_spec` table, since this is allowed to change independently of
-the actual work spec definition.  Consideration was given to a table
-of work spec ID, data key, data value, which would be easier to query
-for specific data fields, but there is no current use case for this.
-Consideration was also given to reusing the `cborrpc` encoding for
-data storage, but this may not be flexible enough for future pure-Go
-use.
+[CBOR](http://cbor.io/) data in `BYTEA` columns.  The extracted work
+spec metadata is stored in its own columns in the `work_spec` table,
+since this is allowed to change independently of the actual work spec
+definition.  Consideration was given to a table of work spec ID, data
+key, data value, which would be easier to query for specific data
+fields, but there is no current use case for this.
+
+Earlier versions of this code used
+[gob](http://godoc.org/pkg/encoding/gob) instead, but that cannot (by
+design) distinguish `nil` from an empty slice; and when this is
+round-tripped to Python code, this causes empty lists to become the
+constant `None` instead.  Using CBOR preserves nilness, but comes at
+the cost of losing most of the non-kind Go type information (most maps
+become `map[interface{}]interface{}`).  In Go land, using a library
+like [mapstructure](https://github.com/mitchellh/mapstructure) is
+almost necessary for dealing with JSONish objects, and hides this
+typing issue.
 
 We rely on the database to manage concurrency for us.  This means
 cooperating with the database to tell it what we want, and it means

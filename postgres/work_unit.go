@@ -15,12 +15,12 @@ type workUnit struct {
 
 func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
 	var unit *workUnit
-	dataGob, err := mapToGob(data)
+	dataBytes, err := mapToBytes(data)
 	if err != nil {
 		return nil, err
 	}
 	err = withTx(spec, func(tx *sql.Tx) error {
-		unit, err = spec.addWorkUnit(tx, name, dataGob, priority)
+		unit, err = spec.addWorkUnit(tx, name, dataBytes, priority)
 		return err
 	})
 	return unit, err
@@ -28,7 +28,7 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 
 // addWorkUnit does the work of AddWorkUnit, assuming a transaction
 // context and that the data dictionary has already been encoded.
-func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataGob []byte, priority float64) (*workUnit, error) {
+func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, priority float64) (*workUnit, error) {
 	unit := workUnit{spec: spec, name: name}
 
 	// Does the unit already exist?
@@ -57,10 +57,10 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataGob []byte, prior
 			changes = append(changes, "active_attempt_id=NULL")
 		}
 		query = buildUpdate(workUnitTable, changes, []string{isWorkUnit})
-		_, err = tx.Exec(query, unit.id, dataGob, priority)
+		_, err = tx.Exec(query, unit.id, dataBytes, priority)
 	} else if err == sql.ErrNoRows {
 		// The work unit doesn't exist, yet
-		row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataGob, priority)
+		row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataBytes, priority)
 		err = row.Scan(&unit.id)
 	}
 	return &unit, nil
@@ -221,23 +221,23 @@ func (unit *workUnit) Name() string {
 func (unit *workUnit) Data() (map[string]interface{}, error) {
 	var result map[string]interface{}
 	err := withTx(unit, func(tx *sql.Tx) error {
-		var dataGob []byte
+		var dataBytes []byte
 
 		// First try to get data from the active attempt
 		row := tx.QueryRow("SELECT attempt.data FROM work_unit, attempt WHERE work_unit.id=$1 AND work_unit.active_attempt_id=attempt.id", unit.id)
-		err := row.Scan(&dataGob)
+		err := row.Scan(&dataBytes)
 
 		// This could return nothing (e.g., active attempt is
 		// null) // or it could return an attempt with no
 		// data; in either case get the unit's original data
-		if err == sql.ErrNoRows || (err == nil && dataGob == nil) {
+		if err == sql.ErrNoRows || (err == nil && dataBytes == nil) {
 			row = tx.QueryRow("SELECT data FROM work_unit WHERE id=$1", unit.id)
-			err = row.Scan(&dataGob)
+			err = row.Scan(&dataBytes)
 		}
 		if err != nil {
 			return err
 		}
-		result, err = gobToMap(dataGob)
+		result, err = bytesToMap(dataBytes)
 		return err
 	})
 	if err != nil {

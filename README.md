@@ -77,7 +77,7 @@ Differences from Python Coordinate
 ----------------------------------
 
 Most Python Coordinate applications should run successfully against
-this server.  Known issues are noted in the "status" section below.
+this server.
 
 Work spec names must be valid Unicode strings.  Work spec definitions
 and work unit data must be Unicode-string-keyed maps.  Work unit keys,
@@ -86,6 +86,32 @@ is sloppy about byte vs. character strings and it is easy to inject
 the wrong type; if you do create a work spec with a non-UTF-8 byte
 string name, the server will eventually return it as an invalid
 Unicode-tagged string.
+
+### Data Types and Data Dictionaries ###
+
+Work specs, work units, and workers all have associated data
+dictionaries; this implementation also allows an updated work unit
+data dictionary to be stored with each attempt to complete the work
+unit.  These data dictionaries should be considered similar to JSON or
+YAML dictionaries.  In addition to JSON types (string, number, list,
+dictionary) they can store UUIDs and Python tuples, given the
+appropriate CBOR tag number for the CBOR-RPC interface.
+
+In various circumstances, these dictionaries will not keep strict Go
+types with them.  You in general have a guarantee that an object will
+be the same _kind_ when retrieved; if a field is a map when submitted
+it will be returned as a map, if an integer of some form you will get
+back some kind of integer.  There is not a guarantee that it will be
+the same _type_; most maps and slices could be returned as containers
+of `interface{}`, particularly in the PostgreSQL backend.  Trying to
+submit a data dictionary containing a `map[string]string` is likely to
+return a `map[interface{}]interface{}`.  You do, however, have a
+guarantee that a non-nil object will never become nil.
+
+This should have minimal effect on Python interoperability, excepting
+that strings have a strong tendency to become Unicode strings.
+
+### Scheduling ###
 
 The work spec scheduler is much simpler than in the Python
 coordinated.  The scheduler only considers work specs' `priority` and
@@ -140,15 +166,27 @@ tracked.  `memory` is the in-memory implementation of this API, and
 `postgres` uses PostgreSQL.  `backend` provides a command-line option
 to choose a backend.
 
-Status
+Future
 ------
 
-(As of 18 Oct 2015)
+This package will be renamed imminently.
 
-The overall system is expected to be complete, though I have not done
-any particular real-world testing yet.  All of the Python tests (and
-their ported equivalents here) pass.
+As suggested in the `jobserver` code, there will be an API call to
+count the number of work units in each status, rather than requiring
+the caller to manually iterate through the work units.  This should
+result in a performance improvement on routine status calls like
+`coordinate summary`, particularly on the PostgreSQL backend.
 
-This implementation has no way to make outbound calls to a Coordinate
-server from a Go program.  This will likely involve creating a new
-network service, possibly a REST API mirroring the Coordinate API.
+Several of the API calls implicitly deal with time, for instance by
+recording the start time of an attempt as `time.Now()`.  These are
+likely to be updated to explicitly pass in the start time, which will
+make it possible to test this functionality.
+
+The `Namespace.Workers()` call simply iterates all known workers, but
+the implementation of the Python Coordinate worker will generate an
+extremely large number of these.  This call is subject to unspecified
+future change.
+
+There is no way for Go code to contact a remote Coordinate daemon of
+any form.  This will likely be implemented by publishing the Go
+Coordinate API as a REST interface, and adding a REST callout backend.

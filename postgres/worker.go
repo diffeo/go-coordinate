@@ -123,16 +123,16 @@ func (w *worker) Mode() (result string, err error) {
 }
 
 func (w *worker) Data() (map[string]interface{}, error) {
-	var dataGob []byte
+	var dataBytes []byte
 	row := theDB(w).QueryRow("SELECT data FROM worker WHERE id=$1", w.id)
-	err := row.Scan(&dataGob)
+	err := row.Scan(&dataBytes)
 	if err != nil {
 		return nil, err
 	}
-	if len(dataGob) == 0 {
+	if len(dataBytes) == 0 {
 		return nil, nil
 	}
-	result, err := gobToMap(dataGob)
+	result, err := bytesToMap(dataBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +152,11 @@ func (w *worker) LastUpdate() (result time.Time, err error) {
 }
 
 func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, mode string) error {
-	dataGob, err := mapToGob(data)
+	dataBytes, err := mapToBytes(data)
 	if err != nil {
 		return err
 	}
-	_, err = theDB(w).Exec("UPDATE worker SET active=TRUE, mode=$2, data=$3, expiration=$4, last_update=$5 WHERE id=$1", w.id, mode, dataGob, expiration, now)
+	_, err = theDB(w).Exec("UPDATE worker SET active=TRUE, mode=$2, data=$3, expiration=$4, last_update=$5 WHERE id=$1", w.id, mode, dataBytes, expiration, now)
 	return err
 }
 

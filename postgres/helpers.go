@@ -1,10 +1,10 @@
 package postgres
 
 import (
-	"bytes"
-	"encoding/gob"
 	"fmt"
+	"github.com/dmaze/goordinate/cborrpc"
 	"github.com/lib/pq"
+	"github.com/ugorji/go/codec"
 	"math"
 	"strings"
 	"time"
@@ -12,25 +12,26 @@ import (
 
 // dictionary <-> binary encoders
 
-func mapToGob(in map[string]interface{}) ([]byte, error) {
-	var b bytes.Buffer
-	encoder := gob.NewEncoder(&b)
-	err := encoder.Encode(in)
+func mapToBytes(in map[string]interface{}) (out []byte, err error) {
+	cbor := new(codec.CborHandle)
+	err = cborrpc.SetExts(cbor)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return b.Bytes(), nil
+	encoder := codec.NewEncoderBytes(&out, cbor)
+	err = encoder.Encode(in)
+	return
 }
 
-func gobToMap(in []byte) (map[string]interface{}, error) {
-	b := bytes.NewBuffer(in)
-	decoder := gob.NewDecoder(b)
-	var result map[string]interface{}
-	err := decoder.Decode(&result)
+func bytesToMap(in []byte) (out map[string]interface{}, err error) {
+	cbor := new(codec.CborHandle)
+	err = cborrpc.SetExts(cbor)
 	if err != nil {
-		return nil, err
+		return
 	}
-	return result, nil
+	decoder := codec.NewDecoderBytes(in, cbor)
+	err = decoder.Decode(&out)
+	return
 }
 
 // other SQL encoders

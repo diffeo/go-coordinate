@@ -4,6 +4,7 @@ import (
 	"github.com/dmaze/goordinate/cborrpc"
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
+	"reflect"
 	"time"
 )
 
@@ -115,7 +116,9 @@ func (s *Suite) TestAttemptLifetime(c *check.C) {
 	data, err = unit.Data()
 	c.Assert(err, check.IsNil)
 	c.Check(data, check.HasLen, 1)
-	c.Check(data["outputs"], check.DeepEquals, []string{"yes"})
+	c.Check(data["outputs"], check.HasLen, 1)
+	c.Check(reflect.ValueOf(data["outputs"]).Index(0).Interface(),
+		check.Equals, "yes")
 
 	// For bonus points, force-clear the active attempt
 	err = unit.ClearActiveAttempt()
