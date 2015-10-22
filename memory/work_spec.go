@@ -230,6 +230,17 @@ func (spec *workSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[stri
 	return
 }
 
+func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
+	globalLock(spec)
+	defer globalUnlock(spec)
+
+	result := make(map[coordinate.WorkUnitStatus]int)
+	for _, unit := range spec.workUnits {
+		result[unit.status()]++
+	}
+	return result, nil
+}
+
 func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
 	globalLock(spec)
 	defer globalUnlock(spec)

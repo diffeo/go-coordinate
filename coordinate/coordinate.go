@@ -307,6 +307,13 @@ type WorkSpec interface {
 	// will be selected.
 	WorkUnits(WorkUnitQuery) (map[string]WorkUnit, error)
 
+	// CountWorkUnitStatus retrieves the number of work units in
+	// each status in this work spec.  This is mostly useful as an
+	// administrator's tool.  It is expected to typically be
+	// faster than calling WorkUnits() and iterating through the
+	// results.
+	CountWorkUnitStatus() (map[WorkUnitStatus]int, error)
+
 	// SetWorkUnitPriorities updates the priorities of multiple
 	// work units to all have the same value.
 	SetWorkUnitPriorities(WorkUnitQuery, float64) error

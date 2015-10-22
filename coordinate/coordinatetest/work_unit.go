@@ -280,6 +280,23 @@ func (s *Suite) TestDeleteWorkUnits(c *check.C) {
 	c.Check(units, check.HasLen, 0)
 }
 
+// TestCountWorkUnitStatus does simple validation on the
+// CountWorkUnitStatus call.
+func (s *Suite) TestCountWorkUnitStatus(c *check.C) {
+	spec, worker := s.makeWorkSpecAndWorker(c)
+	_, err := makeWorkUnits(spec, worker)
+	c.Assert(err, check.IsNil)
+
+	counts, err := spec.CountWorkUnitStatus()
+	c.Assert(err, check.IsNil)
+	c.Check(counts, check.DeepEquals, map[coordinate.WorkUnitStatus]int{
+		coordinate.AvailableUnit: 3,
+		coordinate.PendingUnit:   1,
+		coordinate.FinishedUnit:  1,
+		coordinate.FailedUnit:    1,
+	})
+}
+
 // checkWorkUnitOrder verifies that getting all of the work possible
 // retrieves work units in a specific order.
 func checkWorkUnitOrder(

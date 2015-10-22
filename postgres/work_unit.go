@@ -180,6 +180,53 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 	return result, nil
 }
 
+func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
+	result := make(map[coordinate.WorkUnitStatus]int)
+	query := buildSelect([]string{
+		attemptStatus,
+		"COUNT(*)",
+	}, []string{
+		workUnitAttemptJoin,
+	}, []string{
+		inThisWorkSpec,
+	}) + " GROUP BY " + attemptStatus
+	rows, err := theDB(spec).Query(query, spec.id)
+	if err != nil {
+		return nil, err
+	}
+	err = scanRows(rows, func() error {
+		var (
+			status     sql.NullString
+			unitStatus coordinate.WorkUnitStatus
+			count      int
+			err        error
+		)
+		err = rows.Scan(&status, &count)
+		if err != nil {
+			return err
+		}
+		if !status.Valid {
+			unitStatus = coordinate.AvailableUnit
+		} else {
+			switch status.String {
+			case "expired", "retryable":
+				unitStatus = coordinate.AvailableUnit
+			case "pending":
+				unitStatus = coordinate.PendingUnit
+			case "finished":
+				unitStatus = coordinate.FinishedUnit
+			case "failed":
+				unitStatus = coordinate.FailedUnit
+			default:
+				return fmt.Errorf("unexpected work unit status %v", status)
+			}
+		}
+		result[unitStatus] += count
+		return nil
+	})
+	return result, err
+}
+
 func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
 	cte, args := spec.selectUnits(q)
 	dollars := fmt.Sprintf("$%v", len(args)+1)
