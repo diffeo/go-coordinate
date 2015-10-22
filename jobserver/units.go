@@ -263,33 +263,25 @@ func (jobs *JobServer) CountWorkUnits(workSpecName string) (map[WorkUnitStatus]i
 		return nil, "", err
 	}
 
-	// TODO(dmaze): This is a bad way to do this; it should be
-	// boiled down to a single call in the API
+	statuses, err := workSpec.CountWorkUnitStatus()
+	if err != nil {
+		return nil, "", err
+	}
 
 	result := make(map[WorkUnitStatus]int)
-	var workUnits map[string]coordinate.WorkUnit
-	var prev string
-	for {
-		workUnits, err = workSpec.WorkUnits(coordinate.WorkUnitQuery{
-			PreviousName: prev,
-			Limit:        1000,
-		})
-		if err != nil {
-			return nil, "", err
+	for status, count := range statuses {
+		var s WorkUnitStatus
+		switch status {
+		case coordinate.AvailableUnit:
+			s = Available
+		case coordinate.PendingUnit:
+			s = Pending
+		case coordinate.FinishedUnit:
+			s = Finished
+		case coordinate.FailedUnit:
+			s = Failed
 		}
-		for name, workUnit := range workUnits {
-			status, _, err := workUnitStatus(workUnit)
-			if err != nil {
-				return nil, "", err
-			}
-			result[status]++
-			if name > prev {
-				prev = name
-			}
-		}
-		if len(workUnits) == 0 {
-			break
-		}
+		result[s] = count
 	}
 	return result, "", nil
 }
