@@ -131,6 +131,9 @@ func (attempt *attempt) Finish(data map[string]interface{}) error {
 		return nil
 	}
 	if data == nil {
+		data = attempt.data
+	}
+	if data == nil {
 		data = attempt.workUnit.data
 	}
 	var newUnits map[string]coordinate.AddWorkUnitItem

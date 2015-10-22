@@ -136,21 +136,29 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		// the work unit here; we need the next work spec name
 		// too in any case
 		outputs := []string{workSpecNextWorkSpec, workUnitAttempt}
+		tables := []string{workSpecTable, workUnitTable}
+		conditions := []string{isWorkUnit, workUnitInSpec}
 		if data == nil {
-			outputs = append(outputs, workUnitData)
+			outputs = append(outputs, workUnitData, attemptData)
+			tables = append(tables, attemptTable)
+			conditions = append(conditions, attemptThisWorkUnit)
 		}
-		query := buildSelect(outputs,
-			[]string{workSpecTable, workUnitTable},
-			[]string{isWorkUnit, workUnitInSpec})
+		query := buildSelect(outputs, tables, conditions)
 
 		row := tx.QueryRow(query, a.unit.id)
 		var attemptID sql.NullInt64
 		var nextWorkSpec string
 		if data == nil {
-			var dataBytes []byte
-			err = row.Scan(&nextWorkSpec, &attemptID, &dataBytes)
+			var unitData, attemptData []byte
+			err = row.Scan(&nextWorkSpec, &attemptID, &unitData, &attemptData)
 			if err == nil {
-				data, err = bytesToMap(dataBytes)
+				if attemptData != nil {
+					data, err = bytesToMap(attemptData)
+				} else if unitData != nil {
+					data, err = bytesToMap(unitData)
+				} else {
+					data = map[string]interface{}{}
+				}
 			}
 		} else {
 			err = row.Scan(&nextWorkSpec, &attemptID)

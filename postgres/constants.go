@@ -13,6 +13,7 @@ const (
 	attemptWorkerID             = attemptTable + ".worker_id"
 	attemptStatus               = attemptTable + ".status"
 	attemptActive               = attemptTable + ".active"
+	attemptData                 = attemptTable + ".data"
 	workerID                    = workerTable + ".id"
 	workerName                  = workerTable + ".name"
 	workerParent                = workerTable + ".parent"

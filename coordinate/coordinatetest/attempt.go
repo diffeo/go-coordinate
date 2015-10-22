@@ -406,6 +406,73 @@ func (s *Suite) TestChainingMixed(c *check.C) {
 	}
 }
 
+// TestChainingTwoStep separately renews an attempt to insert an output
+// key, then finishes the work unit; it should still chain.
+func (s *Suite) TestChainingTwoStep(c *check.C) {
+	var (
+		one, two coordinate.WorkSpec
+		worker   coordinate.Worker
+		attempts []coordinate.Attempt
+		units    map[string]coordinate.WorkUnit
+		unit     coordinate.WorkUnit
+		data     map[string]interface{}
+		priority float64
+		ok       bool
+		err      error
+	)
+
+	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "one",
+		"then": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "two",
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	_, err = one.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	err = attempts[0].Renew(time.Duration(900)*time.Second,
+		map[string]interface{}{
+			"output": []interface{}{
+				[]byte{1, 2, 3, 4},
+				cborrpc.PythonTuple{Items: []interface{}{
+					[]byte{1, 2, 3, 4},
+					map[interface{}]interface{}{},
+					map[interface{}]interface{}{
+						"priority": 0,
+					},
+				}},
+			},
+		})
+	c.Assert(err, check.IsNil)
+
+	err = attempts[0].Finish(nil)
+
+	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+	c.Check(units, HasKeys, []string{"\x01\x02\x03\x04"})
+	if unit, ok = units["\x01\x02\x03\x04"]; ok {
+		data, err = unit.Data()
+		c.Assert(err, check.IsNil)
+		c.Check(data, check.DeepEquals, map[string]interface{}{})
+
+		priority, err = unit.Priority()
+		c.Assert(err, check.IsNil)
+		c.Check(priority, check.Equals, 0.0)
+	}
+}
+
 // TestChainingExpiry tests that, if an attempt finishes but is no
 // longer the active attempt, then its successor work units will not
 // be created.
