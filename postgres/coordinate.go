@@ -3,18 +3,16 @@ package postgres
 import (
 	"database/sql"
 	"encoding/gob"
-	"github.com/dmaze/goordinate/coordinate"
-
-	// This Coordinate backend requires the PostgreSQL database/sql
-	// driver library, and creates the connection pool here
+	"github.com/benbjohnson/clock"
 	"github.com/dmaze/goordinate/cborrpc"
+	"github.com/dmaze/goordinate/coordinate"
 	"github.com/lib/pq"
-	_ "github.com/lib/pq"
 	"github.com/satori/go.uuid"
 )
 
 type pgCoordinate struct {
-	db *sql.DB
+	db    *sql.DB
+	clock clock.Clock
 }
 
 // New creates a new coordinate.Coordinate connection object using
@@ -36,6 +34,16 @@ type pgCoordinate struct {
 // with it.  It can (and should) be shared across the application.
 // This New() function should be called sparingly, ideally exactly once.
 func New(connectionString string) (coordinate.Coordinate, error) {
+	clk := clock.New()
+	return NewWithClock(connectionString, clk)
+}
+
+// NewWithClock creates a new coordinate.Coordinate connection object,
+// using an explicit time source.  See New() for further details.
+// Most application code should call New(), and use the default (real)
+// time source; this entry point is intended for tests that need to
+// inject a mock time source.
+func NewWithClock(connectionString string, clk clock.Clock) (coordinate.Coordinate, error) {
 	// If the connection string is a destructured URL, turn it
 	// back into a proper URL
 	if len(connectionString) >= 2 && connectionString[0] == '/' && connectionString[1] == '/' {
@@ -58,7 +66,8 @@ func New(connectionString string) (coordinate.Coordinate, error) {
 	gob.Register(uuid.UUID{})
 
 	return &pgCoordinate{
-		db: db,
+		db:    db,
+		clock: clk,
 	}, nil
 }
 

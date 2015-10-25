@@ -22,7 +22,7 @@ type worker struct {
 }
 
 func newWorker(namespace *namespace, name string) *worker {
-	now := time.Now()
+	now := namespace.Coordinate().clock.Now()
 	expiration := now.Add(time.Duration(15) * time.Minute)
 	return &worker{
 		name:           name,
@@ -141,7 +141,8 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 
 	// Get the metadata and choose a work spec
 	specs, metas := w.namespace.allMetas(true)
-	name, err := coordinate.SimplifiedScheduler(metas, req.AvailableGb)
+	now := w.Coordinate().clock.Now()
+	name, err := coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 	if err == coordinate.ErrNoWork {
 		return attempts, nil
 	} else if err != nil {
@@ -176,12 +177,12 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 // work spec is paused.
 func (w *worker) getWorkFromSpec(spec *workSpec, meta *coordinate.WorkSpecMeta) *attempt {
 	var unit *workUnit
+	now := w.Coordinate().clock.Now()
 	if len(spec.available) != 0 {
 		unit = spec.available.Next()
-	} else if meta.CanStartContinuous() {
+	} else if meta.CanStartContinuous(now) {
 		// Make a brand new work unit.  Its key is the string
 		// form of a time_t.
-		now := time.Now()
 		seconds := now.Unix()
 		nano := now.Nanosecond()
 		milli := nano / 1000000
@@ -219,7 +220,7 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, duration time.Duration) 
 // the bottom of the stack for RequestAttempts().  Assumes the global
 // lock and never fails.
 func (w *worker) makeAttempt(workUnit *workUnit, duration time.Duration) *attempt {
-	start := time.Now()
+	start := w.Coordinate().clock.Now()
 	if duration == time.Duration(0) {
 		duration = time.Duration(15) * time.Minute
 	}

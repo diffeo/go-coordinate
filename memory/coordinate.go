@@ -11,6 +11,7 @@
 package memory
 
 import (
+	"github.com/benbjohnson/clock"
 	"github.com/dmaze/goordinate/coordinate"
 	"sync"
 )
@@ -20,8 +21,17 @@ import (
 // New creates a new Coordinate interface that operates purely in
 // memory.
 func New() coordinate.Coordinate {
+	clk := clock.New()
+	return NewWithClock(clk)
+}
+
+// NewWithClock returns a new in-memory Coordinate interface, with an
+// explicitly specified time source.  This is intended for use in
+// tests.
+func NewWithClock(clk clock.Clock) coordinate.Coordinate {
 	c := new(memCoordinate)
 	c.namespaces = make(map[string]*namespace)
+	c.clock = clk
 	return c
 }
 
@@ -53,6 +63,7 @@ func globalUnlock(c coordinable) {
 type memCoordinate struct {
 	namespaces map[string]*namespace
 	sem        sync.Mutex
+	clock      clock.Clock
 }
 
 func (c *memCoordinate) Namespace(namespace string) (coordinate.Namespace, error) {

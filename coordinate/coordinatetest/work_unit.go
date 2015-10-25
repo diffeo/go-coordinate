@@ -527,9 +527,58 @@ func (s *Suite) TestContinuous(c *check.C) {
 	err = spec.SetMeta(meta)
 	c.Assert(err, check.IsNil)
 	makeAttempt(1)
+}
 
-	// TODO(dmaze): Get a better handle on time, and test
-	// interval/next-continuous
+// TestContinuousInterval verifies the operation of a continuous work spec
+// that has a minimum respawn frequency.
+func (s *Suite) TestContinuousInterval(c *check.C) {
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":       "spec",
+		"continuous": true,
+		"interval":   60,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err := s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	makeAttempt := func(expected int) {
+		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+		c.Assert(err, check.IsNil)
+		c.Check(attempts, check.HasLen, expected)
+		for _, attempt := range attempts {
+			err = attempt.Finish(nil)
+			c.Assert(err, check.IsNil)
+		}
+	}
+
+	start := s.Clock.Now()
+	oneMinute := time.Duration(60) * time.Second
+
+	// While we haven't added any work units yet, since the work
+	// spec is continuous, we should have something
+	makeAttempt(1)
+
+	// The next-attempt time should be the start time plus the
+	// interval
+	meta, err := spec.Meta(false)
+	c.Assert(err, check.IsNil)
+	c.Check(meta.Interval, check.Equals, oneMinute)
+	nextTime := start.Add(oneMinute)
+	c.Check(meta.NextContinuous, SameTime, nextTime)
+
+	// If we only wait 30 seconds we shouldn't get a job
+	s.Clock.Add(time.Duration(30) * time.Second)
+	makeAttempt(0)
+
+	// If we wait 30 more we should
+	s.Clock.Add(time.Duration(30) * time.Second)
+	makeAttempt(1)
+
+	// If we wait 120 more we should only get one
+	s.Clock.Add(time.Duration(120) * time.Second)
+	makeAttempt(1)
+	makeAttempt(0)
 }
 
 // TestMaxRunning tests that setting the max_running limit on a work spec

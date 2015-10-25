@@ -163,15 +163,10 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 	attempt := attempts[0]
 
 	// Start checking things
+	start := s.Clock.Now()
 	startTime, err := attempt.StartTime()
-	start := startTime
 	c.Assert(err, check.IsNil)
-	// TODO(dmaze): better time management
-	// The next check call asserts that the reported startTime
-	// is within 1 µs of the original start time, which is exactly
-	// the sort of thing that will start mysteriously failing on
-	// a busy test host...or a pretty idle laptop.
-	// c.Check(startTime, SameTime, start)
+	c.Check(startTime, SameTime, start)
 
 	data, err := attempt.Data()
 	c.Assert(err, check.IsNil)
@@ -186,14 +181,16 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 	c.Check(expirationTime.Sub(startTime), check.Equals, time.Duration(15)*time.Minute)
 
 	// Renew the lease, giving new work unit data
-	renewTime := time.Now()
-	err = attempt.Renew(time.Duration(5)*time.Minute,
+	s.Clock.Add(time.Duration(10) * time.Second)
+	renewTime := s.Clock.Now()
+	renewDuration := time.Duration(5) * time.Minute
+	err = attempt.Renew(renewDuration,
 		map[string]interface{}{"from": "renew"})
 	c.Assert(err, check.IsNil)
 
 	startTime, err = attempt.StartTime()
 	c.Assert(err, check.IsNil)
-	c.Check(startTime, check.Equals, start) // no change from above
+	c.Check(startTime, SameTime, start) // no change from above
 
 	data, err = attempt.Data()
 	c.Assert(err, check.IsNil)
@@ -205,12 +202,8 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 
 	expirationTime, err = attempt.ExpirationTime()
 	c.Assert(err, check.IsNil)
-	// Again absent good time management it's hard to make a strong
-	// statement here; it should be at least 5 minutes but
-	// (let's hope) less than 6
-	timeLeft := expirationTime.Sub(renewTime)
-	c.Check(timeLeft >= time.Duration(5)*time.Minute, check.Equals, true)
-	c.Check(timeLeft < time.Duration(6)*time.Minute, check.Equals, true)
+	expectedExpiration := renewTime.Add(renewDuration)
+	c.Check(expirationTime, SameTime, expectedExpiration)
 
 	// Finish the attempt
 	err = attempt.Finish(map[string]interface{}{"from": "finish"})
@@ -218,7 +211,7 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 
 	startTime, err = attempt.StartTime()
 	c.Assert(err, check.IsNil)
-	c.Check(startTime, check.Equals, start) // no change from above
+	c.Check(startTime, SameTime, start) // no change from above
 
 	data, err = attempt.Data()
 	c.Assert(err, check.IsNil)

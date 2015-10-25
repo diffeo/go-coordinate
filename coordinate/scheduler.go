@@ -11,14 +11,13 @@ import (
 // that the work spec can generate continuous work units at all; it must
 // have no other incomplete work units; and the next-continuous time
 // must have passed.
-func (meta *WorkSpecMeta) CanStartContinuous() bool {
+func (meta *WorkSpecMeta) CanStartContinuous(now time.Time) bool {
 	if !meta.Continuous {
 		return false
 	}
 	if meta.AvailableCount > 0 || meta.PendingCount > 0 {
 		return false
 	}
-	now := time.Now()
 	if now.Before(meta.NextContinuous) {
 		return false
 	}
@@ -29,7 +28,7 @@ func (meta *WorkSpecMeta) CanStartContinuous() bool {
 // This generally means the work spec is not paused and has positive
 // weight, and either it has at least one available work unit or it is
 // continuous, and it has not hit a max-running constraint.
-func (meta *WorkSpecMeta) CanDoWork() bool {
+func (meta *WorkSpecMeta) CanDoWork(now time.Time) bool {
 	if meta.Paused || meta.Weight <= 0 {
 		return false
 	}
@@ -39,7 +38,7 @@ func (meta *WorkSpecMeta) CanDoWork() bool {
 	if meta.AvailableCount > 0 {
 		return true
 	}
-	if meta.CanStartContinuous() {
+	if meta.CanStartContinuous(now) {
 		return true
 	}
 	return false
@@ -65,14 +64,14 @@ func (meta *WorkSpecMeta) CanDoWork() bool {
 // specs have work (that is, no work specs have available work units,
 // and continuous work specs already have jobs pending) returns
 // ErrNoWork.
-func SimplifiedScheduler(metas map[string]*WorkSpecMeta, availableGb float64) (string, error) {
+func SimplifiedScheduler(metas map[string]*WorkSpecMeta, now time.Time, availableGb float64) (string, error) {
 	var candidates map[string]struct{}
 	var highestPriority int
 
 	// Prune the work spec list
 	for name, meta := range metas {
 		// Filter on core metadata
-		if !meta.CanDoWork() {
+		if !meta.CanDoWork(now) {
 			continue
 		}
 		// Filter on priority

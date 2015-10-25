@@ -18,6 +18,7 @@
 package coordinatetest
 
 import (
+	"github.com/benbjohnson/clock"
 	"github.com/dmaze/goordinate/coordinate"
 	"gopkg.in/check.v1"
 )
@@ -33,6 +34,10 @@ type Suite struct {
 	// It is set up by the gocheck fixture code, and is only valid
 	// during a test execution.
 	Namespace coordinate.Namespace
+
+	// Clock contains the alternate time source to be used in the
+	// test.
+	Clock *clock.Mock
 }
 
 // SetUpTest does per-test setup; specifically it creates a unique

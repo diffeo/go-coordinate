@@ -272,10 +272,18 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			&interval, &nextContinuous, &meta.MaxRunning,
 			&meta.MaxAttemptsReturned,
 			&meta.NextWorkSpecName)
+		if err != nil {
+			return err
+		}
 		spec.namespace = ns
+		meta.NextContinuous = nullTimeToTime(nextContinuous)
+		meta.Interval, err = sqlToDuration(interval)
+		if err != nil {
+			return err
+		}
 		specs[spec.name] = &spec
 		metas[spec.name] = &meta
-		return err
+		return nil
 	})
 	if err != nil {
 		return nil, nil, err

@@ -18,7 +18,7 @@ func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 		row := tx.QueryRow("SELECT id FROM worker WHERE namespace_id=$1 AND name=$2", ns.id, name)
 		err := row.Scan(&worker.id)
 		if err == sql.ErrNoRows {
-			now := time.Now()
+			now := ns.Coordinate().clock.Now()
 			expiration := now.Add(time.Duration(15) * time.Minute)
 			row = tx.QueryRow("INSERT INTO worker(namespace_id, name, active, mode, data, expiration, last_update) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id", ns.id, name, true, "", []byte{}, expiration, now)
 			err = row.Scan(&worker.id)

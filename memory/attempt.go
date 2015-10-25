@@ -68,7 +68,7 @@ func (attempt *attempt) isPending() bool {
 // completion time, status, and data, and removes itself as the active
 // work unit where possible.  Assumes the global lock.
 func (attempt *attempt) finish(status coordinate.AttemptStatus, data map[string]interface{}) {
-	attempt.endTime = time.Now()
+	attempt.endTime = attempt.Coordinate().clock.Now()
 	attempt.status = status
 	if data != nil {
 		attempt.data = data
@@ -94,7 +94,7 @@ func (attempt *attempt) Renew(extendDuration time.Duration, data map[string]inte
 		return coordinate.ErrLostLease
 	}
 	// Otherwise, we get to extend our lease.
-	attempt.expirationTime = time.Now().Add(extendDuration)
+	attempt.expirationTime = attempt.Coordinate().clock.Now().Add(extendDuration)
 	attempt.status = coordinate.Pending
 	if data != nil {
 		attempt.data = data

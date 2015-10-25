@@ -98,7 +98,7 @@ func (a *attempt) ExpirationTime() (result time.Time, err error) {
 
 func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{}) error {
 	// TODO(dmaze): check valid state and active status
-	now := time.Now()
+	now := a.Coordinate().clock.Now()
 	expiration := now.Add(extendDuration)
 	conditions := []string{"id=$1"}
 	changes := []string{
@@ -235,7 +235,7 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 		"status=$2",
 		"end_time=$3",
 	}
-	endTime := time.Now()
+	endTime := a.Coordinate().clock.Now()
 	args := []interface{}{a.id, status, endTime}
 	if data != nil {
 		changes = append(changes, "data=$4")
@@ -369,7 +369,8 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 
 		// Now pick something (this is stateless, but see TODO above)
 		// (If this picks nothing, we're done)
-		name, err = coordinate.SimplifiedScheduler(metas, req.AvailableGb)
+		now := w.Coordinate().clock.Now()
+		name, err = coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 		if err == coordinate.ErrNoWork {
 			return attempts, nil
 		} else if err != nil {
@@ -417,7 +418,8 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		if err != nil {
 			return err
 		}
-		if len(units) == 0 && meta.CanStartContinuous() {
+		now := w.Coordinate().clock.Now()
+		if len(units) == 0 && meta.CanStartContinuous(now) {
 			units, err = w.createContinuousUnits(tx, spec, meta)
 		}
 		if err != nil {
@@ -486,7 +488,7 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	}
 
 	// Create the work unit
-	now := time.Now()
+	now := w.Coordinate().clock.Now()
 	seconds := now.Unix()
 	nano := now.Nanosecond()
 	milli := nano / 1000000
@@ -501,12 +503,19 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	}
 
 	// Update the next-continuous time for the work spec.
-	_, err = tx.Exec(buildUpdate(workSpecTable,
+	res, err := tx.Exec(buildUpdate(workSpecTable,
 		[]string{"next_continuous=$2"},
 		[]string{isWorkSpec}),
 		spec.id, now.Add(meta.Interval))
 	if err != nil {
 		return nil, err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if rows != 1 {
+		return nil, fmt.Errorf("update work spec next continuous changed %v rows (not 1)", rows)
 	}
 
 	// We have the single work unit we want to do.
@@ -532,7 +541,7 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, length time.Duration) (c
 
 func makeAttempt(tx *sql.Tx, unit *workUnit, w *worker, length time.Duration) (*attempt, error) {
 	a := attempt{unit: unit, worker: w}
-	now := time.Now()
+	now := a.Coordinate().clock.Now()
 	expiration := now.Add(length)
 	row := tx.QueryRow("INSERT INTO attempt(work_unit_id, worker_id, start_time, expiration_time) VALUES ($1, $2, $3, $4) RETURNING id", unit.id, w.id, now, expiration)
 	err := row.Scan(&a.id)

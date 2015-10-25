@@ -1,6 +1,7 @@
 package postgres_test
 
 import (
+	"github.com/benbjohnson/clock"
 	"github.com/dmaze/goordinate/coordinate/coordinatetest"
 	"github.com/dmaze/goordinate/postgres"
 	"gopkg.in/check.v1"
@@ -16,9 +17,13 @@ import (
 func Test(t *testing.T) { check.TestingT(t) }
 
 func init() {
-	c, err := postgres.New("")
+	clk := clock.NewMock()
+	c, err := postgres.NewWithClock("", clk)
 	if err != nil {
 		panic(err)
 	}
-	check.Suite(&coordinatetest.Suite{Coordinate: c})
+	check.Suite(&coordinatetest.Suite{
+		Coordinate: c,
+		Clock:      clk,
+	})
 }

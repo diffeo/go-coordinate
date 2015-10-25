@@ -5,6 +5,7 @@ import (
 	"gopkg.in/check.v1"
 	"math"
 	"testing"
+	"time"
 )
 
 // Test is the top-level entry point to run tests.
@@ -95,7 +96,7 @@ var WithinThreeSigma check.Checker = &threeSigmaChecker{
 func (s *SimplifiedSuite) RunScheduler(c *check.C, metas map[string]*WorkSpecMeta, trials int) map[string]int {
 	counts := make(map[string]int)
 	for i := 0; i < trials; i++ {
-		workSpecName, err := SimplifiedScheduler(metas, 1)
+		workSpecName, err := SimplifiedScheduler(metas, time.Now(), 1)
 		c.Assert(err, check.IsNil)
 		counts[workSpecName]++
 	}
@@ -106,7 +107,7 @@ func (s *SimplifiedSuite) RunScheduler(c *check.C, metas map[string]*WorkSpecMet
 // thing with no data.
 func (s *SimplifiedSuite) TestEmpty(c *check.C) {
 	metas := map[string]*WorkSpecMeta{}
-	_, err := SimplifiedScheduler(metas, 1)
+	_, err := SimplifiedScheduler(metas, time.Now(), 1)
 	c.Check(err, check.Equals, ErrNoWork)
 }
 
@@ -133,7 +134,7 @@ func (s *SimplifiedSuite) TestZeroWeight(c *check.C) {
 			AvailableCount: 1000,
 		},
 	}
-	_, err := SimplifiedScheduler(metas, 1)
+	_, err := SimplifiedScheduler(metas, time.Now(), 1)
 	c.Check(err, check.Equals, ErrNoWork)
 }
 
