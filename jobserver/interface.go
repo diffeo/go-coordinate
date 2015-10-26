@@ -16,6 +16,7 @@
 package jobserver
 
 import "github.com/dmaze/goordinate/coordinate"
+import "sync"
 
 // JobServer is a network-accessible interface to Coordinate.  Its
 // methods are the Python coordinated RPC methods, with more normalized
@@ -28,4 +29,11 @@ type JobServer struct {
 	// GlobalConfig is the configuration that is returned by the
 	// GetConfig RPC call.
 	GlobalConfig map[string]interface{}
+
+	// locks is the root of the tree for the hierarchical lock
+	// subsystem.
+	locks lockNode
+
+	// lockLock is a global mutex over the locks tree.
+	lockLock sync.Mutex
 }
