@@ -139,6 +139,13 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 }
 
 func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
+	// If we need counts, we need to run expiry so that the
+	// available/pending counts are rightish
+	if withCounts {
+		_ = withTx(spec, func(tx *sql.Tx) error {
+			return expireAttempts(spec, tx)
+		})
+	}
 	var meta coordinate.WorkSpecMeta
 	err := withTx(spec, func(tx *sql.Tx) error {
 		var (

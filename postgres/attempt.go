@@ -25,6 +25,10 @@ func (a *attempt) Worker() coordinate.Worker {
 }
 
 func (a *attempt) Status() (coordinate.AttemptStatus, error) {
+	_ = withTx(a, func(tx *sql.Tx) error {
+		return expireAttempts(a, tx)
+	})
+
 	var status string
 	row := theDB(a).QueryRow("SELECT status FROM attempt WHERE id=$1", a.id)
 	err := row.Scan(&status)
@@ -80,6 +84,10 @@ func (a *attempt) StartTime() (result time.Time, err error) {
 }
 
 func (a *attempt) EndTime() (time.Time, error) {
+	_ = withTx(a, func(tx *sql.Tx) error {
+		return expireAttempts(a, tx)
+	})
+
 	var nt pq.NullTime
 	row := theDB(a).QueryRow("SELECT end_time FROM attempt WHERE id=$1", a.id)
 	err := row.Scan(&nt)
@@ -91,6 +99,10 @@ func (a *attempt) EndTime() (time.Time, error) {
 }
 
 func (a *attempt) ExpirationTime() (result time.Time, err error) {
+	_ = withTx(a, func(tx *sql.Tx) error {
+		return expireAttempts(a, tx)
+	})
+
 	row := theDB(a).QueryRow("SELECT expiration_time FROM attempt WHERE id=$1", a.id)
 	err = row.Scan(&result)
 	return
@@ -268,6 +280,9 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 // WorkUnit attempt functions
 
 func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
+	_ = withTx(unit, func(tx *sql.Tx) error {
+		return expireAttempts(unit, tx)
+	})
 	w := worker{namespace: unit.spec.namespace}
 	a := attempt{unit: unit, worker: &w}
 	query := buildSelect([]string{
@@ -347,6 +362,11 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		spec     *workSpec
 		meta     *coordinate.WorkSpecMeta
 	)
+
+	// Run system-global expiry.
+	_ = withTx(w, func(tx *sql.Tx) error {
+		return expireAttempts(w, tx)
+	})
 
 	// Collect the set of candidate work specs and metadata outside
 	// the main transaction.  This is pretty expensive to collect
@@ -632,4 +652,74 @@ func (w *worker) findAttempts(conditions []string, forOtherWorkers bool) ([]coor
 
 func (a *attempt) Coordinate() *pgCoordinate {
 	return a.worker.namespace.coordinate
+}
+
+// expireAttempts finds all attempts whose expiration time has passed
+// and expires them.  It runs on all attempts for all work units in all
+// work specs in all namespaces (which simplifies the query).  Expired
+// attempts' statuses become "expired", and those attempts cease to be
+// the active attempt for their corresponding work unit.
+//
+// In general this should be called in its own transaction and its error
+// return ignored:
+//
+//     _ = withTx(self, func(tx *sql.Tx) error {
+//              return expireAttempts(self, tx)
+//     })
+//
+// Expiry is generally secondary to whatever actual work is going on.
+// If a result is different because of expiry, pretend the relevant
+// call was made a second earlier or later.  If this fails, then
+// either there is a concurrency issue (and since the query is
+// system-global, the other expirer will clean up for us) or there is
+// an operational error (and the caller will fail afterwards).
+func expireAttempts(c coordinable, tx *sql.Tx) error {
+	// There are several places this is called with much smaller
+	// scope.  For instance, Attempt.Status() needs to invoke
+	// expiry but only actually cares about this very specific
+	// attempt.  If there are multiple namespaces,
+	// Worker.RequestAttempts() only cares about this namespace
+	// (though it will run on all work specs).  It may help system
+	// performance to try to run this with narrower scope.
+	//
+	// This is probably also an excellent candidate for a stored
+	// procedure.
+	var (
+		now        time.Time
+		cte, query string
+		count      int64
+		result     sql.Result
+		err        error
+	)
+
+	now = c.Coordinate().clock.Now()
+
+	// Remove expiring attempts from their work unit
+	cte = buildSelect([]string{attemptID},
+		[]string{attemptTable},
+		[]string{attemptIsPending, attemptIsExpired}) // $1 = "now"
+	cte += " FOR UPDATE"
+	query = buildUpdate(workUnitTable,
+		[]string{"active_attempt_id=NULL"},
+		[]string{"active_attempt_id IN (" + cte + ")"})
+	result, err = tx.Exec(query, now)
+	if err != nil {
+		return err
+	}
+
+	// If this marked nothing as expired, we're done
+	count, err = result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return nil
+	}
+
+	// Mark attempts as expired
+	query = buildUpdate(attemptTable,
+		[]string{"expiration_time=$1", "status='expired'"},
+		[]string{attemptIsPending, attemptIsExpired})
+	_, err = tx.Exec(query, now)
+	return err
 }

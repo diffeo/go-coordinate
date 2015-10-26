@@ -522,3 +522,51 @@ func (s *Suite) TestChainingExpiry(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(units, check.HasLen, 0)
 }
+
+// TestAttemptExpiration validates that an attempt's status will switch
+// (on its own) to "expired" after a timeout.
+func (s *Suite) TestAttemptExpiration(c *check.C) {
+	workSpec, worker := s.makeWorkSpecAndWorker(c)
+	workUnit, err := workSpec.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	attempt := attempts[0]
+
+	status, err := attempt.Status()
+	c.Assert(err, check.IsNil)
+	c.Check(status, check.Equals, coordinate.Pending)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 0)
+
+	// There is a default expiration of 15 minutes (checked elsewhere)
+	// So if we wait for, say, 20 minutes we should become expired
+	s.Clock.Add(time.Duration(20) * time.Minute)
+	status, err = attempt.Status()
+	c.Assert(err, check.IsNil)
+	c.Check(status, check.Equals, coordinate.Expired)
+
+	// The work unit should be "available" for all purposes
+	meta, err := workSpec.Meta(true)
+	c.Assert(err, check.IsNil)
+	c.Check(meta.AvailableCount, check.Equals, 1)
+	c.Check(meta.PendingCount, check.Equals, 0)
+
+	uStatus, err := workUnit.Status()
+	c.Assert(err, check.IsNil)
+	c.Check(uStatus, check.Equals, coordinate.AvailableUnit)
+
+	// If we request more attempts we should get back the expired
+	// unit again
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+
+	status, err = attempts[0].Status()
+	c.Assert(err, check.IsNil)
+	c.Check(status, check.Equals, coordinate.Pending)
+}

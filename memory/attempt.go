@@ -28,6 +28,7 @@ func (attempt *attempt) Worker() coordinate.Worker {
 func (attempt *attempt) Status() (coordinate.AttemptStatus, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
+	attempt.workUnit.workSpec.expireUnits()
 	return attempt.status, nil
 }
 
@@ -46,18 +47,20 @@ func (attempt *attempt) StartTime() (time.Time, error) {
 func (attempt *attempt) EndTime() (time.Time, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
+	attempt.workUnit.workSpec.expireUnits()
 	return attempt.endTime, nil
 }
 
 func (attempt *attempt) ExpirationTime() (time.Time, error) {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
+	attempt.workUnit.workSpec.expireUnits()
 	return attempt.expirationTime, nil
 }
 
 // isPending checks to see whether an attempt is in "pending" state.
 // This counts if the attempt is nominally expired but is still the
-// active attempt its work unit.
+// active attempt for its work unit.
 func (attempt *attempt) isPending() bool {
 	return (attempt.status == coordinate.Pending) ||
 		((attempt.status == coordinate.Expired) &&
@@ -88,7 +91,9 @@ func (attempt *attempt) Renew(extendDuration time.Duration, data map[string]inte
 		return coordinate.ErrNotPending
 	}
 	// Check: we must be the active work unit.  If we aren't, we
-	// are expired and have lost our lease.
+	// are expired and have lost our lease.  (We do not run expiry;
+	// if you can get here after your time runs out but before you've
+	// actually been expired, you win!)
 	if attempt.workUnit.activeAttempt != attempt {
 		attempt.finish(coordinate.Expired, data)
 		return coordinate.ErrLostLease

@@ -12,8 +12,11 @@ const (
 	attemptWorkUnitID           = attemptTable + ".work_unit_id"
 	attemptWorkerID             = attemptTable + ".worker_id"
 	attemptStatus               = attemptTable + ".status"
-	attemptActive               = attemptTable + ".active"
 	attemptData                 = attemptTable + ".data"
+	attemptStartTime            = attemptTable + ".start_time"
+	attemptEndTime              = attemptTable + ".end_time"
+	attemptExpirationTime       = attemptTable + ".expiration_time"
+	attemptActive               = attemptTable + ".active"
 	workerID                    = workerTable + ".id"
 	workerName                  = workerTable + ".name"
 	workerParent                = workerTable + ".parent"
@@ -58,6 +61,8 @@ const (
 		attemptStatus + " IS NULL OR " +
 		attemptStatus + "='expired' OR " +
 		attemptStatus + "='retryable')")
+	attemptIsPending    = attemptStatus + "='pending'"
+	attemptIsExpired    = attemptExpirationTime + "<$1"
 	attemptThisWorkUnit = attemptWorkUnitID + "=" + workUnitID
 	attemptThisWorker   = attemptWorkerID + "=" + workerID
 )

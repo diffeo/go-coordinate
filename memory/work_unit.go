@@ -34,9 +34,14 @@ func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
+	unit.workSpec.expireUnits()
 	return unit.status(), nil
 }
 
+// status is an internal helper that converts a single unit's attempt
+// status to a work unit status.  It assumes the global lock (and that
+// the active attempt will not change under it).  It assumes that, if
+// expiry is necessary, it has already been run.
 func (unit *workUnit) status() coordinate.WorkUnitStatus {
 	if unit.activeAttempt == nil {
 		return coordinate.AvailableUnit
@@ -74,6 +79,7 @@ func (unit *workUnit) SetPriority(priority float64) error {
 func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
+	unit.workSpec.expireUnits()
 	// Since this returns an interface type, if we just return
 	// unit.activeAttempt, we will get back a nil with a concrete
 	// type which is not equal to nil with interface type. Go Go

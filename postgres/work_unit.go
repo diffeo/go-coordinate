@@ -153,6 +153,9 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery) (string, []interfa
 }
 
 func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordinate.WorkUnit, error) {
+	_ = withTx(spec, func(tx *sql.Tx) error {
+		return expireAttempts(spec, tx)
+	})
 	cte, args := spec.selectUnits(q)
 	query := buildSelect([]string{
 		"id",
@@ -181,6 +184,9 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 }
 
 func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
+	_ = withTx(spec, func(tx *sql.Tx) error {
+		return expireAttempts(spec, tx)
+	})
 	result := make(map[coordinate.WorkUnitStatus]int)
 	query := buildSelect([]string{
 		attemptStatus,
@@ -228,6 +234,9 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 }
 
 func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
+	_ = withTx(spec, func(tx *sql.Tx) error {
+		return expireAttempts(spec, tx)
+	})
 	cte, args := spec.selectUnits(q)
 	dollars := fmt.Sprintf("$%v", len(args)+1)
 	args = append(args, priority)
@@ -237,6 +246,9 @@ func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
+	_ = withTx(spec, func(tx *sql.Tx) error {
+		return expireAttempts(spec, tx)
+	})
 	cte, args := spec.selectUnits(q)
 	dollars := fmt.Sprintf("$%v", len(args)+1)
 	args = append(args, priority)
@@ -246,6 +258,9 @@ func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, prior
 }
 
 func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (int, error) {
+	_ = withTx(spec, func(tx *sql.Tx) error {
+		return expireAttempts(spec, tx)
+	})
 	cte, args := spec.selectUnits(q)
 	query := "DELETE FROM work_unit WHERE id IN (" + cte + ")"
 	result, err := theDB(spec).Exec(query, args...)
@@ -298,14 +313,12 @@ func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 }
 
 func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
-	// long hand approach
-	query := buildSelect([]string{
-		"attempt.status",
-	}, []string{
-		"work_unit LEFT OUTER JOIN attempt ON work_unit.active_attempt_id=attempt.id",
-	}, []string{
-		"work_unit.id=$1",
+	_ = withTx(unit, func(tx *sql.Tx) error {
+		return expireAttempts(unit, tx)
 	})
+	query := buildSelect([]string{attemptStatus},
+		[]string{workUnitAttemptJoin},
+		[]string{isWorkUnit})
 	row := theDB(unit).QueryRow(query, unit.id)
 	var ns sql.NullString
 	err := row.Scan(&ns)

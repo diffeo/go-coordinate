@@ -70,6 +70,7 @@ func (spec *workSpec) getMeta(withCounts bool) coordinate.WorkSpecMeta {
 	result.AvailableCount = 0
 	result.PendingCount = 0
 	if withCounts {
+		spec.expireUnits()
 		for _, unit := range spec.workUnits {
 			if unit.activeAttempt == nil ||
 				unit.activeAttempt.status == coordinate.Expired ||
@@ -108,6 +109,9 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 	if exists {
 		unit.data = data
 		unit.priority = priority
+		// NB: we do not care if the unit is expired; that would
+		// only cause it to transition pending -> available which
+		// does not affect this case
 		switch unit.status() {
 		case coordinate.AvailableUnit, coordinate.PendingUnit:
 			// do nothing
@@ -197,6 +201,9 @@ func (spec *workSpec) queryWithoutLimit(query coordinate.WorkUnitQuery, f func(*
 // query calls a callback function for every work unit that a
 // coordinate.WorkUnitQuery selects, in sorted order if limit is specified.
 func (spec *workSpec) query(query coordinate.WorkUnitQuery, f func(*workUnit)) {
+	// The query could mention a state, in which case we need to
+	// run expiry to distinguish available vs. pending
+	spec.expireUnits()
 	// No limit?  We know how to do that
 	if query.Limit <= 0 {
 		spec.queryWithoutLimit(query, f)
@@ -234,6 +241,7 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 	globalLock(spec)
 	defer globalUnlock(spec)
 
+	spec.expireUnits()
 	result := make(map[coordinate.WorkUnitStatus]int)
 	for _, unit := range spec.workUnits {
 		result[unit.status()]++
@@ -280,6 +288,21 @@ func (spec *workSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, erro
 
 	spec.query(query, deleteWorkUnit)
 	return count, nil
+}
+
+// expireUnits scans all work units in this work spec, and if any have
+// an active attempt whose expiration time has passed, marks them as
+// expired and clears that active attempt.  It assumes the global
+// lock.
+func (spec *workSpec) expireUnits() {
+	now := spec.Coordinate().clock.Now()
+	for _, unit := range spec.workUnits {
+		if unit.activeAttempt != nil &&
+			unit.activeAttempt.status == coordinate.Pending &&
+			unit.activeAttempt.expirationTime.Before(now) {
+			unit.activeAttempt.finish(coordinate.Expired, nil)
+		}
+	}
 }
 
 func (spec *workSpec) Coordinate() *memCoordinate {
