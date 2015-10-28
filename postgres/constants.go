@@ -52,6 +52,7 @@ const (
 	isWorkSpec         = workSpecID + "=$1"
 	isWorkUnit         = workUnitID + "=$1"
 	inThisWorkSpec     = workUnitSpec + "=$1"
+	hasNoAttempt       = workUnitAttempt + " IS NULL"
 	hasThisParent      = workerParent + "=$1"
 	isAttempt          = attemptID + "=$1"
 	byThisWorker       = attemptWorkerID + "=$1"

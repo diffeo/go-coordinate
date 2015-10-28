@@ -296,44 +296,61 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		return nil, nil, err
 	}
 	if withCounts {
-		query = buildSelect([]string{
-			workSpecName,
-			attemptStatus,
-			"COUNT(*)",
-		}, []string{
-			workSpecTable,
-			workUnitAttemptJoin,
-		}, []string{
-			inThisNamespace, // binds $1
-			workUnitInSpec,
-			"(" + attemptStatus + " IS NULL OR " + attemptStatus + "='pending')",
-		})
-		query += " GROUP BY " + workSpecName + ", " + attemptStatus
+		// A single query that selects both "available" and
+		// "pending" is hopelessly expensive.  Also, in the
+		// only place this is called (in RequestAttempts) we
+		// need to know whether or not there are any available
+		// attempts, but we don't really care how many there
+		// are so long as there are more than zero.
+		//
+		// Pending:
+		query = buildSelect([]string{workSpecName, "COUNT(*)"},
+			[]string{workSpecTable, workUnitTable, attemptTable},
+			[]string{
+				inThisNamespace, // binds $1
+				workUnitInSpec,
+				attemptThisWorkUnit,
+				attemptIsPending,
+			})
+		query += " GROUP BY " + workSpecName
 		rows, err = tx.Query(query, ns.id)
 		if err != nil {
 			return nil, nil, err
 		}
 		err = scanRows(rows, func() error {
 			var name string
-			var status sql.NullString
 			var count int
-			err := rows.Scan(&name, &status, &count)
-			if err != nil {
-				return err
+			err := rows.Scan(&name, &count)
+			if err == nil {
+				metas[name].PendingCount = count
 			}
-			if !status.Valid {
-				metas[name].AvailableCount += count
-			} else {
-				switch status.String {
-				case "expired":
-					metas[name].AvailableCount += count
-				case "retryable":
-					metas[name].AvailableCount += count
-				case "pending":
-					metas[name].PendingCount += count
+			return err
+		})
+
+		// Available count (0/1):
+		query = buildSelect([]string{"1"},
+			[]string{workUnitTable},
+			[]string{workUnitInSpec, hasNoAttempt})
+		query = buildSelect(
+			[]string{
+				workSpecName,
+				"EXISTS(" + query + ")",
+			},
+			[]string{workSpecTable},
+			[]string{inThisNamespace})
+		rows, err = tx.Query(query, ns.id)
+		err = scanRows(rows, func() error {
+			var name string
+			var present bool
+			err := rows.Scan(&name, &present)
+			if err == nil {
+				if present {
+					metas[name].AvailableCount = 1
+				} else {
+					metas[name].AvailableCount = 0
 				}
 			}
-			return nil
+			return err
 		})
 		if err != nil {
 			return nil, nil, err
