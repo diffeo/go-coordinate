@@ -1,7 +1,10 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package memory
 
 import (
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/coordinate"
 )
 
 // namespace is a container type for a coordinate.Namespace.

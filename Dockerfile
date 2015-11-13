@@ -1,8 +1,8 @@
-# Dockerfile for building goordinated into a container.
+# Dockerfile for building coordinated into a container.
 # setup.sh will prepare prerequisites in the current directory.
 FROM scratch
-MAINTAINER David Maze <dmaze@diffeo.com>
+MAINTAINER Diffeo Support <support@diffeo.com>
 
-COPY goordinated.bin /goordinated
+COPY coordinated.bin /coordinated
 COPY container-version /etc/container-version
-ENTRYPOINT ["/goordinated"]
+ENTRYPOINT ["/coordinated"]

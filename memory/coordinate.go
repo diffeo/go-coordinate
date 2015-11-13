@@ -1,3 +1,6 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 // Package memory provides an in-process, in-memory implementation of
 // Coordinate.  There is no persistence on this job queue, nor is
 // there any automatic sharing.  The entire system is behind a single
@@ -12,7 +15,7 @@ package memory
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"sync"
 )
 

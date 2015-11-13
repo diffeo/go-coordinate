@@ -1,3 +1,6 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver
 
 // WorkUnitStatus is one of the possible work unit states supported by the
@@ -12,7 +15,7 @@ const (
 	// complete.  This was supported in rejester but not in Python
 	// Coordinate.
 	// Blocked WorkUnitStatus = 2
-	
+
 	// Pending work units have been returned by the get_work call,
 	// and have not yet been completed.
 	Pending WorkUnitStatus = 3

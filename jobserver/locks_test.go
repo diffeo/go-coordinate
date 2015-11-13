@@ -1,7 +1,10 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver_test
 
 import (
-	"github.com/dmaze/goordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/cborrpc"
 	"gopkg.in/check.v1"
 )
 

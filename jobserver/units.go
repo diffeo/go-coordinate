@@ -1,9 +1,12 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver
 
 import (
 	"errors"
-	"github.com/dmaze/goordinate/cborrpc"
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/mitchellh/mapstructure"
 	"math"
 	"reflect"

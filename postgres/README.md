@@ -11,13 +11,13 @@ Usage
 Connect to an existing PostgreSQL server:
 
 ```sh
-goordinated -backend postgres://user:pass@postgres.example.com/database
+coordinated -backend postgres://user:pass@postgres.example.com/database
 ```
 
 You can also, carefully, use the connection-string format:
 
 ```sh
-goordinated -backend 'postgres:host=postgres.example.com user=user ...'
+coordinated -backend 'postgres:host=postgres.example.com user=user ...'
 ```
 
 Or, you can set the connection information in environment variables,
@@ -28,7 +28,7 @@ export PGHOST=postgres.example.com
 export PGDATABASE=database
 export PGUSER=user
 export PGPASSWORD=password
-goordinated -backend postgres:
+coordinated -backend postgres:
 ```
 
 As of this writing, all required tables will be created (and updated
@@ -52,9 +52,9 @@ migration file, add it to the `migrations` subdirectory, and run
 
 ```sh
 go get -u github.com/jteeuwen/go-bindata/...
-go generate github.com/dmaze/goordinate/postgres
-git add src/github.com/dmaze/goordinate/postgres/migrations.go
-go build github.com/dmaze/goordinate/goordinated
+go generate github.com/diffeo/go-coordinate/postgres
+git add src/github.com/diffeo/go-coordinate/postgres/migrations.go
+go build github.com/diffeo/go-coordinate/cmd/coordinated
 ```
 
 This sequence regenerates the `migrations.go` file, which should be
@@ -81,7 +81,7 @@ export PGHOST=127.0.0.1  # or $(docker-machine ip default)
 export PGUSER=postgres
 export PGDATABASE=postgres
 export PGSSLMODE=disable
-go test github.com/dmaze/goordinate/postgres
+go test github.com/diffeo/go-coordinate/postgres
 ```
 
 Implementation notes
@@ -134,6 +134,6 @@ database migration tool.  It has the advantages of being able to run
 in-process (and not strictly require an external tool or configuration
 file) and being able to use
 [go-bindata](https://github.com/jteeuwen/go-bindata) as a migration
-source.  This also means that, if goordinated wants an ORMish system
+source.  This also means that, if coordinated wants an ORMish system
 in the future, [gorp](https://github.com/go-gorp/gorp) has indirectly
 already been chosen.

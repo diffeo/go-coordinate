@@ -1,6 +1,10 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 // Package jobserver provides a CBOR-RPC interface compatible with
-// the Python coordinate module.  This should be merged in some form
-// with the goordinated package.
+// the Python coordinate module.  This defines what is served from
+// github.com/diffeo/go-coordinate/cmd/coordinated, and probably should
+// be merged in some form with that package.
 //
 // The Python coordinated operates with an extremely irregular
 // RPC-like interface.  Many methods, but not all, take a dictionary
@@ -15,8 +19,10 @@
 // to native Go code or other client interfaces.
 package jobserver
 
-import "github.com/dmaze/goordinate/coordinate"
-import "sync"
+import (
+	"github.com/diffeo/go-coordinate/coordinate"
+	"sync"
+)
 
 // JobServer is a network-accessible interface to Coordinate.  Its
 // methods are the Python coordinated RPC methods, with more normalized

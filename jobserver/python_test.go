@@ -1,3 +1,6 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver_test
 
 // This file has ports of the assorted interesting Python-based tests
@@ -6,10 +9,10 @@ package jobserver_test
 import (
 	"flag"
 	"fmt"
-	"github.com/dmaze/goordinate/backend"
-	"github.com/dmaze/goordinate/cborrpc"
-	"github.com/dmaze/goordinate/coordinate"
-	"github.com/dmaze/goordinate/jobserver"
+	"github.com/diffeo/go-coordinate/backend"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/diffeo/go-coordinate/jobserver"
 	"github.com/satori/go.uuid"
 	"gopkg.in/check.v1"
 	"os"

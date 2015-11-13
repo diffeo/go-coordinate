@@ -1,3 +1,6 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package postgres
 
 const (

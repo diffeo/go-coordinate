@@ -1,9 +1,12 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package memory_test
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/dmaze/goordinate/coordinate/coordinatetest"
-	"github.com/dmaze/goordinate/memory"
+	"github.com/diffeo/go-coordinate/coordinate/coordinatetest"
+	"github.com/diffeo/go-coordinate/memory"
 	"gopkg.in/check.v1"
 	"testing"
 )

@@ -1,8 +1,11 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package coordinatetest
 
 import (
 	"fmt"
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"gopkg.in/check.v1"
 	"reflect"
 	"time"

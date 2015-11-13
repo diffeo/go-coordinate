@@ -1,16 +1,21 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver
 
-import "github.com/dmaze/goordinate/cborrpc"
-import "github.com/dmaze/goordinate/coordinate"
-import "github.com/mitchellh/mapstructure"
-import "errors"
+import (
+	"errors"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/mitchellh/mapstructure"
+)
 
 // decode is a helper that uses the mapstructure library to decode a
 // string-keyed map into a structure.
 func decode(result interface{}, options map[string]interface{}) error {
 	config := mapstructure.DecoderConfig{
 		DecodeHook: cborrpc.DecodeBytesAsString,
-		Result: result,
+		Result:     result,
 	}
 	decoder, err := mapstructure.NewDecoder(&config)
 	if err == nil {
@@ -27,11 +32,17 @@ func decode(result interface{}, options map[string]interface{}) error {
 // BLOCKED).
 func translateWorkUnitStatus(status WorkUnitStatus) (coordinate.WorkUnitStatus, error) {
 	switch status {
-	case 0: return coordinate.AnyStatus, nil
-	case Available: return coordinate.AvailableUnit, nil
-	case Pending: return coordinate.PendingUnit, nil
-	case Finished: return coordinate.FinishedUnit, nil
-	case Failed: return coordinate.FailedUnit, nil
-	default: return coordinate.AnyStatus, errors.New("invalid work unit status")
+	case 0:
+		return coordinate.AnyStatus, nil
+	case Available:
+		return coordinate.AvailableUnit, nil
+	case Pending:
+		return coordinate.PendingUnit, nil
+	case Finished:
+		return coordinate.FinishedUnit, nil
+	case Failed:
+		return coordinate.FailedUnit, nil
+	default:
+		return coordinate.AnyStatus, errors.New("invalid work unit status")
 	}
 }

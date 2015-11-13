@@ -1,12 +1,17 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 // Package backend provides a standard way to construct a coordinate
 // interface based on command-line flags.
 package backend
 
-import "github.com/dmaze/goordinate/coordinate"
-import "github.com/dmaze/goordinate/memory"
-import "github.com/dmaze/goordinate/postgres"
-import "errors"
-import "strings"
+import (
+	"errors"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/diffeo/go-coordinate/memory"
+	"github.com/diffeo/go-coordinate/postgres"
+	"strings"
+)
 
 // Backend describes user-visible parameters to store coordinate data.
 // This implements the flag.Value interface, and so a typical use is

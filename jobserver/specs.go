@@ -1,8 +1,13 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver
 
-import "github.com/dmaze/goordinate/coordinate"
-import "github.com/mitchellh/mapstructure"
-import "time"
+import (
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/mitchellh/mapstructure"
+	"time"
+)
 
 // ListWorkSpecsOptions contains options to the ListWorkSpecs call.
 type ListWorkSpecsOptions struct {

@@ -1,9 +1,12 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package postgres
 
 import (
 	"database/sql"
 	"fmt"
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/lib/pq"
 	"time"
 )

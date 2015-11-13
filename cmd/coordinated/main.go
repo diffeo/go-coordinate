@@ -1,4 +1,7 @@
-// Package goordinated provides a wire-compatible reimplementation of
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
+// Package coordinated provides a wire-compatible reimplementation of
 // the Diffeo Coordinate daemon.  This is intended to be fully
 // compatible with the existing Coordinate toolset at
 // https://github.com/diffeo/coordinate.  This is purely a server-side
@@ -18,10 +21,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/dmaze/goordinate/backend"
-	"github.com/dmaze/goordinate/cborrpc"
-	"github.com/dmaze/goordinate/coordinate"
-	"github.com/dmaze/goordinate/jobserver"
+	"github.com/diffeo/go-coordinate/backend"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/diffeo/go-coordinate/jobserver"
 	"github.com/ugorji/go/codec"
 	"gopkg.in/yaml.v2"
 )

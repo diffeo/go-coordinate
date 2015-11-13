@@ -35,12 +35,12 @@ more workers talking to one server.
 Installation
 ------------
 
-    go get github.com/dmaze/goordinate/goordinated
+    go get github.com/diffeo/go-coordinate/cmd/coordinated
 
 Usage
 -----
 
-Run the `goordinated` binary.  With default options, it will use
+Run the `coordinated` binary.  With default options, it will use
 in-memory storage and start a network server listening on port 5932.
 This is the default TCP port for the Python Coordinate daemon, and
 application configurations that normally point at that daemon should
@@ -48,7 +48,8 @@ work against this one as well.
 
 ```sh
 pip install coordinate
-go get github.com/dmaze/goordinate/goordinated
+go get github.com/diffeo/go-coordinate/cmd/coordinated
+$GOPATH/bin/coordinated &
 cat >config.yaml <<EOF
 coordinate:
   addresses: ['localhost:5932']
@@ -69,7 +70,7 @@ def task_master():
 ```
 
 `test_job_client.py`, `test_job_flow.py`, and `test_task_master.py`
-all use this fixture and will run against the `goordinated` server.
+all use this fixture and will run against the Go `coordinated` server.
 Many of these tests have been extracted into Go tests in the
 "jobserver" package.
 
@@ -154,7 +155,7 @@ If you need a later work spec to preempt an earlier one, set a
 Packages
 --------
 
-`goordinated` is the main process, providing the network service.
+`cmd/coordinated` is the main process, providing the network service.
 `jobserver` provides the RPC calls compatible with the Python
 Coordinate system.  `cborrpc` provides the underlying wire transport.
 

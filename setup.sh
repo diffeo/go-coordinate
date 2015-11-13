@@ -2,14 +2,14 @@
 #
 # setup.sh: prepare a Docker build environment
 #
-# This copies content from the goordinate source directory to the current
+# This copies content from the go-cordinate source directory to the current
 # directory, so that you can run "docker build" to get a container out.
 # Typical use is:
 #
 #   mkdir docker-build
 #   cd docker-build
 #   ../setup.sh
-#   docker build -t $USER/goordinate:$(cat container-version) .
+#   docker build -t $USER/coordinated:$(cat container-version) .
 #
 # If a command-line argument is given to this script, it is taken as a
 # build number and appended to the git-derived container version.
@@ -29,13 +29,13 @@ B=${1:+-$1}
 # Pre-build a static binary
 docker run --rm -it \
        -v "$GOPATH":/gopath \
-       -v "$D":/usr/src/goordinate \
+       -v "$D":/usr/src/go-coordinate \
        -v "$O":/usr/src/output \
        -e GOPATH=/gopath \
        -e CGO_ENABLED=0 \
-       -w /usr/src/goordinate \
+       -w /usr/src/go-coordinate \
        golang:1.5.1 \
-       go build -a --installsuffix cgo --ldflags=-s -o /usr/src/output/goordinated.bin ./goordinated
+       go build -a --installsuffix cgo --ldflags=-s -o /usr/src/output/coordinated.bin ./cmd/coordinated
 
 # Create the version stamp file
 VERSION_HASH=$(cd "$D" && git rev-list -n1 --abbrev-commit HEAD)

@@ -1,3 +1,6 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 // Package coordinatetest provides generic functional tests for the
 // Coordinate interface.  These are implemented via the
 // http://labix.org/gocheck support library, so a typical backend test
@@ -7,7 +10,7 @@
 //
 //     import (
 //         "testing"
-//         "github.com/dmaze/goordinate/coordinate/coordinatetest"
+//         "github.com/diffeo/go-coordinate/coordinate/coordinatetest"
 //         "gopkg.in/check.v1"
 //     )
 //
@@ -19,7 +22,7 @@ package coordinatetest
 
 import (
 	"github.com/benbjohnson/clock"
-	"github.com/dmaze/goordinate/coordinate"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"gopkg.in/check.v1"
 )
 

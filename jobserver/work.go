@@ -1,10 +1,15 @@
+// Copyright 2015 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
 package jobserver
 
-import "errors"
-import "fmt"
-import "github.com/dmaze/goordinate/cborrpc"
-import "github.com/dmaze/goordinate/coordinate"
-import "time"
+import (
+	"errors"
+	"fmt"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"time"
+)
 
 // GetWorkOptions contains mapped options for the GetWork() call.
 type GetWorkOptions struct {
