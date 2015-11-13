@@ -170,19 +170,6 @@ to choose a backend.
 Future
 ------
 
-This package will be renamed imminently.
-
-As suggested in the `jobserver` code, there will be an API call to
-count the number of work units in each status, rather than requiring
-the caller to manually iterate through the work units.  This should
-result in a performance improvement on routine status calls like
-`coordinate summary`, particularly on the PostgreSQL backend.
-
-Several of the API calls implicitly deal with time, for instance by
-recording the start time of an attempt as `time.Now()`.  These are
-likely to be updated to explicitly pass in the start time, which will
-make it possible to test this functionality.
-
 The `Namespace.Workers()` call simply iterates all known workers, but
 the implementation of the Python Coordinate worker will generate an
 extremely large number of these.  This call is subject to unspecified
