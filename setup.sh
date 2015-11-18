@@ -38,11 +38,8 @@ docker run --rm -it \
        go build -a --installsuffix cgo --ldflags=-s -o /usr/src/output/coordinated.bin ./cmd/coordinated
 
 # Create the version stamp file
-VERSION_HASH=$(cd "$D" && git rev-list -n1 --abbrev-commit HEAD)
-VERSION_TIME_T=$(cd "$D" && git rev-list -n1 --pretty='format:%ct' HEAD | tail -1)
-VERSION_DATE=$(date --date="$VERSION_TIME_T" +%Y%m%d 2>/dev/null ||
-                      date -j -r "$VERSION_TIME_T" +%Y%m%d)
-echo "$VERSION_DATE-$VERSION_HASH$B" > "$O/container-version"
+V=$(cd "$D" && git describe HEAD)
+echo "$V$B" > "$O/container-version"
 
 # Copy in any additional files required
 if [ "$D" != "$O" ]; then
