@@ -408,7 +408,14 @@ type AttemptRequest struct {
 	// not available.
 	NumberOfWorkUnits int
 
-	// TODO: limit to work specs
+	// WorkSpecs limits this request to only consider specific
+	// work spec(s).  If this is nil or an empty slice, any work
+	// spec is acceptable; otherwise only work units from the
+	// named work specs will be returned.  It is not an error if
+	// these work specs do not exist.  This could cause no work
+	// units to be returned if none of the named work specs have
+	// available work units, even though other work specs do.
+	WorkSpecs []string
 }
 
 // A Worker is a process that is doing work.  Workers may be

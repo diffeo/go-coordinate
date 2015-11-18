@@ -142,3 +142,21 @@ func SimplifiedScheduler(metas map[string]*WorkSpecMeta, now time.Time, availabl
 	// The preceding loop always should have picked a candidate
 	panic(errors.New("SimplifiedScheduler didn't pick a candidate"))
 }
+
+// LimitMetasToNames returns a copy of a metadata map limited to
+// specific names.  If names is empty, metas is returned unmodified;
+// otherwise a new map is returned where the keys are only the values
+// in names and the values are the corresponding objects in metas.  If
+// a string is in names that is not a key in metas, it is ignored.
+func LimitMetasToNames(metas map[string]*WorkSpecMeta, names []string) map[string]*WorkSpecMeta {
+	if len(names) == 0 {
+		return metas
+	}
+	newMetas := make(map[string]*WorkSpecMeta)
+	for _, name := range names {
+		if meta, present := metas[name]; present {
+			newMetas[name] = meta
+		}
+	}
+	return newMetas
+}

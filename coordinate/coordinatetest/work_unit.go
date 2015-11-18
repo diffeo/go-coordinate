@@ -626,3 +626,100 @@ func (s *Suite) TestMaxRunning(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(attempts, check.HasLen, 1)
 }
+
+// TestRequestSpecificSpec verifies that requesting work units for a
+// specific work spec gets the right thing back.
+func (s *Suite) TestRequestSpecificSpec(c *check.C) {
+	one, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "one",
+		"priority": 20,
+	})
+	c.Assert(err, check.IsNil)
+	_, err = one.AddWorkUnit("u1", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	two, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "two",
+		"priority": 10,
+	})
+	c.Assert(err, check.IsNil)
+	_, err = two.AddWorkUnit("u2", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	three, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "three",
+		"priority": 0,
+	})
+	c.Assert(err, check.IsNil)
+	_, err = three.AddWorkUnit("u3", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	worker, err := s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	// Plain RequestAttempts should return "one" with the highest
+	// priority
+	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) > 0 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "u1")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(nil)
+		c.Assert(err, check.IsNil)
+	}
+
+	// If I request only "three" I should get only "three"
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		WorkSpecs: []string{"three"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) > 0 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "u3")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(nil)
+		c.Assert(err, check.IsNil)
+	}
+
+	// Both "two" and "three" should give "two" with higher priority
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		WorkSpecs: []string{"three", "two"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) > 0 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "u2")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(nil)
+		c.Assert(err, check.IsNil)
+	}
+
+	// "four" should just return nothing
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		WorkSpecs: []string{"four"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 0)
+	for _, attempt := range attempts {
+		err = attempt.Retry(nil)
+		c.Assert(err, check.IsNil)
+	}
+
+	// Empty list should query everything and get "one"
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		WorkSpecs: []string{},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) > 0 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "u1")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(nil)
+		c.Assert(err, check.IsNil)
+	}
+}
