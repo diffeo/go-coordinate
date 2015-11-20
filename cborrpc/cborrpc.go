@@ -32,8 +32,11 @@ type Response struct {
 	Error string
 }
 
+// Wrapper type to avoid codec "fast path" encoding
+type keyOrValue interface{}
+
 // Actual "wire format" representation for top-level CBOR-RPC messages.
-type wireFormat []interface{}
+type wireFormat []keyOrValue
 
 // MapBySlice is a marker for the codec library to indicate this is
 // actually a map.
@@ -52,8 +55,8 @@ type reqExt struct {
 	cbor *codec.CborHandle
 }
 
-// Encode Request as a byte string.
-func (x reqExt) WriteExt(v interface{}) (resp []byte) {
+// Export a Request in some format.
+func (x reqExt) ConvertExt(v interface{}) interface{} {
 	request := v.(Request)
 
 	// Assemble the "over-the-wire" response dictionary
@@ -67,31 +70,23 @@ func (x reqExt) WriteExt(v interface{}) (resp []byte) {
 	}
 
 	// Convert it to CBOR bytes
+	var resp []byte
 	encoder := codec.NewEncoderBytes(&resp, x.cbor)
 	encoder.MustEncode(wire)
-	return
-}
-
-// Decode a byte string into a Request.
-func (x reqExt) ReadExt(v interface{}, data []byte) {
-	decoder := codec.NewDecoderBytes(data, x.cbor)
-	var wire map[string]interface{}
-	decoder.MustDecode(&wire)
-
-	result := v.(*Request)
-	result.Method = string(wire["method"].([]byte))
-	result.ID = uint(wire["id"].(uint64))
-	result.Params = wire["params"].([]interface{})
-}
-
-// Export a Request in some format.
-func (x reqExt) ConvertExt(v interface{}) interface{} {
-	return x.WriteExt(v)
+	return resp
 }
 
 // Unpackage some format into a Request.
 func (x reqExt) UpdateExt(dest interface{}, v interface{}) {
-	x.ReadExt(dest, v.([]byte))
+	data := v.([]byte)
+	decoder := codec.NewDecoderBytes(data, x.cbor)
+	var wire map[string]interface{}
+	decoder.MustDecode(&wire)
+
+	result := dest.(*Request)
+	result.Method = string(wire["method"].([]byte))
+	result.ID = uint(wire["id"].(uint64))
+	result.Params = wire["params"].([]interface{})
 }
 
 // Codec extension plugin to convert Response.
@@ -99,8 +94,8 @@ type respExt struct {
 	cbor *codec.CborHandle
 }
 
-// Encode Response as a byte string.
-func (x respExt) WriteExt(v interface{}) (resp []byte) {
+// Export a Response in some format.
+func (x respExt) ConvertExt(v interface{}) interface{} {
 	response := v.(Response)
 
 	// Assemble the "over-the-wire" response dictionary
@@ -118,31 +113,23 @@ func (x respExt) WriteExt(v interface{}) (resp []byte) {
 	}
 
 	// Convert it to CBOR bytes
+	var resp []byte
 	encoder := codec.NewEncoderBytes(&resp, x.cbor)
 	encoder.MustEncode(wire)
-	return
-}
-
-// Decode a byte string into a Response.
-func (x respExt) ReadExt(v interface{}, data []byte) {
-	decoder := codec.NewDecoderBytes(data, x.cbor)
-	var wire map[string]interface{}
-	decoder.MustDecode(&wire)
-	response := v.(*Response)
-	response.ID = uint(wire["id"].(uint64))
-	response.Result = wire["result"]
-	errorDict := wire["error"].(map[string]interface{})
-	response.Error = string(errorDict["message"].([]byte))
-}
-
-// Export a Response in some format.
-func (x respExt) ConvertExt(v interface{}) interface{} {
-	return x.WriteExt(v)
+	return resp
 }
 
 // Unpackage some format into a Response.
 func (x respExt) UpdateExt(dest interface{}, v interface{}) {
-	x.ReadExt(dest, v.([]byte))
+	data := v.([]byte)
+	decoder := codec.NewDecoderBytes(data, x.cbor)
+	var wire map[string]interface{}
+	decoder.MustDecode(&wire)
+	response := dest.(*Response)
+	response.ID = uint(wire["id"].(uint64))
+	response.Result = wire["result"]
+	errorDict := wire["error"].(map[string]interface{})
+	response.Error = string(errorDict["message"].([]byte))
 }
 
 // PythonTuple is a simple Go wrapper representing a Python tuple.
@@ -156,23 +143,6 @@ type PythonTuple struct {
 // PythonTuple objects.
 type pythonTupleExt struct {
 	cbor *codec.CborHandle
-}
-
-func (x pythonTupleExt) WriteExt(v interface{}) (resp []byte) {
-	tuple := v.(PythonTuple)
-	encoder := codec.NewEncoderBytes(&resp, x.cbor)
-	items := tuple.Items
-	if items == nil {
-		items = []interface{}{}
-	}
-	encoder.MustEncode(items)
-	return
-}
-
-func (x pythonTupleExt) ReadExt(v interface{}, data []byte) {
-	decoder := codec.NewDecoderBytes(data, x.cbor)
-	tuple := v.(PythonTuple)
-	decoder.MustDecode(tuple.Items)
 }
 
 func (x pythonTupleExt) ConvertExt(v interface{}) interface{} {
@@ -200,14 +170,6 @@ type uuidExt struct {
 	cbor *codec.CborHandle
 }
 
-func (x uuidExt) WriteExt(v interface{}) []byte {
-	panic("uuidExt.WriteExt not implemented")
-}
-
-func (x uuidExt) ReadExt(v interface{}, data []byte) {
-	panic("uuidExt.ReadExt not implemented")
-}
-
 func (x uuidExt) ConvertExt(v interface{}) interface{} {
 	uuid := v.(uuid.UUID)
 	return uuid.Bytes()
@@ -229,24 +191,24 @@ func SetExts(cbor *codec.CborHandle) error {
 	reqExt := new(reqExt)
 	reqExt.cbor = cbor
 	var req Request
-	if err := cbor.SetExt(reflect.TypeOf(req), 24, reqExt); err != nil {
+	if err := cbor.SetInterfaceExt(reflect.TypeOf(req), 24, reqExt); err != nil {
 		return err
 	}
 
 	respExt := new(respExt)
 	respExt.cbor = cbor
 	var resp Response
-	if err := cbor.SetExt(reflect.TypeOf(resp), 24, respExt); err != nil {
+	if err := cbor.SetInterfaceExt(reflect.TypeOf(resp), 24, respExt); err != nil {
 		return err
 	}
 
-	if err := cbor.SetExt(reflect.TypeOf(uuid.UUID{}), 37, &uuidExt{cbor}); err != nil {
+	if err := cbor.SetInterfaceExt(reflect.TypeOf(uuid.UUID{}), 37, &uuidExt{cbor}); err != nil {
 		return err
 	}
 
 	tupleExt := pythonTupleExt{cbor}
 	var tuple PythonTuple
-	if err := cbor.SetExt(reflect.TypeOf(tuple), 128, &tupleExt); err != nil {
+	if err := cbor.SetInterfaceExt(reflect.TypeOf(tuple), 128, &tupleExt); err != nil {
 		return err
 	}
 	return nil
