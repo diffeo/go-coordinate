@@ -14,6 +14,9 @@
 # If a command-line argument is given to this script, it is taken as a
 # build number and appended to the git-derived container version.
 
+GO_MODULE="github.com/diffeo/go-coordinate"
+GO_SUBMODULE="cmd/coordinated"
+
 # Break automatically on any command error
 set -e
 
@@ -26,30 +29,18 @@ O=$(pwd -P)
 # Build number suffix (if any)
 B=${1:+-$1}
 
-# If this is itself running inside a Docker container, set an
-# environment variable HOST_MAP to /host/path=/container/path, so the
-# "docker run -v" option can be set correctly.
-if [ -n "$HOST_MAP" ]; then
-    SED_EXPR=$(echo "$HOST_MAP" | sed "s@\(.*\)=\(.*\)@s=^\2=\1=@")
-    HOST_GOPATH=$(echo "$GOPATH" | sed "$SED_EXPR")
-    HOST_D=$(echo "$D" | sed "$SED_EXPR")
-    HOST_O=$(echo "$O" | sed "$SED_EXPR")
-else
-    HOST_GOPATH="$GOPATH"
-    HOST_D="$D"
-    HOST_O="$O"
+# Create a Go environment (if needed)
+if [ -z "$GOPATH" ]; then
+    export GOPATH="$O/go"
+    mkdir -p "$GOPATH/src/$GO_MODULE"
+    (cd "$D" && (find . -name '*.go' -print0; find .git -type f -print0) | xargs -0 tar cf "$O/go.tar")
+    (cd "$GOPATH/src/$GO_MODULE" && tar xf "$O/go.tar")
+    (cd "$GOPATH/src/$GO_MODULE" && go get -u "./$GO_SUBMODULE")
 fi
 
 # Pre-build a static binary
-docker run --rm \
-       -v "$HOST_GOPATH":/gopath \
-       -v "$HOST_D":/usr/src/go-coordinate \
-       -v "$HOST_O":/usr/src/output \
-       -e GOPATH=/gopath \
-       -e CGO_ENABLED=0 \
-       -w /usr/src/go-coordinate \
-       golang:1.5.1 \
-       go build -a --installsuffix cgo --ldflags=-s -o /usr/src/output/coordinated.bin ./cmd/coordinated
+(cd "$GOPATH/src/$GO_MODULE" && \
+ go build -a --ldflags=-s -o "$O/coordinated.bin" "./$GO_SUBMODULE")
 
 # Create the version stamp file
 V=$(cd "$D" && git describe HEAD)
