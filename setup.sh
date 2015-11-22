@@ -40,6 +40,7 @@ fi
 
 # Pre-build a static binary
 (cd "$GOPATH/src/$GO_MODULE" && \
+ CGO_ENABLED=0 GOOS=linux \
  go build -a --ldflags=-s -o "$O/coordinated.bin" "./$GO_SUBMODULE")
 
 # Create the version stamp file
