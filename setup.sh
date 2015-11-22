@@ -27,7 +27,7 @@ O=$(pwd -P)
 B=${1:+-$1}
 
 # Pre-build a static binary
-docker run --rm -it \
+docker run --rm \
        -v "$GOPATH":/gopath \
        -v "$D":/usr/src/go-coordinate \
        -v "$O":/usr/src/output \
