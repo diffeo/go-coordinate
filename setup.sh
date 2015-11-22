@@ -26,11 +26,25 @@ O=$(pwd -P)
 # Build number suffix (if any)
 B=${1:+-$1}
 
+# If this is itself running inside a Docker container, set an
+# environment variable HOST_MAP to /host/path=/container/path, so the
+# "docker run -v" option can be set correctly.
+if [ -n "$HOST_MAP" ]; then
+    SED_EXPR=$(echo "$HOST_MAP" | sed "s@\(.*\)=\(.*\)@s=^\2=\1=@")
+    HOST_GOPATH=$(echo "$GOPATH" | sed "$SED_EXPR")
+    HOST_D=$(echo "$D" | sed "$SED_EXPR")
+    HOST_O=$(echo "$O" | sed "$SED_EXPR")
+else
+    HOST_GOPATH="$GOPATH"
+    HOST_D="$D"
+    HOST_O="$O"
+fi
+
 # Pre-build a static binary
 docker run --rm \
-       -v "$GOPATH":/gopath \
-       -v "$D":/usr/src/go-coordinate \
-       -v "$O":/usr/src/output \
+       -v "$HOST_GOPATH":/gopath \
+       -v "$HOST_D":/usr/src/go-coordinate \
+       -v "$HOST_O":/usr/src/output \
        -e GOPATH=/gopath \
        -e CGO_ENABLED=0 \
        -w /usr/src/go-coordinate \
