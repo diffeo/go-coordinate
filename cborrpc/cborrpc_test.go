@@ -4,6 +4,7 @@
 package cborrpc
 
 import (
+	"bytes"
 	"github.com/satori/go.uuid"
 	"github.com/ugorji/go/codec"
 	"gopkg.in/check.v1"
@@ -208,6 +209,179 @@ func (s *Suite) TestDecodeUUID(c *check.C) {
 	err := encoder.Decode(&actual)
 	c.Assert(err, check.IsNil)
 	c.Check(actual, check.DeepEquals, expected)
+}
+
+// DeTest holds data for a decoding test.
+type DeTest struct {
+	Data  []byte
+	Value interface{}
+}
+
+func DeTestByteString(v string) DeTest {
+	return DeTest{
+		Data:  append([]byte{0x40 + byte(len(v))}, []byte(v)...),
+		Value: []byte(v),
+	}
+}
+
+// TestDecodeRegressions checks various bits of the codec library.
+func (s *Suite) TestDecodeRegressions(c *check.C) {
+	tests := make(map[string]DeTest)
+	tests["kList"] = DeTestByteString("list")
+	tests["vList"] = DeTest{
+		Data:  []byte{0x83, 0x01, 0x02, 0x03},
+		Value: []interface{}{uint64(1), uint64(2), uint64(3)},
+	}
+	tests["kTuple"] = DeTestByteString("tuple")
+	tests["vTuple"] = DeTest{
+		Data:  []byte{0xd8, 0x80, 0x83, 0x04, 0x05, 0x06},
+		Value: PythonTuple{Items: []interface{}{uint64(4), uint64(5), uint64(6)}},
+	}
+	tests["kMixed"] = DeTestByteString("mixed")
+	tests["vMixed"] = DeTest{
+		Data: []byte{0x82, 0x01, 0xD8, 0x80, 0x82, 0x02, 0x82, 0x03, 0x04},
+		Value: []interface{}{
+			uint64(1),
+			PythonTuple{Items: []interface{}{
+				uint64(2),
+				[]interface{}{uint64(3), uint64(4)},
+			}},
+		},
+	}
+	tests["kUUID"] = DeTestByteString("uuid")
+	tests["vUUID"] = DeTest{
+		Data:  []byte{0xd8, 0x25, 0x50, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10},
+		Value: uuid.FromStringOrNil("01020304-0506-0708-090a-0b0c0d0e0f10"),
+	}
+	tests["kStr"] = DeTestByteString("str")
+	tests["vStr"] = DeTest{
+		Data:  []byte{0x43, 0x66, 0x6f, 0x6f},
+		Value: []byte{0x66, 0x6f, 0x6f},
+	}
+	tests["kUnicode"] = DeTestByteString("unicode")
+	tests["vUnicode"] = DeTest{
+		Data:  []byte{0x63, 0x66, 0x6f, 0x6f},
+		Value: "foo",
+	}
+	tests["smallMap"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xA6},
+			tests["kList"].Data,
+			tests["vList"].Data,
+			tests["kTuple"].Data,
+			tests["vTuple"].Data,
+			tests["kMixed"].Data,
+			tests["vMixed"].Data,
+			tests["kUUID"].Data,
+			tests["vUUID"].Data,
+			tests["kStr"].Data,
+			tests["vStr"].Data,
+			tests["kUnicode"].Data,
+			tests["vUnicode"].Data,
+		}, []byte{}),
+		Value: map[interface{}]interface{}{
+			"list":    tests["vList"].Value,
+			"tuple":   tests["vTuple"].Value,
+			"mixed":   tests["vMixed"].Value,
+			"uuid":    tests["vUUID"].Value,
+			"str":     tests["vStr"].Value,
+			"unicode": tests["vUnicode"].Value,
+		},
+	}
+	tests["mapOfMap"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xA1, 0x41, 0x61},
+			tests["smallMap"].Data,
+		}, []byte{}),
+		Value: map[interface{}]interface{}{
+			"a": tests["smallMap"].Value,
+		},
+	}
+	tests["tupleOfNested"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xD8, 0x80, 0x81},
+			tests["mapOfMap"].Data,
+		}, []byte{}),
+		Value: PythonTuple{Items: []interface{}{tests["mapOfMap"].Value}},
+	}
+	tests["kvps"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0x81, 0xD8, 0x80, 0x81 /* 0x82, 0x41, 0x61 */},
+			tests["smallMap"].Data,
+		}, []byte{}),
+		Value: []interface{}{
+			PythonTuple{Items: []interface{}{
+				// []byte{0x61},
+				tests["smallMap"].Value,
+			}},
+		},
+	}
+	tests["miniKvp"] = DeTest{
+		Data: []byte{0x81, 0xd8, 0x80, 0x82, 0x41, 0x61, 0x41, 0x62},
+		Value: []interface{}{
+			PythonTuple{Items: []interface{}{
+				[]byte{0x61},
+				[]byte{0x62},
+			}},
+		},
+	}
+	tests["miniKvp2"] = DeTest{
+		Data: []byte{0x81, 0xd8, 0x80, 0x82, 0x41, 0x61, 0xA0},
+		Value: []interface{}{
+			PythonTuple{Items: []interface{}{
+				[]byte{0x61},
+				map[interface{}]interface{}{},
+			}},
+		},
+	}
+	tests["params"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0x82},
+			DeTestByteString("spec").Data,
+			tests["kvps"].Data,
+		}, []byte{}),
+		Value: []interface{}{
+			DeTestByteString("spec").Value,
+			tests["kvps"].Value,
+		},
+	}
+	tests["topLevelMap"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xA3},
+			DeTestByteString("params").Data,
+			tests["params"].Data,
+			DeTestByteString("id").Data,
+			[]byte{0x02},
+			DeTestByteString("method").Data,
+			DeTestByteString("add_work_units").Data,
+		}, []byte{}),
+		Value: map[interface{}]interface{}{
+			"params": tests["params"].Value,
+			"id":     uint64(2),
+			"method": []byte("add_work_units"),
+		},
+	}
+	tests["request"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xD8, 0x18, 0x58, byte(len(tests["topLevelMap"].Data))},
+			tests["topLevelMap"].Data,
+		}, []byte{}),
+		Value: Request{
+			Method: "add_work_units",
+			ID:     2,
+			Params: tests["params"].Value.([]interface{}),
+		},
+	}
+
+	for name, test := range tests {
+		decoder := codec.NewDecoderBytes(test.Data, s.cbor)
+		var actual interface{}
+		err := decoder.Decode(&actual)
+		c.Check(err, check.IsNil, check.Commentf("%v", name))
+		if err == nil {
+			c.Check(actual, check.DeepEquals, test.Value, check.Commentf("%v", name))
+		}
+	}
 }
 
 // deepEqualAny is a gocheck checker that passes if the provided value
