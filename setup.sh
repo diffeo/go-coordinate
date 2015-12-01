@@ -50,6 +50,7 @@ else
     cp -a "$D/Dockerfile" "$O"
 fi
 V=$(cd "$D" && git describe HEAD)
+echo "$V$B" > "$O/container-version"
 NOW=$(TZ=UTC date +%Y-%m-%dT%H:%M:%SZ)
 cat >>"$O/Dockerfile" <<EOF
 LABEL name="coordinated" \\
