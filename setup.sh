@@ -27,7 +27,7 @@ D=$(cd $(dirname "$0") && pwd -P)
 O=$(pwd -P)
 
 # Build number suffix (if any)
-B=${1:+-$1}
+B=${1}
 
 # Create a Go environment (if needed)
 if [ -z "$GOPATH" ]; then
@@ -43,11 +43,26 @@ fi
  CGO_ENABLED=0 GOOS=linux \
  go build -a --ldflags=-s -o "$O/coordinated.bin" "./$GO_SUBMODULE")
 
-# Create the version stamp file
-V=$(cd "$D" && git describe HEAD)
-echo "$V$B" > "$O/container-version"
-
-# Copy in any additional files required
-if [ "$D" != "$O" ]; then
+# Append labels to the Dockerfile
+if [ "$D" = "$O" ]; then
+    sed -i .bak -e '/^LABEL/,$d' "$O/Dockerfile"
+else
     cp -a "$D/Dockerfile" "$O"
 fi
+V=$(cd "$D" && git describe HEAD)
+NOW=$(TZ=UTC date +%Y-%m-%dT%H:%M:%SZ)
+cat >>"$O/Dockerfile" <<EOF
+LABEL name="coordinated" \\
+      version="$V" \\
+      release="$B" \\
+      architecture="x86_64" \\
+      build_date="$NOW" \\
+      vendor="Diffeo, Inc." \\
+      url="https://github.com/diffeo/go-coordinate" \\
+      summary="Coordinate job queue daemon" \\
+      description="Coordinate job queue daemon" \\
+      vcs-type="git" \\
+      vcs-url="https://github.com/diffeo/go-coordinate" \\
+      vcs-ref="$V" \\
+      distribution-scope="public"
+EOF

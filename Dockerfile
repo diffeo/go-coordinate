@@ -4,5 +4,4 @@ FROM scratch
 MAINTAINER Diffeo Support <support@diffeo.com>
 
 COPY coordinated.bin /coordinated
-COPY container-version /etc/container-version
 ENTRYPOINT ["/coordinated"]
