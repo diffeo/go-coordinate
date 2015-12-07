@@ -526,6 +526,83 @@ func (s *Suite) TestChainingExpiry(c *check.C) {
 	c.Check(units, check.HasLen, 0)
 }
 
+// TestChainingDuplicate tests that work unit chaining still works
+// even when the same output work unit is generated twice (it should
+// get retried).
+func (s *Suite) TestChainingDuplicate(c *check.C) {
+	var (
+		err      error
+		one      coordinate.WorkSpec
+		worker   coordinate.Worker
+		attempts []coordinate.Attempt
+	)
+	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "one",
+		"then":     "two",
+		"priority": 1,
+	})
+	c.Assert(err, check.IsNil)
+
+	_, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":     "two",
+		"priority": 2,
+	})
+	c.Assert(err, check.IsNil)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	_, err = one.AddWorkUnit("a", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	_, err = one.AddWorkUnit("b", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "one")
+	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "a")
+
+	err = attempts[0].Finish(map[string]interface{}{
+		"output": []string{"z"},
+	})
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "two")
+	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "z")
+
+	err = attempts[0].Finish(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "one")
+	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "b")
+
+	err = attempts[0].Finish(map[string]interface{}{
+		"output": []string{"z"},
+	})
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 1)
+	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "two")
+	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "z")
+
+	err = attempts[0].Finish(map[string]interface{}{})
+	c.Assert(err, check.IsNil)
+
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Assert(attempts, check.HasLen, 0)
+}
+
 // TestAttemptExpiration validates that an attempt's status will switch
 // (on its own) to "expired" after a timeout.
 func (s *Suite) TestAttemptExpiration(c *check.C) {

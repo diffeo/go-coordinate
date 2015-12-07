@@ -56,15 +56,32 @@ func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 		namespace: ns,
 		name:      name,
 	}
-	row := theDB(ns).QueryRow("SELECT work_spec.id FROM work_spec WHERE namespace_id=$1 AND name=$2", ns.id, name)
-	err := row.Scan(&spec.id)
-	if err == sql.ErrNoRows {
-		return nil, coordinate.ErrNoSuchWorkSpec{Name: name}
-	}
+	err := withTx(ns, func(tx *sql.Tx) error {
+		return txWorkSpec(tx, &spec)
+	})
 	if err != nil {
 		return nil, err
 	}
 	return &spec, nil
+}
+
+// txWorkSpec retrieves a work spec within the context of an existing
+// transaction.  The workSpec object must be populated with its
+// "namespace" and "name" fields.
+func txWorkSpec(tx *sql.Tx, spec *workSpec) error {
+	row := tx.QueryRow(buildSelect([]string{
+		workSpecID,
+	}, []string{
+		workSpecTable,
+	}, []string{
+		inThisNamespace,
+		workSpecName + "=$2",
+	}), spec.namespace.id, spec.name)
+	err := row.Scan(&spec.id)
+	if err == sql.ErrNoRows {
+		return coordinate.ErrNoSuchWorkSpec{Name: spec.name}
+	}
+	return err
 }
 
 func (ns *namespace) DestroyWorkSpec(name string) error {

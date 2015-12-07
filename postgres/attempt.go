@@ -188,21 +188,18 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			return nil // no longer active attempt
 		}
 
-		// TODO(dmaze): This should become a join in the
-		// previous query
-		query = buildSelect([]string{
-			workSpecID,
-		}, []string{
-			workSpecTable,
-		}, []string{
-			inThisNamespace,
-			workSpecName + "=$2",
-		})
-		row = tx.QueryRow(query, a.unit.spec.namespace.id, nextWorkSpec)
-		var nextWorkSpecID int
-		err = row.Scan(&nextWorkSpecID)
+		// Ideally we'd extract the work spec ID in the previous
+		// query with a join too; but this helps share some code
+		spec := workSpec{
+			namespace: a.unit.spec.namespace,
+			name:      nextWorkSpec,
+		}
+		err = txWorkSpec(tx, &spec)
 		if err != nil {
-			return err
+			if _, present := err.(coordinate.ErrNoSuchWorkSpec); !present {
+				return nil // "then" work spec doesn't exist
+			}
+			return err // something else went wrong
 		}
 
 		units := coordinate.ExtractWorkUnitOutput(data["output"])
@@ -215,7 +212,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			if err != nil {
 				return err
 			}
-			_, err = tx.Exec("INSERT INTO "+workUnitTable+"(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4)", nextWorkSpecID, name, dataBytes, item.Priority)
+			_, err = spec.addWorkUnit(tx, name, dataBytes, item.Priority)
 			if err != nil {
 				return err
 			}
