@@ -115,3 +115,10 @@ func (s *PythonSuite) TestUnlockSanity(c *check.C) {
 	c.Check(ok, check.Equals, true)
 	c.Check(msg, check.Equals, "")
 }
+
+func (s *PythonSuite) TestReadlockNotNil(c *check.C) {
+	locks, err := s.JobServer.Readlock([]interface{}{})
+	c.Assert(err, check.IsNil)
+	c.Check(locks, check.NotNil)
+	c.Check(locks, check.HasLen, 0)
+}

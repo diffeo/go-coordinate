@@ -278,6 +278,7 @@ func (jobs *JobServer) Renew(lockerID string, timeout int, keys interface{}) (ok
 // Readlock determines the current owner, if any, of a list of key paths.
 // The return value is a list of either string owner names or nil.
 func (jobs *JobServer) Readlock(keys interface{}) (result []interface{}, err error) {
+	result = make([]interface{}, 0)
 	err = jobs.doLock(keys, func(_ time.Time, keys [][]interface{}) error {
 		for _, key := range keys {
 			node := jobs.locks.Path(key, false)
