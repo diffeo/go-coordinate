@@ -141,6 +141,15 @@ type UpdateWorkUnitOptions struct {
 	WorkerID string `mapstructure:"worker_id"`
 }
 
+// LeaseDuration converts the requested LeaseTime to a duration.
+func (opts UpdateWorkUnitOptions) LeaseDuration() time.Duration {
+	leaseTime := opts.LeaseTime
+	if leaseTime < 1 {
+		leaseTime = 300
+	}
+	return time.Duration(leaseTime) * time.Second
+}
+
 // UpdateWorkUnit causes some state change in a work unit.  If the
 // work unit is pending, this is the principal interface to complete
 // or renew it; if it is already complete this can cause it to be
@@ -200,14 +209,32 @@ func (jobs *JobServer) UpdateWorkUnit(
 	}
 	if err == nil && attempt == nil {
 		// Caller is trying to manipulate an AVAILABLE work
-		// unit.  Cowardly refuse to start a new attempt on
-		// their behalf, or to update the persistent work unit
-		// data this way.  (In theory there's no reason we
-		// *couldn't* do either, though I'm not aware of any
-		// callers that do; add_work_unit will replace
-		// existing work units and is the more typical way to
-		// refresh data.)
-		err = errors.New("update_work_unit will not adjust an available work unit")
+		// unit.  Either they are trying to change the work
+		// unit data in place, or they are trying to jump a
+		// work unit directly to a completed state.  (The
+		// latter is possible during the Python work unit
+		// parent cleanup, if the timing is bad.)
+		if uwuOptions.Status == Available || uwuOptions.Status == 0 {
+			// The only thing we are doing is changing the
+			// work unit data.
+			if uwuOptions.Data != nil {
+				priority, err := workUnit.Priority()
+				if err == nil {
+					_, err = workSpec.AddWorkUnit(workUnit.Name(), uwuOptions.Data, priority)
+				}
+				if err == nil {
+					changed = true
+				}
+			}
+			return changed && err == nil, "", err
+		}
+		// Otherwise we are trying to transition to another
+		// state; so force-create an attempt.
+		worker, err := jobs.Namespace.Worker(uwuOptions.WorkerID)
+		if err == nil {
+			attempt, err = worker.MakeAttempt(workUnit, uwuOptions.LeaseDuration())
+			status = coordinate.Pending
+		}
 	}
 	if err == nil {
 		switch status {
@@ -215,7 +242,7 @@ func (jobs *JobServer) UpdateWorkUnit(
 			changed = true // or there's an error
 			switch uwuOptions.Status {
 			case 0, Pending:
-				err = uwuRenew(attempt, uwuOptions)
+				err = attempt.Renew(uwuOptions.LeaseDuration(), uwuOptions.Data)
 			case Available:
 				err = attempt.Expire(uwuOptions.Data)
 			case Finished:
@@ -266,13 +293,4 @@ func (jobs *JobServer) UpdateWorkUnit(
 		}
 	}
 	return changed && err == nil, "", err
-}
-
-func uwuRenew(attempt coordinate.Attempt, uwuOptions UpdateWorkUnitOptions) error {
-	leaseTime := uwuOptions.LeaseTime
-	if leaseTime < 1 {
-		leaseTime = 300
-	}
-	extendDuration := time.Duration(leaseTime) * time.Second
-	return attempt.Renew(extendDuration, uwuOptions.Data)
 }
