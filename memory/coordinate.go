@@ -81,6 +81,17 @@ func (c *memCoordinate) Namespace(namespace string) (coordinate.Namespace, error
 	return ns, nil
 }
 
+func (c *memCoordinate) Namespaces() (map[string]coordinate.Namespace, error) {
+	globalLock(c)
+	defer globalUnlock(c)
+
+	result := make(map[string]coordinate.Namespace)
+	for name, namespace := range c.namespaces {
+		result[name] = namespace
+	}
+	return result, nil
+}
+
 func (c *memCoordinate) Coordinate() *memCoordinate {
 	return c
 }

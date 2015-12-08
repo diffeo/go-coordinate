@@ -5,10 +5,11 @@ package postgres
 
 const (
 	// SQL table names:
-	attemptTable  = "attempt"
-	workerTable   = "worker"
-	workSpecTable = "work_spec"
-	workUnitTable = "work_unit"
+	attemptTable   = "attempt"
+	namespaceTable = "namespace"
+	workerTable    = "worker"
+	workSpecTable  = "work_spec"
+	workUnitTable  = "work_unit"
 
 	// SQL column names:
 	attemptID                   = attemptTable + ".id"
@@ -20,6 +21,8 @@ const (
 	attemptEndTime              = attemptTable + ".end_time"
 	attemptExpirationTime       = attemptTable + ".expiration_time"
 	attemptActive               = attemptTable + ".active"
+	namespaceName               = namespaceTable + ".name"
+	namespaceID                 = namespaceTable + ".id"
 	workerID                    = workerTable + ".id"
 	workerName                  = workerTable + ".name"
 	workerParent                = workerTable + ".parent"

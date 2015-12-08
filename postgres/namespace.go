@@ -37,6 +37,34 @@ func (c *pgCoordinate) Namespace(name string) (coordinate.Namespace, error) {
 	return &ns, nil
 }
 
+func (c *pgCoordinate) Namespaces() (map[string]coordinate.Namespace, error) {
+	result := make(map[string]coordinate.Namespace)
+	err := withTx(c, func(tx *sql.Tx) error {
+		rows, err := tx.Query(buildSelect([]string{
+			namespaceName,
+			namespaceID,
+		}, []string{
+			namespaceTable,
+		}, []string{}))
+		if err != nil {
+			return err
+		}
+		return scanRows(rows, func() error {
+			ns := namespace{coordinate: c}
+			err := rows.Scan(&ns.name, &ns.id)
+			if err != nil {
+				return err
+			}
+			result[ns.name] = &ns
+			return nil
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 // coordinate.Namespace interface:
 
 func (ns *namespace) Name() string {

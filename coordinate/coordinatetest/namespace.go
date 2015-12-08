@@ -13,6 +13,19 @@ func (s *Suite) TestNamespaceTrivial(c *check.C) {
 	c.Assert(s.Namespace.Name(), check.Equals, c.TestName())
 }
 
+// TestNamespaces does some basic tests on the namespace list call.
+// If this is run against a shared server, it may not be possible to
+// assert that no namespaces beyond the specific test namespace exist,
+// so this only verifies that the requested namespace is present.
+func (s *Suite) TestNamespaces(c *check.C) {
+	namespaces, err := s.Coordinate.Namespaces()
+	c.Assert(err, check.IsNil)
+	namespace, present := namespaces[s.Namespace.Name()]
+	c.Assert(present, check.Equals, true)
+	c.Assert(namespace, check.NotNil)
+	c.Check(namespace.Name(), check.Equals, s.Namespace.Name())
+}
+
 // TestSpecCreateDestroy performs basic work spec lifetime tests.
 func (s *Suite) TestSpecCreateDestroy(c *check.C) {
 	var (

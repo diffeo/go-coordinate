@@ -24,6 +24,9 @@ type Coordinate interface {
 	// Coordinate implementations such as the Python one that do
 	// not use namespaces pass an empty string here.
 	Namespace(namespace string) (Namespace, error)
+
+	// Namespaces retrieves a map of all known namespaces.
+	Namespaces() (map[string]Namespace, error)
 }
 
 // Namespace is a single application's state within Coordinate.  A
