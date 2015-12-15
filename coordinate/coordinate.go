@@ -107,7 +107,7 @@ type WorkSpecMeta struct {
 	// if this work spec has higher priority than another then this
 	// work spec will always run before that other one.  Default
 	// priority is the "priority" field in the work spec data, or 0.
-	Priority int
+	Priority int `json:"priority"`
 
 	// Weight specifies the relative weight of this work spec: if
 	// this work spec's priority is twice another one's, then the
@@ -116,29 +116,29 @@ type WorkSpecMeta struct {
 	// weight is the "weight" field in the work spec data, or 20
 	// minus the "nice" field in the work spec data, defaulting
 	// to 20 if neither field is specified at all.
-	Weight int
+	Weight int `json:"weight"`
 
 	// Paused indicates whether this work unit can generate more
 	// work units.  Default is the value of the work spec
 	// "disabled" flag, if set, otherwise false.
-	Paused bool
+	Paused bool `json:"paused"`
 
 	// Continuous indicates whether the system can generate new
 	// artificial work units for this work spec if there is no
 	// other work to do.  If the work spec data does not set the
 	// "continuous" flag to true, setting this field has no effect.
 	// Defaults to the value of CanBeContinuous.
-	Continuous bool
+	Continuous bool `json:"continuous"`
 
 	// CanBeContinuous indicates whether the work spec allows
 	// continuous work unit generation.  This is directly set from
 	// the "continuous" flag in the work spec data, and
 	// WorkSpec.SetMeta() will not change this.
-	CanBeContinuous bool
+	CanBeContinuous bool `json:"can_be_continuous"`
 
 	// MinMemoryGb specifies the minimum memory required to run
 	// this job (or 0 for unlimited).
-	MinMemoryGb float64
+	MinMemoryGb float64 `json:"min_memory_gb,omitempty"`
 
 	// Interval specifies the minimum time duration before
 	// generating another continuous work unit.  Setting this in
@@ -147,14 +147,14 @@ type WorkSpecMeta struct {
 	// Defaults to the value of the "interval" field in the data
 	// in seconds, or 0 (i.e., generate more continuous work units
 	// immediately) if absent.
-	Interval time.Duration
+	Interval time.Duration `json:"interval"`
 
 	// NextContinuous specifies the earliest time a new continuous
 	// work unit could be generated.  This is updated every time
 	// a new continuous work unit is produced.  Defaults to a zero
 	// time, which should always mean continuous work units could be
 	// immediately generated on startup.
-	NextContinuous time.Time
+	NextContinuous time.Time `json:"next_continuous"`
 
 	// MaxRunning specifies the maximum number of concurrent work
 	// units of this work spec that are allowed to execute across
@@ -163,7 +163,7 @@ type WorkSpecMeta struct {
 	// Defaults to the value of the "max_running" field in the
 	// work spec data, or 0.  A zero value is interpreted as
 	// "unlimited".
-	MaxRunning int
+	MaxRunning int `json:"max_running"`
 
 	// MaxAttemptsReturned specifies the maximum number of
 	// attempts that can be produced by Worker.RequestAttempts().
@@ -171,7 +171,7 @@ type WorkSpecMeta struct {
 	// MaxRunning work units.  Defaults to the value of the
 	// "max_getwork" field in the work spec data, or 0.  A zero
 	// value is interpreted as "unlimited".
-	MaxAttemptsReturned int
+	MaxAttemptsReturned int `json:"max_attempts_returned"`
 
 	// NextWorkSpecName gives the name of a work spec that runs
 	// after this one.  If this is a non-empty string, then when
@@ -180,7 +180,7 @@ type WorkSpecMeta struct {
 	// work spec.  WorkSpec.SetMeta() ignores this field.
 	// Defaults to the value of the "then" field in the work spec
 	// data, or empty string.
-	NextWorkSpecName string
+	NextWorkSpecName string `json:"next_work_spec_name"`
 
 	// AvailableCount indicates the number of work units in this
 	// work spec that could be returned from a
@@ -189,7 +189,7 @@ type WorkSpecMeta struct {
 	// expired or retryable.  WorkSpec.Meta() only returns this
 	// field if its "withCounts" parameter is true.
 	// WorkSpec.SetMeta() ignores this field.
-	AvailableCount int
+	AvailableCount int `json:"available_count"`
 
 	// PendingCount indicates the number of work units in this
 	// work spec that are currently have an active attempt that is
@@ -197,7 +197,7 @@ type WorkSpecMeta struct {
 	// this work unit.  WorkSpec.Meta() only returns this field
 	// if its "withCounts" parameter is true.  WorkSpec.SetMeta()
 	// ignores this field.
-	PendingCount int
+	PendingCount int `json:"pending_count"`
 }
 
 // WorkUnitStatus defines a high-level status of a work unit.
@@ -396,20 +396,20 @@ type AttemptRequest struct {
 	// to the returned work unit.  If zero, ignore this
 	// constraint.  This is compared with the "min_gb" field in
 	// the work spec.
-	AvailableGb float64
+	AvailableGb float64 `json:"available_gb"`
 
 	// Lifetime is the minimum requested time to perform this
 	// attempt; it must be completed or renewed by this deadline.
 	// If zero, use a system-provided default, generally 15
 	// minutes.
-	Lifetime time.Duration
+	Lifetime time.Duration `json:"lifetime"`
 
 	// NumberOfWorkUnits is the number of work units requested.
 	// If zero, actually use one.  All of the returned attempts
 	// will be for work units in the same work spec.  Fewer work
 	// units, maybe as few as zero, can be returned if they are
 	// not available.
-	NumberOfWorkUnits int
+	NumberOfWorkUnits int `json:"number_of_work_units"`
 
 	// WorkSpecs limits this request to only consider specific
 	// work spec(s).  If this is nil or an empty slice, any work
@@ -418,7 +418,7 @@ type AttemptRequest struct {
 	// these work specs do not exist.  This could cause no work
 	// units to be returned if none of the named work specs have
 	// available work units, even though other work specs do.
-	WorkSpecs []string
+	WorkSpecs []string `json:"work_specs"`
 }
 
 // A Worker is a process that is doing work.  Workers may be

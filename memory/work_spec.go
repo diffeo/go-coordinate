@@ -154,7 +154,7 @@ func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	defer globalUnlock(spec)
 	workUnit := spec.workUnits[name]
 	if workUnit == nil {
-		return nil, nil
+		return nil, coordinate.ErrNoSuchWorkUnit{Name: name}
 	}
 	return workUnit, nil
 }

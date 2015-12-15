@@ -177,7 +177,7 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 
 	endTime, err := attempt.EndTime()
 	c.Assert(err, check.IsNil)
-	c.Check(endTime, check.Equals, time.Time{})
+	c.Check(endTime, SameTime, time.Time{})
 
 	expirationTime, err := attempt.ExpirationTime()
 	c.Assert(err, check.IsNil)
@@ -201,7 +201,7 @@ func (s *Suite) TestAttemptMetadata(c *check.C) {
 
 	endTime, err = attempt.EndTime()
 	c.Assert(err, check.IsNil)
-	c.Check(endTime, check.Equals, time.Time{})
+	c.Check(endTime, SameTime, time.Time{})
 
 	expirationTime, err = attempt.ExpirationTime()
 	c.Assert(err, check.IsNil)
@@ -316,7 +316,7 @@ func (s *Suite) TestWorkUnitChaining(c *check.C) {
 	if _, ok = units["two_c"]; ok {
 		data, err = units["two_c"].Data()
 		c.Assert(err, check.IsNil)
-		c.Check(data, check.DeepEquals, map[string]interface{}{})
+		c.Check(data, check.HasLen, 0)
 	}
 
 	// Put the output in the original work unit data
@@ -461,7 +461,7 @@ func (s *Suite) TestChainingTwoStep(c *check.C) {
 	if unit, ok = units["\x01\x02\x03\x04"]; ok {
 		data, err = unit.Data()
 		c.Assert(err, check.IsNil)
-		c.Check(data, check.DeepEquals, map[string]interface{}{})
+		c.Check(data, check.HasLen, 0)
 
 		priority, err = unit.Priority()
 		c.Assert(err, check.IsNil)

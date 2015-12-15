@@ -48,8 +48,7 @@ func (s *Suite) TestTrivialWorkUnitFlow(c *check.C) {
 	c.Check(count, check.Equals, 1)
 
 	unit, err = spec.WorkUnit("unit")
-	c.Assert(err, check.IsNil)
-	c.Check(unit, check.IsNil)
+	c.Check(err, check.DeepEquals, coordinate.ErrNoSuchWorkUnit{Name: "unit"})
 
 	units, err = spec.WorkUnits(coordinate.WorkUnitQuery{})
 	c.Assert(err, check.IsNil)
@@ -302,7 +301,7 @@ func (s *Suite) TestCountWorkUnitStatus(c *check.C) {
 
 // checkWorkUnitOrder verifies that getting all of the work possible
 // retrieves work units in a specific order.
-func checkWorkUnitOrder(
+func (s *Suite) checkWorkUnitOrder(
 	c *check.C,
 	worker coordinate.Worker,
 	spec coordinate.WorkSpec,
@@ -310,6 +309,7 @@ func checkWorkUnitOrder(
 ) {
 	var processedUnits []string
 	for {
+		s.Clock.Add(time.Duration(5) * time.Second)
 		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 		c.Assert(err, check.IsNil)
 		if len(attempts) == 0 {
@@ -336,7 +336,7 @@ func (s *Suite) TestWorkUnitOrder(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 
-	checkWorkUnitOrder(c, worker, spec, "a", "b", "c")
+	s.checkWorkUnitOrder(c, worker, spec, "a", "b", "c")
 }
 
 // TestWorkUnitPriorityCtor tests that priorities passed in the work unit
@@ -361,7 +361,7 @@ func (s *Suite) TestWorkUnitPriorityCtor(c *check.C) {
 		c.Check(pri, check.Equals, unit.float64)
 	}
 
-	checkWorkUnitOrder(c, worker, spec, "b", "a", "c")
+	s.checkWorkUnitOrder(c, worker, spec, "b", "a", "c")
 }
 
 // TestWorkUnitPrioritySet tests two different ways of setting work unit
@@ -421,7 +421,7 @@ func (s *Suite) TestWorkUnitPrioritySet(c *check.C) {
 	c.Assert(err, check.IsNil)
 	c.Check(priority, check.Equals, 10.0)
 
-	checkWorkUnitOrder(c, worker, spec, "d", "c", "b", "a")
+	s.checkWorkUnitOrder(c, worker, spec, "d", "c", "b", "a")
 }
 
 // TestWorkUnitData validates that the system can store and update
@@ -504,6 +504,7 @@ func (s *Suite) TestContinuous(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	makeAttempt := func(expected int) {
+		s.Clock.Add(time.Duration(5) * time.Second)
 		attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 		c.Assert(err, check.IsNil)
 		c.Check(attempts, check.HasLen, expected)
@@ -602,12 +603,14 @@ func (s *Suite) TestMaxRunning(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// First call, nothing is pending, so we should get one back
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Check(attempts, check.HasLen, 1)
 
 	// While that is still running, do another request; since we
 	// have hit max_running we should get nothing back
+	s.Clock.Add(time.Duration(5) * time.Second)
 	a2, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Check(a2, check.HasLen, 0)
@@ -620,6 +623,7 @@ func (s *Suite) TestMaxRunning(c *check.C) {
 
 	// Now nothing is pending and we can ask for more; even if we
 	// ask for 20 we only get one
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
 		NumberOfWorkUnits: 20,
 	})
@@ -659,6 +663,7 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 
 	// Plain RequestAttempts should return "one" with the highest
 	// priority
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Check(attempts, check.HasLen, 1)
@@ -671,6 +676,7 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 	}
 
 	// If I request only "three" I should get only "three"
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"three"},
 	})
@@ -685,6 +691,7 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 	}
 
 	// Both "two" and "three" should give "two" with higher priority
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"three", "two"},
 	})
@@ -699,6 +706,7 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 	}
 
 	// "four" should just return nothing
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"four"},
 	})
@@ -710,6 +718,7 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 	}
 
 	// Empty list should query everything and get "one"
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{},
 	})

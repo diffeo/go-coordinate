@@ -67,3 +67,14 @@ type ErrNoSuchWorkSpec struct {
 func (err ErrNoSuchWorkSpec) Error() string {
 	return fmt.Sprintf("No such work spec %v", err.Name)
 }
+
+// ErrNoSuchWorkUnit is returned by WorkSpec.WorkUnit() and similar
+// functions that want to look up a work unit by name, but cannot find
+// it.
+type ErrNoSuchWorkUnit struct {
+	Name string
+}
+
+func (err ErrNoSuchWorkUnit) Error() string {
+	return fmt.Sprintf("No such work unit %q", err.Name)
+}

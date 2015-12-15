@@ -55,7 +55,10 @@ func (s *Suite) SetUpTest(c *check.C) {
 
 // TearDownTest destroys the namespace created in SetUpTest.
 func (s *Suite) TearDownTest(c *check.C) {
-	err := s.Namespace.Destroy()
+	var err error
+	if s.Namespace != nil {
+		err = s.Namespace.Destroy()
+	}
 	if err != nil {
 		c.Error(err)
 	}

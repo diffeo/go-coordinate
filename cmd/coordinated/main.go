@@ -22,6 +22,8 @@ func main() {
 
 	cborRPCBind := flag.String("cborrpc", ":5932",
 		"[ip]:port for CBOR-RPC interface")
+	httpBind := flag.String("http", ":5980",
+		"[ip]:port for HTTP REST interface")
 	backend := backend.Backend{Implementation: "memory", Address: ""}
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
 	config := flag.String("config", "", "global configuration YAML file")
@@ -41,6 +43,7 @@ func main() {
 	}
 
 	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind)
+	go ServeHTTP(coordinate, *httpBind)
 	select {}
 }
 

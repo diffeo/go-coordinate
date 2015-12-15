@@ -109,7 +109,7 @@ func (s *Suite) TestDefaultMeta(c *check.C) {
 	c.Check(meta.Continuous, check.Equals, false)
 	c.Check(meta.CanBeContinuous, check.Equals, false)
 	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
@@ -147,7 +147,7 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 	c.Check(meta.Continuous, check.Equals, true)
 	c.Check(meta.CanBeContinuous, check.Equals, true)
 	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
@@ -176,7 +176,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.Continuous, check.Equals, false)
 	c.Check(meta.CanBeContinuous, check.Equals, false)
 	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
@@ -205,7 +205,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.Continuous, check.Equals, true)
 	c.Check(meta.CanBeContinuous, check.Equals, true)
 	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
@@ -299,7 +299,7 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.Continuous, check.Equals, true)
 	c.Check(meta.CanBeContinuous, check.Equals, true)
 	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 0)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
@@ -330,7 +330,7 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	// Cannot clear "can be continuous" flag
 	c.Check(meta.CanBeContinuous, check.Equals, true)
 	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, check.Equals, time.Time{})
+	c.Check(meta.NextContinuous, SameTime, time.Time{})
 	c.Check(meta.MaxRunning, check.Equals, 10)
 	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
 	// Cannot change following work spec
@@ -389,6 +389,7 @@ func (s *Suite) TestMetaCounts(c *check.C) {
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Assert(attempts, check.HasLen, 1)
@@ -400,6 +401,7 @@ func (s *Suite) TestMetaCounts(c *check.C) {
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Assert(attempts, check.HasLen, 1)
@@ -411,6 +413,7 @@ func (s *Suite) TestMetaCounts(c *check.C) {
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
+	s.Clock.Add(time.Duration(5) * time.Second)
 	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
 	c.Assert(attempts, check.HasLen, 1)

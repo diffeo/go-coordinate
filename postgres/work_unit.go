@@ -74,7 +74,7 @@ func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	row := theDB(spec).QueryRow("SELECT id FROM work_unit WHERE work_spec_id=$1 AND name=$2", spec.id, name)
 	err := row.Scan(&unit.id)
 	if err == sql.ErrNoRows {
-		return nil, nil
+		return nil, coordinate.ErrNoSuchWorkUnit{Name: name}
 	}
 	if err != nil {
 		return nil, err

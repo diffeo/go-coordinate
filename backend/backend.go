@@ -10,6 +10,7 @@ import (
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/memory"
 	"github.com/diffeo/go-coordinate/postgres"
+	"github.com/diffeo/go-coordinate/restclient"
 	"strings"
 )
 
@@ -45,6 +46,8 @@ type Backend struct {
 // errors (invalid connection string, etc.)
 func (b *Backend) Coordinate() (coordinate.Coordinate, error) {
 	switch b.Implementation {
+	case "http", "https":
+		return restclient.New(b.String())
 	case "memory":
 		return memory.New(), nil
 	case "postgres":

@@ -163,9 +163,9 @@ Coordinate system.  `cborrpc` provides the underlying wire transport.
 slightly different from the Python Coordinate API; in particular, an
 Attempt object records a single worker working on a single work unit,
 allowing the history of workers and individual work units to be
-tracked.  `memory` is the in-memory implementation of this API, and
-`postgres` uses PostgreSQL.  `backend` provides a command-line option
-to choose a backend.
+tracked.  `memory` is the in-memory implementation of this API,
+`postgres` uses PostgreSQL, and `restclient` talks to a REST server.
+`backend` provides a command-line option to choose a backend.
 
 Future
 ------
@@ -174,7 +174,3 @@ The `Namespace.Workers()` call simply iterates all known workers, but
 the implementation of the Python Coordinate worker will generate an
 extremely large number of these.  This call is subject to unspecified
 future change.
-
-There is no way for Go code to contact a remote Coordinate daemon of
-any form.  This will likely be implemented by publishing the Go
-Coordinate API as a REST interface, and adding a REST callout backend.
