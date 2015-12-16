@@ -88,9 +88,7 @@ func handleConnection(conn net.Conn, jobd *jobserver.JobServer, cbor *codec.Cbor
 			fmt.Printf("Error reading message: %v\n", err)
 			return
 		}
-		fmt.Printf("Request: %v\n", request)
 		response := doRequest(jobdv, request)
-		fmt.Printf("Response: %v\n", response)
 		err = encoder.Encode(response)
 		if err != nil {
 			fmt.Printf("Error encoding response: %v\n", err)
