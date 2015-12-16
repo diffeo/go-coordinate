@@ -160,3 +160,29 @@ func LimitMetasToNames(metas map[string]*WorkSpecMeta, names []string) map[strin
 	}
 	return newMetas
 }
+
+// LimitMetasToRuntimes returns a copy of a metadata map limited to
+// specific runtimes.  If runtimes is empty, metas is returned
+// unmodified; otherwise a new map is returned where the keys and
+// values are identical to meta, except that any pairs where the
+// meta.Runtime value is not exactly equal to one of runtimes are
+// not copied into the output.
+func LimitMetasToRuntimes(metas map[string]*WorkSpecMeta, runtimes []string) map[string]*WorkSpecMeta {
+	if len(runtimes) == 0 {
+		return metas
+	}
+	newMetas := make(map[string]*WorkSpecMeta)
+	for name, meta := range metas {
+		found := false
+		for _, runtime := range runtimes {
+			if meta.Runtime == runtime {
+				found = true
+				break
+			}
+		}
+		if found {
+			newMetas[name] = meta
+		}
+	}
+	return newMetas
+}

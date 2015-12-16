@@ -732,3 +732,131 @@ func (s *Suite) TestRequestSpecificSpec(c *check.C) {
 		c.Assert(err, check.IsNil)
 	}
 }
+
+// TestByRuntime creates two work specs with different runtimes, and
+// validates that requests that want a specific runtime get it.
+func (s *Suite) TestByRuntime(c *check.C) {
+	// The specific thing we'll simulate here is one Python
+	// worker, using the jobserver interface, with an empty
+	// runtime string, plus one Go worker, using the native API,
+	// with a "go" runtime.
+	var (
+		err          error
+		worker       coordinate.Worker
+		pSpec, gSpec coordinate.WorkSpec
+		pUnit, gUnit coordinate.WorkUnit
+		attempts     []coordinate.Attempt
+	)
+
+	worker, err = s.Namespace.Worker("worker")
+	c.Assert(err, check.IsNil)
+
+	pSpec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "p",
+	})
+	c.Assert(err, check.IsNil)
+	pUnit, err = pSpec.AddWorkUnit("p", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	gSpec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name":    "g",
+		"runtime": "go",
+	})
+	c.Assert(err, check.IsNil)
+	gUnit, err = gSpec.AddWorkUnit("g", map[string]interface{}{}, 0.0)
+	c.Assert(err, check.IsNil)
+
+	// If we use default settings for RequestAttempts, we should
+	// get back both work units
+	s.Clock.Add(time.Duration(5) * time.Second)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	for _, attempt := range attempts {
+		err = attempt.Finish(map[string]interface{}{})
+		c.Assert(err, check.IsNil)
+	}
+	if len(attempts) == 1 {
+		wasP := attempts[0].WorkUnit().Name() == "p"
+
+		// Get more attempts
+		s.Clock.Add(time.Duration(5) * time.Second)
+		attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+		c.Assert(err, check.IsNil)
+		c.Check(attempts, check.HasLen, 1)
+		for _, attempt := range attempts {
+			err = attempt.Finish(map[string]interface{}{})
+			c.Assert(err, check.IsNil)
+		}
+
+		if len(attempts) == 1 {
+			// Should have gotten the other work spec
+			if wasP {
+				c.Check(attempts[0].WorkUnit().Name(), check.Equals, "g")
+			} else {
+				c.Check(attempts[0].WorkUnit().Name(), check.Equals, "p")
+			}
+		}
+
+		// Now there shouldn't be anything more
+		s.Clock.Add(time.Duration(5) * time.Second)
+		attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
+		c.Assert(err, check.IsNil)
+		c.Check(attempts, check.HasLen, 0)
+		for _, attempt := range attempts {
+			err = attempt.Finish(map[string]interface{}{})
+			c.Assert(err, check.IsNil)
+		}
+	}
+
+	// Reset the world
+	err = pUnit.ClearActiveAttempt()
+	c.Assert(err, check.IsNil)
+	err = gUnit.ClearActiveAttempt()
+	c.Assert(err, check.IsNil)
+
+	// What we expect to get from jobserver
+	s.Clock.Add(time.Duration(5) * time.Second)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		Runtimes: []string{""},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) == 1 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "p")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(map[string]interface{}{})
+		c.Assert(err, check.IsNil)
+	}
+
+	// A more sophisticated Python check
+	s.Clock.Add(time.Duration(5) * time.Second)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		Runtimes: []string{"python", "python_2", "python_2.7", ""},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) == 1 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "p")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(map[string]interface{}{})
+		c.Assert(err, check.IsNil)
+	}
+
+	// What we expect to get from Go land
+	s.Clock.Add(time.Duration(5) * time.Second)
+	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{
+		Runtimes: []string{"go"},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(attempts, check.HasLen, 1)
+	if len(attempts) == 1 {
+		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "g")
+	}
+	for _, attempt := range attempts {
+		err = attempt.Retry(map[string]interface{}{})
+		c.Assert(err, check.IsNil)
+	}
+}

@@ -67,6 +67,10 @@ type WorkSpecData struct {
 	// "outputs", these will be translated into new work units in
 	// the Then work spec.
 	Then string
+
+	// Runtime specifies the name and possibly version of a
+	// language runtime required to run this work spec.
+	Runtime string
 }
 
 // ExtractWorkSpecMeta fills in as much of a WorkSpecMeta object as
@@ -115,21 +119,10 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 		meta.MaxRunning = data.MaxRunning
 		meta.MaxAttemptsReturned = data.MaxGetwork
 		meta.NextWorkSpecName = data.Then
+		meta.Runtime = data.Runtime
 	}
 	return
 }
-
-// TODO(dmaze): YOU ARE HERE
-//
-// scp sends back
-//
-// u'output': [b'key',
-//             (b'key', {}, {u'priority': 0L})]
-//
-// which is the usual awful mix of parts, including duplicating the key.
-// We can't usefully decode this as anything other than a []interface{}
-// and then try to pattern-match each item as either a plain string
-// or a tuple (which can be either a 2- or 3-tuple).
 
 // AddWorkUnitItem describes a single work unit to be added.  This is
 // returned from ExtractWorkUnitOutput.  When it appears in a work

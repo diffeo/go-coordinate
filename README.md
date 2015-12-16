@@ -88,6 +88,32 @@ the wrong type; if you do create a work spec with a non-UTF-8 byte
 string name, the server will eventually return it as an invalid
 Unicode-tagged string.
 
+### Runtimes ###
+
+A work spec may include a `runtime` key.  This is a single string,
+intended to name a language runtime such as "go", "python_2", _etc._
+If no runtime is specified, this defaults to an empty string.  The
+Python-compatible interface will only return work units from work
+specs with an empty runtime string.  The Go API lets you specify what
+runtimes you will accept.
+
+This means that you can run both Python and Go-based work, using the
+[Python coordinate package](http://github.com/diffeo/coordinate)
+unmodified for its Python worker and custom code for a Go worker,
+using work specs like (`coordinate flow` syntax):
+
+```yaml
+a_python_spec:
+  module: python.module
+  run_function: coordinate_run
+  ...
+
+a_go_spec:
+  runtime: go
+  task: task_name
+  ...
+```
+
 ### Data Types and Data Dictionaries ###
 
 Work specs, work units, and workers all have associated data

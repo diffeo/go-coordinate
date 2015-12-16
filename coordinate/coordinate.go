@@ -198,6 +198,15 @@ type WorkSpecMeta struct {
 	// if its "withCounts" parameter is true.  WorkSpec.SetMeta()
 	// ignores this field.
 	PendingCount int `json:"pending_count"`
+
+	// Runtime names the runtime environment this work spec
+	// expects to have.  This should generally be a short
+	// description such as "python_2", "go", or "java_1.7".
+	// WorkSpec.SetMeta() ignores this field.  Defaults to the
+	// value of the "runtime" field in the work spec data, or
+	// empty string.  For backwards compatibility, empty string
+	// should be interpreted as "python_2".
+	Runtime string `json:"runtime"`
 }
 
 // WorkUnitStatus defines a high-level status of a work unit.
@@ -304,7 +313,7 @@ type WorkSpec interface {
 	AddWorkUnit(name string, data map[string]interface{}, priority float64) (WorkUnit, error)
 
 	// WorkUnit retrieves a single work unit by name.  If it does
-	// not exist, return nil (not an error).
+	// not exist, return ErrNoSuchWorkUnit.
 	WorkUnit(name string) (WorkUnit, error)
 
 	// WorkUnits retrieves any number of work units by a query.
@@ -419,6 +428,16 @@ type AttemptRequest struct {
 	// units to be returned if none of the named work specs have
 	// available work units, even though other work specs do.
 	WorkSpecs []string `json:"work_specs"`
+
+	// Runtimes limits this request to only allow specific
+	// language runtimes.  If this is nil or an empty slice, any
+	// runtime is acceptable; otherwise only work units from work
+	// specs whose WorkSpecMeta.Runtime exactly matches one of
+	// these strings will be returned.  This could cause no work
+	// units to be returned if none of the work specs with any of
+	// these runtimes have work, even though other work specs that
+	// use other runtimes do.
+	Runtimes []string `json:"runtimes"`
 }
 
 // A Worker is a process that is doing work.  Workers may be

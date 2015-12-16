@@ -390,6 +390,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		// Now pick something (this is stateless, but see TODO above)
 		// (If this picks nothing, we're done)
 		metas = coordinate.LimitMetasToNames(metas, req.WorkSpecs)
+		metas = coordinate.LimitMetasToRuntimes(metas, req.Runtimes)
 		now := w.Coordinate().clock.Now()
 		name, err = coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 		if err == coordinate.ErrNoWork {

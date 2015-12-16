@@ -94,6 +94,7 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	// Preserve immutable fields (taking advantage of meta pass-by-value)
 	meta.CanBeContinuous = spec.meta.CanBeContinuous
 	meta.NextWorkSpecName = spec.meta.NextWorkSpecName
+	meta.Runtime = spec.meta.Runtime
 
 	// If this cannot be continuous, force-clear that flag
 	if !meta.CanBeContinuous {

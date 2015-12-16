@@ -115,6 +115,7 @@ func (s *Suite) TestDefaultMeta(c *check.C) {
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	c.Check(meta.Runtime, check.Equals, "")
 }
 
 // TestPrefilledMeta tests that WorkSpec.Meta() fills in correctly from
@@ -136,6 +137,7 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 		"max_running": 10,
 		"max_getwork": 1,
 		"then":        "spec2",
+		"runtime":     "go",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -153,6 +155,7 @@ func (s *Suite) TestPrefilledMeta(c *check.C) {
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	c.Check(meta.Runtime, check.Equals, "go")
 }
 
 // TestSetDataSetsMeta tests that...yeah
@@ -182,6 +185,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	c.Check(meta.Runtime, check.Equals, "")
 
 	err = spec.SetData(map[string]interface{}{
 		"name":        "spec",
@@ -194,6 +198,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 		"max_running": 10,
 		"max_getwork": 1,
 		"then":        "spec2",
+		"runtime":     "go",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -211,6 +216,7 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	c.Check(meta.Runtime, check.Equals, "go")
 }
 
 // TestNiceWeight tests the "weight = 20-nice" rule.
@@ -305,6 +311,7 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	c.Check(meta.NextWorkSpecName, check.Equals, "")
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	c.Check(meta.Runtime, check.Equals, "")
 
 	err = spec.SetMeta(coordinate.WorkSpecMeta{
 		Priority:            10,
@@ -318,6 +325,7 @@ func (s *Suite) TestSetMeta(c *check.C) {
 		NextWorkSpecName:    "then",
 		AvailableCount:      100,
 		PendingCount:        50,
+		Runtime:             "go",
 	})
 	c.Assert(err, check.IsNil)
 
@@ -338,6 +346,8 @@ func (s *Suite) TestSetMeta(c *check.C) {
 	// Cannot set the counts
 	c.Check(meta.AvailableCount, check.Equals, 0)
 	c.Check(meta.PendingCount, check.Equals, 0)
+	// Cannot change the language runtime
+	c.Check(meta.Runtime, check.Equals, "")
 }
 
 // TestMetaContinuous specifically checks that you cannot enable the

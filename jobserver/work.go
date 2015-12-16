@@ -72,6 +72,7 @@ func (jobs *JobServer) GetWork(workerID string, options map[string]interface{}) 
 		}
 		req := coordinate.AttemptRequest{
 			NumberOfWorkUnits: gwOptions.MaxJobs,
+			Runtimes:          []string{""},
 		}
 		attempts, err = worker.RequestAttempts(req)
 	}

@@ -41,6 +41,7 @@ const (
 	workSpecMaxRunning          = workSpecTable + ".max_running"
 	workSpecMaxAttemptsReturned = workSpecTable + ".max_attempts_returned"
 	workSpecNextWorkSpec        = workSpecTable + ".next_work_spec_name"
+	workSpecRuntime             = workSpecTable + ".runtime"
 	workUnitID                  = workUnitTable + ".id"
 	workUnitName                = workUnitTable + ".name"
 	workUnitData                = workUnitTable + ".data"
