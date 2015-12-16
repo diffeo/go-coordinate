@@ -66,6 +66,9 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, pri
 		row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataBytes, priority)
 		err = row.Scan(&unit.id)
 	}
+	if err != nil {
+		return nil, err
+	}
 	return &unit, nil
 }
 
