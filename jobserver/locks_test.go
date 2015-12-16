@@ -122,3 +122,10 @@ func (s *PythonSuite) TestReadlockNotNil(c *check.C) {
 	c.Check(locks, check.NotNil)
 	c.Check(locks, check.HasLen, 0)
 }
+
+func (s *PythonSuite) TestUnlockNotLocked(c *check.C) {
+	keys := []interface{}{[]interface{}{"foo"}, []interface{}{"bar"}}
+	ok, _, err := s.JobServer.Unlock("id", keys)
+	c.Assert(err, check.IsNil)
+	c.Check(ok, check.Equals, false)
+}

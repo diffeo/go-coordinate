@@ -299,7 +299,10 @@ func (jobs *JobServer) Unlock(lockerID string, keys interface{}) (ok bool, msg s
 	err = jobs.doLock(keys, func(_ time.Time, keys [][]interface{}) error {
 		for _, key := range keys {
 			node := jobs.locks.Path(key, false)
-			if node == nil || node.Deadline.IsZero() || node.Owner != lockerID {
+			if node == nil {
+				msg = fmt.Sprintf("%v is not held", key)
+				return nil
+			} else if node.Deadline.IsZero() || node.Owner != lockerID {
 				msg = fmt.Sprintf("%v is held by %v", key, node.Owner)
 				return nil
 			}
