@@ -34,6 +34,24 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, priority float64) (*workUnit, error) {
 	unit := workUnit{spec: spec, name: name}
 
+	// Lock the whole work unit table.
+	//
+	// This is a little unfortunate.  The problem we run into is
+	// that SELECT ... FOR UPDATE works fine if the row already
+	// exists, but if it doesn't, then nothing gets locked, and so
+	// this function can hit a constraint violation if two
+	// concurrent calls both SELECT, find nothing, and INSERT the
+	// same work unit.
+	//
+	// Other approaches to this include making transactions
+	// SERIALIZABLE (which causes surprisingly many issues; but
+	// those should probably be addressed too) and trapping the
+	// constraint violation after the INSERT.
+	_, err := tx.Exec("LOCK TABLE " + workUnitTable + " IN SHARE ROW EXCLUSIVE MODE")
+	if err != nil {
+		return nil, err
+	}
+
 	// Does the unit already exist?
 	query := buildSelect([]string{
 		workUnitID,
@@ -46,7 +64,7 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, pri
 	}) + " FOR UPDATE OF " + workUnitTable
 	row := tx.QueryRow(query, spec.id, name)
 	var status sql.NullString
-	err := row.Scan(&unit.id, &status)
+	err = row.Scan(&unit.id, &status)
 	if err == nil {
 		// The unit already exists and we've found its data
 		isPending := status.Valid && (status.String == "pending")

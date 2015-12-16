@@ -159,6 +159,24 @@ func (s *Suite) TestConcurrentExecution(c *check.C) {
 	}
 }
 
+// TestAddSameUnit creates the same work unit many times in parallel
+// and checks for errors.
+func (s *Suite) TestAddSameUnit(c *check.C) {
+	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+	})
+	c.Assert(err, check.IsNil)
+	numUnits := 1000
+	doWork := func(int) {
+		for i := 0; i < numUnits; i++ {
+			unit := fmt.Sprintf("unit%03d", i)
+			_, err := spec.AddWorkUnit(unit, map[string]interface{}{}, 0.0)
+			c.Assert(err, check.IsNil)
+		}
+	}
+	pooled(doWork, c, true)
+}
+
 // ------------------------------------------------------------------------
 // Actual benchmarks:
 
