@@ -1,4 +1,0 @@
-A1            101 00001 map of 1 item
-63 6B 65 79   011 00011  string of 3 characters "key"
-D8 80         110 11000  tuple tag 128
-80            100 00000    list of 0 items
