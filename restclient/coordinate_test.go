@@ -34,3 +34,10 @@ func init() {
 		Clock:      clock,
 	})
 }
+
+func TestEmptyURL(t *testing.T) {
+	_, err := restclient.New("")
+	if err == nil {
+		t.Fatal("Expected error when given empty URL.")
+	}
+}

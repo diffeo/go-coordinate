@@ -21,14 +21,14 @@ import (
 // REST server.
 func New(baseURL string) (coordinate.Coordinate, error) {
 	var (
-		err error
-		url *url.URL
-		c   *restCoordinate
+		err       error
+		parsedURL *url.URL
+		c         *restCoordinate
 	)
-	url, err = url.Parse(baseURL)
+	parsedURL, err = url.Parse(baseURL)
 	if err == nil {
 		c = &restCoordinate{
-			resource: resource{URL: url},
+			resource: resource{URL: parsedURL},
 		}
 		err = c.Refresh()
 	}
