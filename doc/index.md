@@ -5,7 +5,7 @@ Basics
 ------
 
 * [Data Model](model.md)
-* [Special Work Spec Keys](work_spec.md)
+* [Special Work Spec Keys](work_specs.md)
 * [Change History](changes.md)
 
 Features

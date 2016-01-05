@@ -26,7 +26,7 @@ work unit is executed.  A work unit is defined by a JSON object
 (Python dictionary, Go `map[string]interface{}`) which is required to
 have a key `name` with a string value.
 
-There are several [special work spec keys](work_spec.md).  Work specs
+There are several [special work spec keys](work_specs.md).  Work specs
 can also be controlled in several ways via a metadata object; for
 instance a work spec can be paused so that no new work will be
 returned from it.
