@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver
@@ -28,7 +28,7 @@ func (jobs *JobServer) WorkerHeartbeat(
 		}
 	}
 	if err == nil {
-		now := time.Now()
+		now := jobs.Clock.Now()
 		lifetime := time.Duration(expireSeconds) * time.Second
 		expiration := now.Add(lifetime)
 		err = worker.Update(data, now, expiration, mode)

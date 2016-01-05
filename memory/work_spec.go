@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package memory
@@ -75,11 +75,10 @@ func (spec *workSpec) getMeta(withCounts bool) coordinate.WorkSpecMeta {
 	if withCounts {
 		spec.expireUnits()
 		for _, unit := range spec.workUnits {
-			if unit.activeAttempt == nil ||
-				unit.activeAttempt.status == coordinate.Expired ||
-				unit.activeAttempt.status == coordinate.Retryable {
+			switch unit.status() {
+			case coordinate.AvailableUnit:
 				result.AvailableCount++
-			} else if unit.activeAttempt.status == coordinate.Pending {
+			case coordinate.PendingUnit:
 				result.PendingCount++
 			}
 		}
@@ -105,48 +104,56 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	return nil
 }
 
-func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
+func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (coordinate.WorkUnit, error) {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
+	now := spec.Coordinate().clock.Now()
 	unit, exists := spec.workUnits[name]
 	if exists {
 		unit.data = data
-		unit.priority = priority
+		unit.meta = meta
 		// NB: we do not care if the unit is expired; that would
 		// only cause it to transition pending -> available which
 		// does not affect this case
 		switch unit.status() {
-		case coordinate.AvailableUnit, coordinate.PendingUnit:
+		case coordinate.AvailableUnit, coordinate.PendingUnit, coordinate.DelayedUnit:
 			// do nothing
 		default:
 			// drop the existing (completed) attempt and
 			// make the work unit be available again
 			unit.activeAttempt = nil
-			spec.available.Add(unit)
+			if !now.Before(unit.meta.NotBefore) {
+				spec.available.Add(unit)
+			}
 		}
 	} else {
 		unit = new(workUnit)
 		unit.name = name
 		unit.data = data
-		unit.priority = priority
+		unit.meta = meta
 		unit.workSpec = spec
 		spec.workUnits[name] = unit
-		spec.available.Add(unit)
+		if !now.Before(unit.meta.NotBefore) {
+			spec.available.Add(unit)
+		}
 	}
 	return unit, nil
 }
 
 func (spec *workSpec) addWorkUnits(units map[string]coordinate.AddWorkUnitItem) {
+	now := spec.Coordinate().clock.Now()
 	for name, item := range units {
 		unit := workUnit{
 			name:     name,
 			data:     item.Data,
-			priority: item.Priority,
+			meta:     item.Meta,
 			workSpec: spec,
 		}
 		spec.workUnits[name] = &unit
-		spec.available.Add(&unit)
+		if !now.Before(unit.meta.NotBefore) {
+			spec.available.Add(&unit)
+		}
 	}
 }
 
@@ -257,7 +264,7 @@ func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, prio
 	globalLock(spec)
 	defer globalUnlock(spec)
 	spec.query(query, func(unit *workUnit) {
-		unit.priority = priority
+		unit.meta.Priority = priority
 		spec.available.Reprioritize(unit)
 	})
 	return nil
@@ -267,7 +274,7 @@ func (spec *workSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, a
 	globalLock(spec)
 	defer globalUnlock(spec)
 	spec.query(query, func(unit *workUnit) {
-		unit.priority += adjustment
+		unit.meta.Priority += adjustment
 		spec.available.Reprioritize(unit)
 	})
 	return nil
@@ -301,10 +308,25 @@ func (spec *workSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, erro
 func (spec *workSpec) expireUnits() {
 	now := spec.Coordinate().clock.Now()
 	for _, unit := range spec.workUnits {
-		if unit.activeAttempt != nil &&
-			unit.activeAttempt.status == coordinate.Pending &&
-			unit.activeAttempt.expirationTime.Before(now) {
-			unit.activeAttempt.finish(coordinate.Expired, nil)
+		switch unit.status() {
+		case coordinate.PendingUnit:
+			// If the attempt's expiration time has passed,
+			// expire it
+			if unit.activeAttempt.expirationTime.Before(now) {
+				unit.activeAttempt.finish(coordinate.Expired, nil)
+			}
+		case coordinate.AvailableUnit:
+			// If it is not in the available list (probably
+			// because it had previously been delayed) add it
+			if unit.availableIndex == 0 {
+				spec.available.Add(unit)
+			}
+		case coordinate.DelayedUnit:
+			// If it is in the available list, remove it
+			// (which may imply time going backwards)
+			if unit.availableIndex > 0 {
+				spec.available.Remove(unit)
+			}
 		}
 	}
 }

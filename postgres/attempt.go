@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package postgres
@@ -114,22 +114,20 @@ func (a *attempt) ExpirationTime() (result time.Time, err error) {
 func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{}) error {
 	// TODO(dmaze): check valid state and active status
 	now := a.Coordinate().clock.Now()
-	expiration := now.Add(extendDuration)
-	conditions := []string{"id=$1"}
-	changes := []string{
-		"expiration_time=$2",
-	}
-	args := []interface{}{a.id, expiration}
+	params := queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "expiration_time", now.Add(extendDuration))
 	if data != nil {
 		dataBytes, err := mapToBytes(data)
 		if err != nil {
 			return err
 		}
-		changes = append(changes, "data=$3")
-		args = append(args, dataBytes)
+		fields.Add(&params, "data", dataBytes)
 	}
-	query := buildUpdate("attempt", changes, conditions)
-	_, err := theDB(a).Exec(query, args...)
+	query := buildUpdate(attemptTable, fields.UpdateChanges(), []string{
+		isAttempt(&params, a.id),
+	})
+	_, err := theDB(a).Exec(query, params...)
 	return err
 }
 
@@ -152,7 +150,8 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		// too in any case
 		outputs := []string{workSpecNextWorkSpec, workUnitAttempt}
 		tables := []string{workSpecTable, workUnitTable}
-		conditions := []string{isWorkUnit, workUnitInSpec}
+		params := queryParams{}
+		conditions := []string{isWorkUnit(&params, a.unit.id), workUnitInSpec}
 		if data == nil {
 			outputs = append(outputs, workUnitData, attemptData)
 			tables = append(tables, attemptTable)
@@ -160,7 +159,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		}
 		query := buildSelect(outputs, tables, conditions)
 
-		row := tx.QueryRow(query, a.unit.id)
+		row := tx.QueryRow(query, params...)
 		var attemptID sql.NullInt64
 		var nextWorkSpec string
 		if data == nil {
@@ -202,7 +201,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			return err // something else went wrong
 		}
 
-		units := coordinate.ExtractWorkUnitOutput(data["output"])
+		units := coordinate.ExtractWorkUnitOutput(data["output"], a.Coordinate().clock.Now())
 		if units == nil {
 			return nil // nothing to do
 		}
@@ -212,7 +211,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 			if err != nil {
 				return err
 			}
-			_, err = spec.addWorkUnit(tx, name, dataBytes, item.Priority)
+			_, err = spec.addWorkUnit(tx, name, dataBytes, item.Meta)
 			if err != nil {
 				return err
 			}
@@ -228,9 +227,23 @@ func (a *attempt) Fail(data map[string]interface{}) error {
 	})
 }
 
-func (a *attempt) Retry(data map[string]interface{}) error {
+func (a *attempt) Retry(data map[string]interface{}, delay time.Duration) error {
 	return withTx(a, func(tx *sql.Tx) error {
-		return a.complete(tx, data, "retryable")
+		err := a.complete(tx, data, "retryable")
+		if err == nil {
+			// Also update the "not before" time on the work unit
+			then := a.Coordinate().clock.Now().Add(delay)
+			params := queryParams{}
+			fields := fieldList{}
+			fields.Add(&params, "not_before", then)
+			query := buildUpdate(workUnitTable,
+				fields.UpdateChanges(),
+				[]string{
+					isWorkUnit(&params, a.unit.id),
+				})
+			_, err = tx.Exec(query, params...)
+		}
+		return err
 	})
 }
 
@@ -239,26 +252,22 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 	// TODO(dmaze): check if attempt is active if required
 
 	// Mark the attempt as completed
-	conditions := []string{
-		isAttempt,
-	}
-	changes := []string{
-		"active=FALSE",
-		"status=$2",
-		"end_time=$3",
-	}
-	endTime := a.Coordinate().clock.Now()
-	args := []interface{}{a.id, status, endTime}
+	params := queryParams{}
+	fields := fieldList{}
+	fields.AddDirect("active", "FALSE")
+	fields.Add(&params, "status", status)
+	fields.Add(&params, "end_time", a.Coordinate().clock.Now())
 	if data != nil {
-		changes = append(changes, "data=$4")
 		dataBytes, err := mapToBytes(data)
 		if err != nil {
 			return err
 		}
-		args = append(args, dataBytes)
+		fields.Add(&params, "data", dataBytes)
 	}
-	query := buildUpdate("attempt", changes, conditions)
-	_, err := tx.Exec(query, args...)
+	query := buildUpdate(attemptTable, fields.UpdateChanges(), []string{
+		isAttempt(&params, a.id),
+	})
+	_, err := tx.Exec(query, params...)
 	if err != nil {
 		return err
 	}
@@ -436,13 +445,13 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 
 	// Now choose units and create attempts
 	err = withTx(w, func(tx *sql.Tx) error {
-		units, err := w.chooseWorkUnits(tx, spec, count)
+		now := w.Coordinate().clock.Now()
+		units, err := w.chooseWorkUnits(tx, spec, count, now)
 		if err != nil {
 			return err
 		}
-		now := w.Coordinate().clock.Now()
 		if len(units) == 0 && meta.CanStartContinuous(now) {
-			units, err = w.createContinuousUnits(tx, spec, meta)
+			units, err = w.createContinuousUnits(tx, spec, meta, now)
 		}
 		if err != nil {
 			return err
@@ -462,20 +471,22 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 
 // chooseWorkUnits chooses up to a specified number of work units from
 // some work spec.
-func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*workUnit, error) {
+func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now time.Time) ([]*workUnit, error) {
+	params := queryParams{}
 	query := buildSelect([]string{
 		workUnitID,
 		workUnitName,
 	}, []string{
 		workUnitTable,
 	}, []string{
-		inThisWorkSpec,
-		workUnitAttempt + " IS NULL",
+		workUnitInOtherSpec(&params, spec.id),
+		hasNoAttempt,
+		"NOT " + workUnitTooSoon(&params, now),
 	})
 	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC")
 	query += fmt.Sprintf(" LIMIT %v", numUnits)
 	query += " FOR UPDATE OF work_unit"
-	rows, err := tx.Query(query, spec.id)
+	rows, err := tx.Query(query, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -495,14 +506,15 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int) ([]*w
 
 // createContinuousUnits tries to create exactly one continuous work
 // unit, and returns it.
-func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta) ([]*workUnit, error) {
+func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta, now time.Time) ([]*workUnit, error) {
 	// We will want to ensure that only one worker is attempting
 	// to create this work unit, and we will ultimately want to
 	// update the next-continuous time
+	params := queryParams{}
 	row := tx.QueryRow(buildSelect([]string{workSpecID},
 		[]string{workSpecTable},
-		[]string{isWorkSpec})+" FOR UPDATE",
-		spec.id)
+		[]string{isWorkSpec(&params, spec.id)})+" FOR UPDATE",
+		params...)
 	var anID int
 	err := row.Scan(&anID)
 	if err != nil {
@@ -510,7 +522,6 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	}
 
 	// Create the work unit
-	now := w.Coordinate().clock.Now()
 	seconds := now.Unix()
 	nano := now.Nanosecond()
 	milli := nano / 1000000
@@ -519,16 +530,19 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	if err != nil {
 		return nil, err
 	}
-	unit, err := spec.addWorkUnit(tx, name, dataBytes, 0.0)
+	unit, err := spec.addWorkUnit(tx, name, dataBytes, coordinate.WorkUnitMeta{})
 	if err != nil {
 		return nil, err
 	}
 
 	// Update the next-continuous time for the work spec.
+	params = queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "next_continuous", now.Add(meta.Interval))
 	res, err := tx.Exec(buildUpdate(workSpecTable,
-		[]string{"next_continuous=$2"},
-		[]string{isWorkSpec}),
-		spec.id, now.Add(meta.Interval))
+		fields.UpdateChanges(),
+		[]string{isWorkSpec(&params, spec.id)}),
+		params...)
 	if err != nil {
 		return nil, err
 	}

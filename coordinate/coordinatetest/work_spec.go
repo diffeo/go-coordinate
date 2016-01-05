@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinatetest
@@ -384,9 +384,14 @@ func (s *Suite) TestMetaContinuous(c *check.C) {
 
 // TestMetaCounts does basic tests on the "available" and "pending" counts.
 func (s *Suite) TestMetaCounts(c *check.C) {
-	spec, worker := s.makeWorkSpecAndWorker(c)
+	sts := SimpleTestSetup{
+		WorkerName:   "worker",
+		WorkSpecName: "spec",
+	}
+	sts.Do(s, c)
+
 	checkCounts := func(available, pending int) {
-		meta, err := spec.Meta(true)
+		meta, err := sts.WorkSpec.Meta(true)
 		c.Assert(err, check.IsNil)
 		c.Check(meta.AvailableCount, check.Equals, available)
 		c.Check(meta.PendingCount, check.Equals, pending)
@@ -394,43 +399,37 @@ func (s *Suite) TestMetaCounts(c *check.C) {
 	checkCounts(0, 0)
 
 	// Adding a work unit adds to the available count
-	_, err := spec.AddWorkUnit("one", map[string]interface{}{}, 0.0)
+	_, err := sts.AddWorkUnit("one")
 	c.Assert(err, check.IsNil)
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
 	s.Clock.Add(time.Duration(5) * time.Second)
-	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
+	attempt := sts.RequestOneAttempt(c)
 	checkCounts(0, 1)
 
 	// Expiring an attempt makes it available again
-	err = attempts[0].Expire(nil)
+	err = attempt.Expire(nil)
 	c.Assert(err, check.IsNil)
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
 	s.Clock.Add(time.Duration(5) * time.Second)
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
+	attempt = sts.RequestOneAttempt(c)
 	checkCounts(0, 1)
 
 	// Marking an attempt retryable makes it pending again
-	err = attempts[0].Retry(nil)
+	err = attempt.Retry(nil, time.Duration(0))
 	c.Assert(err, check.IsNil)
 	checkCounts(1, 0)
 
 	// Starting an attempt makes it pending
 	s.Clock.Add(time.Duration(5) * time.Second)
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
+	attempt = sts.RequestOneAttempt(c)
 	checkCounts(0, 1)
 
 	// Finishing an attempt takes it out of the list entirely
-	err = attempts[0].Finish(nil)
+	err = attempt.Finish(nil)
 	c.Assert(err, check.IsNil)
 	checkCounts(0, 0)
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package cborrpc
@@ -55,13 +55,14 @@ func DecodeBytesAsString(from, to reflect.Type, data interface{}) (interface{}, 
 // the contained slice.  If obj is a slice, returns it.  Otherwise
 // returns failure.
 func Detuplify(obj interface{}) ([]interface{}, bool) {
-	if tuple, ok := obj.(PythonTuple); ok {
-		return tuple.Items, true
+	switch t := obj.(type) {
+	case PythonTuple:
+		return t.Items, true
+	case []interface{}:
+		return t, true
+	default:
+		return nil, false
 	}
-	if slice, ok := obj.([]interface{}); ok {
-		return slice, true
-	}
-	return nil, false
 }
 
 // SloppyDetuplify turns any object into a slice.  If it is already a
@@ -72,4 +73,18 @@ func SloppyDetuplify(obj interface{}) []interface{} {
 		return slice
 	}
 	return []interface{}{obj}
+}
+
+// Destringify tries to turn any object into a string.  If it is a
+// string or byte slice, returns the string and true; otherwise returns
+// empty string and false.
+func Destringify(obj interface{}) (string, bool) {
+	switch s := obj.(type) {
+	case string:
+		return s, true
+	case []byte:
+		return string(s), true
+	default:
+		return "", false
+	}
 }

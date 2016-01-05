@@ -1,7 +1,11 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package postgres
+
+import (
+	"time"
+)
 
 const (
 	// SQL table names:
@@ -48,6 +52,7 @@ const (
 	workUnitSpec                = workUnitTable + ".work_spec_id"
 	workUnitAttempt             = workUnitTable + ".active_attempt_id"
 	workUnitPriority            = workUnitTable + ".priority"
+	workUnitNotBefore           = workUnitTable + ".not_before"
 
 	// This join selects all work units and attempts, including
 	// work units with no active attempt
@@ -55,22 +60,59 @@ const (
 		attemptTable + "  ON " + workUnitAttempt + "=" + attemptID)
 
 	// WHERE clause fragments:
-	inThisNamespace    = workSpecNamespace + "=$1"
-	isWorkSpec         = workSpecID + "=$1"
-	isWorkUnit         = workUnitID + "=$1"
-	inThisWorkSpec     = workUnitSpec + "=$1"
-	hasNoAttempt       = workUnitAttempt + " IS NULL"
-	hasThisParent      = workerParent + "=$1"
-	isAttempt          = attemptID + "=$1"
-	byThisWorker       = attemptWorkerID + "=$1"
-	workUnitInSpec     = workUnitSpec + "=" + workSpecID
-	attemptIsActive    = attemptActive + "=TRUE"
-	attemptIsAvailable = ("(" +
-		attemptStatus + " IS NULL OR " +
-		attemptStatus + "='expired' OR " +
-		attemptStatus + "='retryable')")
+	hasNoAttempt        = workUnitAttempt + " IS NULL"
+	hasThisParent       = workerParent + "=$1"
+	byThisWorker        = attemptWorkerID + "=$1"
+	workUnitInSpec      = workUnitSpec + "=" + workSpecID
+	attemptIsActive     = attemptActive + "=TRUE"
 	attemptIsPending    = attemptStatus + "='pending'"
 	attemptIsExpired    = attemptExpirationTime + "<$1"
 	attemptThisWorkUnit = attemptWorkUnitID + "=" + workUnitID
 	attemptThisWorker   = attemptWorkerID + "=" + workerID
 )
+
+func isWorkSpec(params *queryParams, id int) string {
+	return workSpecID + "=" + params.Param(id)
+}
+
+func workSpecInNamespace(params *queryParams, id int) string {
+	return workSpecNamespace + "=" + params.Param(id)
+}
+
+func workSpecHasName(params *queryParams, name string) string {
+	return workSpecName + "=" + params.Param(name)
+}
+
+func isWorkUnit(params *queryParams, id int) string {
+	return workUnitID + "=" + params.Param(id)
+}
+
+func workUnitInOtherSpec(params *queryParams, id int) string {
+	return workUnitSpec + "=" + params.Param(id)
+}
+
+func workUnitHasName(params *queryParams, name string) string {
+	return workUnitName + "=" + params.Param(name)
+}
+
+// workUnitTooSoon determines whether a work unit cannot run because
+// its not_before time has not arrived yet.  If a work unit looks
+// available and this predicate returns true, it is actually delayed.
+func workUnitTooSoon(params *queryParams, now time.Time) string {
+	return "(" + workUnitNotBefore + " IS NOT NULL AND " + params.Param(now) + "<" + workUnitNotBefore + ")"
+}
+
+// workUnitAvailable determines whether a work unit is really available.
+func workUnitAvailable(params *queryParams, now time.Time) string {
+	return "(" + attemptStatus + " IS NULL AND NOT (" + workUnitTooSoon(params, now) + "))"
+}
+
+// workUnitDelayed determines whether a work unit is delayed: it has no
+// active attempt but it is too soon for it to start.
+func workUnitDelayed(params *queryParams, now time.Time) string {
+	return "(" + attemptStatus + " IS NULL AND (" + workUnitTooSoon(params, now) + "))"
+}
+
+func isAttempt(params *queryParams, id int) string {
+	return attemptID + "=" + params.Param(id)
+}

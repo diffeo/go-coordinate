@@ -1,9 +1,10 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package memory
 
 import (
+	"github.com/diffeo/go-coordinate/coordinate"
 	"gopkg.in/check.v1"
 )
 
@@ -69,7 +70,7 @@ func (s *Suite) TestQueueOfTwoInWrongOrder(c *check.C) {
 }
 
 func (s *Suite) TestQueueOfThreeWithPriorities(c *check.C) {
-	first := &workUnit{name: "z", priority: 100}
+	first := &workUnit{name: "z", meta: coordinate.WorkUnitMeta{Priority: 100}}
 	second := &workUnit{name: "a"}
 	third := &workUnit{name: "m"}
 	s.push(second, third, first)
@@ -105,7 +106,7 @@ func (s *Suite) TestReprioritizeFirst(c *check.C) {
 	second := &workUnit{name: "b"}
 	third := &workUnit{name: "c"}
 	s.push(first, second, third)
-	first.priority = -1
+	first.meta.Priority = -1
 	s.q.Reprioritize(first)
 	s.popAll(second, third, first)
 }
@@ -115,7 +116,7 @@ func (s *Suite) TestReprioritizeMiddle(c *check.C) {
 	second := &workUnit{name: "b"}
 	third := &workUnit{name: "c"}
 	s.push(first, second, third)
-	second.priority = 100
+	second.meta.Priority = 100
 	s.q.Reprioritize(second)
 	s.popAll(second, first, third)
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinatetest
@@ -90,7 +90,7 @@ func concurrently(f func(i, seq int), c *check.C) {
 // Coordinate setup helpers:
 func createWorkUnits(spec coordinate.WorkSpec, n int, c *check.C) {
 	for i := 0; i < n; i++ {
-		_, err := spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, 0.0)
+		_, err := spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, coordinate.WorkUnitMeta{})
 		c.Assert(err, check.IsNil)
 	}
 }
@@ -170,7 +170,7 @@ func (s *Suite) TestAddSameUnit(c *check.C) {
 	doWork := func(int) {
 		for i := 0; i < numUnits; i++ {
 			unit := fmt.Sprintf("unit%03d", i)
-			_, err := spec.AddWorkUnit(unit, map[string]interface{}{}, 0.0)
+			_, err := spec.AddWorkUnit(unit, map[string]interface{}{}, coordinate.WorkUnitMeta{})
 			c.Assert(err, check.IsNil)
 		}
 	}
@@ -200,7 +200,7 @@ func (s *Suite) benchmarkWorkUnitCreation(c *check.C, executor func(func(i, seq 
 	c.Assert(err, check.IsNil)
 
 	createWorkUnit := func(i, seq int) {
-		_, err := spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, 0.0)
+		_, err := spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, coordinate.WorkUnitMeta{})
 		c.Check(err, check.IsNil)
 	}
 	executor(createWorkUnit, c)

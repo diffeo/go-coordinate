@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver
@@ -193,7 +193,7 @@ func (jobs *JobServer) doLock(keys interface{}, f func(time.Time, [][]interface{
 	}
 	jobs.lockLock.Lock()
 	defer jobs.lockLock.Unlock()
-	now := time.Now()
+	now := jobs.Clock.Now()
 	jobs.locks.Expire(now)
 	return f(now, newKeys)
 }

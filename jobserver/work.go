@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver
@@ -219,9 +219,9 @@ func (jobs *JobServer) UpdateWorkUnit(
 			// The only thing we are doing is changing the
 			// work unit data.
 			if uwuOptions.Data != nil {
-				priority, err := workUnit.Priority()
+				meta, err := workUnit.Meta()
 				if err == nil {
-					_, err = workSpec.AddWorkUnit(workUnit.Name(), uwuOptions.Data, priority)
+					_, err = workSpec.AddWorkUnit(workUnit.Name(), uwuOptions.Data, meta)
 				}
 				if err == nil {
 					changed = true

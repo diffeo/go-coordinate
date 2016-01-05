@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver_test
@@ -9,6 +9,7 @@ import (
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/jobserver"
 	"gopkg.in/check.v1"
+	"time"
 )
 
 // TestUpdateAvailable tries to transition a work unit from "available"
@@ -79,4 +80,37 @@ func (s *PythonSuite) TestUpdateAvailableFull(c *check.C) {
 	c.Check(msg, check.Equals, "")
 	c.Check(ok, check.Equals, true)
 	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Failed)
+}
+
+// TestDelayedUnit creates a work unit to run in the future,
+func (s *PythonSuite) TestDelayedUnit(c *check.C) {
+	empty := map[string]interface{}{}
+	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+
+	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, []interface{}{
+		cborrpc.PythonTuple{Items: []interface{}{
+			"unit",
+			empty,
+			map[string]interface{}{"delay": 90},
+		}},
+	})
+	c.Assert(err, check.IsNil)
+	c.Check(msg, check.Equals, "")
+	c.Check(ok, check.Equals, true)
+
+	// Even though it is delayed, we should report it as available
+	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
+
+	// Get-work should return nothing
+	s.doNoWork(c)
+
+	// If we wait 60 seconds (out of 90) we should still get nothing
+	s.Clock.Add(time.Duration(60) * time.Second)
+	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
+	s.doNoWork(c)
+
+	// If we wait another 60 seconds we should be able to do it
+	s.Clock.Add(time.Duration(60) * time.Second)
+	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
+	s.doOneWork(c, workSpecName, "unit")
 }

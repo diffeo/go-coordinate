@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package postgres
@@ -9,7 +9,6 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/lib/pq"
 	"github.com/satori/go.uuid"
 )
 
@@ -88,97 +87,4 @@ type coordinable interface {
 // theDB fetches the database handle from some object in the tree.
 func theDB(c coordinable) *sql.DB {
 	return c.Coordinate().db
-}
-
-// withTx calls some function with a database/sql transaction object.
-// If f panics or returns a non-nil error, rolls the transaction back;
-// otherwise commits it before returning.  Returns the error value from
-// f, or some other error related to transaction management.
-func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
-	var (
-		tx   *sql.Tx
-		done bool
-	)
-
-	// If we have a failure, roll back; and if that rollback fails
-	// and we don't yet have an error, set the error (how do we
-	// get there?)
-	defer func() {
-		if tx != nil && !done {
-			err2 := tx.Rollback()
-			if err == nil {
-				err = err2
-			}
-		}
-	}()
-
-	// Run in a loop, repeating the work on serialization errors
-	for {
-		// Create the transaction
-		tx, err = theDB(c).Begin()
-		if err != nil {
-			return
-		}
-
-		// TODO(dmaze): see if there is a more useful way to
-		// set this globally
-		_, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
-		if err != nil {
-			return
-		}
-
-		// Call the callback function
-		err = f(tx)
-
-		// If that succeeded, commit
-		if err == nil {
-			err = tx.Commit()
-			done = true
-		}
-
-		// If we specifically got a serialization error,
-		// retry
-		if pqerr, ok := err.(*pq.Error); ok {
-			if pqerr.Code == "40001" {
-				err = tx.Rollback()
-				if err != nil {
-					return
-				}
-				tx = nil
-				err = nil
-				continue
-			}
-		}
-
-		break
-	}
-
-	// Return, rolling back if needed
-	return
-}
-
-// scanRows runs an SQL query and calls a function for each row in the
-// result.  The callback function should only call the Scan() method on
-// the provided Rows object; this function will take care of advancing
-// through the list of rows and closing the iterator as required.
-func scanRows(rows *sql.Rows, f func() error) (err error) {
-	var done bool
-	defer func() {
-		if !done {
-			err2 := rows.Close()
-			if err == nil {
-				err = err2
-			}
-		}
-	}()
-
-	for rows.Next() {
-		err = f()
-		if err != nil {
-			return
-		}
-	}
-	done = true
-	err = rows.Err()
-	return
 }

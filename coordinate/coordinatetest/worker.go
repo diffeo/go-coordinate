@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinatetest
@@ -199,7 +199,7 @@ func (s *Suite) TestWorkerAttempts(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// Create and perform one work unit
-	_, err = spec.AddWorkUnit("one", map[string]interface{}{}, 0.0)
+	_, err = spec.AddWorkUnit("one", map[string]interface{}{}, coordinate.WorkUnitMeta{})
 	c.Assert(err, check.IsNil)
 	attempts, err := child.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)
@@ -211,7 +211,7 @@ func (s *Suite) TestWorkerAttempts(c *check.C) {
 	c.Assert(err, check.IsNil)
 
 	// Create and start (but don't finish) a second one
-	_, err = spec.AddWorkUnit("two", map[string]interface{}{}, 0.0)
+	_, err = spec.AddWorkUnit("two", map[string]interface{}{}, coordinate.WorkUnitMeta{})
 	c.Assert(err, check.IsNil)
 	attempts, err = child.RequestAttempts(coordinate.AttemptRequest{})
 	c.Assert(err, check.IsNil)

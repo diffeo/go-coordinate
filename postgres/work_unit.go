@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package postgres
@@ -7,7 +7,9 @@ import (
 	"database/sql"
 	"fmt"
 	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/lib/pq"
 	"strings"
+	"time"
 )
 
 type workUnit struct {
@@ -16,14 +18,14 @@ type workUnit struct {
 	name string
 }
 
-func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
+func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (coordinate.WorkUnit, error) {
 	var unit *workUnit
 	dataBytes, err := mapToBytes(data)
 	if err != nil {
 		return nil, err
 	}
 	err = withTx(spec, func(tx *sql.Tx) error {
-		unit, err = spec.addWorkUnit(tx, name, dataBytes, priority)
+		unit, err = spec.addWorkUnit(tx, name, dataBytes, meta)
 		return err
 	})
 	return unit, err
@@ -31,7 +33,7 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, prio
 
 // addWorkUnit does the work of AddWorkUnit, assuming a transaction
 // context and that the data dictionary has already been encoded.
-func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, priority float64) (*workUnit, error) {
+func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, meta coordinate.WorkUnitMeta) (*workUnit, error) {
 	unit := workUnit{spec: spec, name: name}
 
 	// Lock the whole work unit table.
@@ -53,35 +55,47 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, pri
 	}
 
 	// Does the unit already exist?
+	params := queryParams{}
 	query := buildSelect([]string{
 		workUnitID,
 		attemptStatus,
 	}, []string{
 		workUnitAttemptJoin,
 	}, []string{
-		inThisWorkSpec,
-		workUnitName + "=$2",
+		workUnitInOtherSpec(&params, spec.id),
+		workUnitHasName(&params, name),
 	}) + " FOR UPDATE OF " + workUnitTable
-	row := tx.QueryRow(query, spec.id, name)
+	row := tx.QueryRow(query, params...)
 	var status sql.NullString
 	err = row.Scan(&unit.id, &status)
+
+	// Before we go too far, start building up whatever query we're
+	// going to do; there are a lot of shared parts
+	params = queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "data", dataBytes)
+	fields.Add(&params, "priority", meta.Priority)
+	fields.Add(&params, "not_before", timeToNullTime(meta.NotBefore))
+
 	if err == nil {
 		// The unit already exists and we've found its data
 		isPending := status.Valid && (status.String == "pending")
-		// We need to update its data and priority, and
-		// (if not pending) reset its active attempt
-		changes := []string{
-			"data=$2",
-			"priority=$3",
-		}
+		// In addition to the shared fields, if the work unit
+		// is not pending, we should reset its active attempt
 		if !isPending {
-			changes = append(changes, "active_attempt_id=NULL")
+			fields.AddDirect("active_attempt_id", "NULL")
 		}
-		query = buildUpdate(workUnitTable, changes, []string{isWorkUnit})
-		_, err = tx.Exec(query, unit.id, dataBytes, priority)
+		query = buildUpdate(workUnitTable,
+			fields.UpdateChanges(),
+			[]string{isWorkUnit(&params, unit.id)})
+		_, err = tx.Exec(query, params...)
 	} else if err == sql.ErrNoRows {
 		// The work unit doesn't exist, yet
-		row := tx.QueryRow("INSERT INTO work_unit(work_spec_id, name, data, priority) VALUES ($1, $2, $3, $4) RETURNING id", spec.id, name, dataBytes, priority)
+		fields.Add(&params, "work_spec_id", spec.id)
+		fields.Add(&params, "name", name)
+		query := fields.InsertStatement(workUnitTable)
+		query += " RETURNING id"
+		row := tx.QueryRow(query, params...)
 		err = row.Scan(&unit.id)
 	}
 	if err != nil {
@@ -92,7 +106,16 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, pri
 
 func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	unit := workUnit{spec: spec, name: name}
-	row := theDB(spec).QueryRow("SELECT id FROM work_unit WHERE work_spec_id=$1 AND name=$2", spec.id, name)
+	params := queryParams{}
+	query := buildSelect([]string{
+		workUnitID,
+	}, []string{
+		workUnitTable,
+	}, []string{
+		workUnitInOtherSpec(&params, spec.id),
+		workUnitHasName(&params, name),
+	})
+	row := theDB(spec).QueryRow(query, params...)
 	err := row.Scan(&unit.id)
 	if err == sql.ErrNoRows {
 		return nil, coordinate.ErrNoSuchWorkUnit{Name: name}
@@ -107,21 +130,18 @@ func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 // The returned values from the function are an SQL statement and an
 // argument list.  The output of the query is a single column, "id",
 // which is a work unit ID.
-func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery) (string, []interface{}) {
+func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery, now time.Time) (string, queryParams) {
 	// NB: github.com/jmoiron/sqlx has named-parameter binds which
 	// will definitely help this.
-	outputs := []string{"work_unit.id"}
-	tables := []string{"work_unit"}
-	conditions := []string{
-		"work_spec_id=$1",
-	}
-	args := []interface{}{spec.id}
+	outputs := []string{workUnitID}
+	tables := []string{workUnitTable}
+	params := queryParams{}
+	conditions := []string{workUnitInOtherSpec(&params, spec.id)}
 
 	if len(q.Names) > 0 {
 		nameparams := make([]string, len(q.Names))
 		for i, name := range q.Names {
-			nameparams[i] = fmt.Sprintf("$%v", len(args)+1)
-			args = append(args, name)
+			nameparams[i] = params.Param(name)
 		}
 		cond := "name IN (" + strings.Join(nameparams, ", ") + ")"
 		conditions = append(conditions, cond)
@@ -135,13 +155,15 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery) (string, []interfa
 			case coordinate.AnyStatus:
 				foundAny = true
 			case coordinate.AvailableUnit:
-				statusBits = append(statusBits, " IS NULL", "='expired'", "='retryable'")
+				statusBits = append(statusBits, workUnitAvailable(&params, now))
 			case coordinate.PendingUnit:
-				statusBits = append(statusBits, "='pending'")
+				statusBits = append(statusBits, attemptStatus+"='pending'")
 			case coordinate.FinishedUnit:
-				statusBits = append(statusBits, "='finished'")
+				statusBits = append(statusBits, attemptStatus+"='finished'")
 			case coordinate.FailedUnit:
-				statusBits = append(statusBits, "='failed'")
+				statusBits = append(statusBits, attemptStatus+"='failed'")
+			case coordinate.DelayedUnit:
+				statusBits = append(statusBits, workUnitDelayed(&params, now))
 				// Anything else is an internal error but
 				// returning that is irritating; ignore it
 			}
@@ -151,20 +173,14 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery) (string, []interfa
 		if !foundAny {
 			// Do an outer join on available attempt; this
 			// replaces the plain "work_unit" table
-			tables = []string{"work_unit LEFT OUTER JOIN attempt ON work_unit.active_attempt_id=attempt.id"}
-			for i, bit := range statusBits {
-				statusBits[i] = "attempt.status" + bit
-			}
+			tables = []string{workUnitAttemptJoin}
 			cond := "(" + strings.Join(statusBits, " OR ") + ")"
 			conditions = append(conditions, cond)
 		}
 	}
 
 	if q.PreviousName != "" {
-		dollars := fmt.Sprintf("$%v", len(args)+1)
-		args = append(args, q.PreviousName)
-		cond := "name > " + dollars
-		conditions = append(conditions, cond)
+		conditions = append(conditions, "name>"+params.Param(q.PreviousName))
 	}
 
 	query := buildSelect(outputs, tables, conditions)
@@ -173,14 +189,14 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery) (string, []interfa
 		query += fmt.Sprintf(" ORDER BY name ASC LIMIT %v", q.Limit)
 	}
 
-	return query, args
+	return query, params
 }
 
 func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordinate.WorkUnit, error) {
 	_ = withTx(spec, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
-	cte, args := spec.selectUnits(q)
+	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	query := buildSelect([]string{
 		"id",
 		"name",
@@ -189,7 +205,7 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 	}, []string{
 		"id IN (" + cte + ")",
 	})
-	rows, err := theDB(spec).Query(query, args...)
+	rows, err := theDB(spec).Query(query, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -211,16 +227,19 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 	_ = withTx(spec, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
+	now := spec.Coordinate().clock.Now()
 	result := make(map[coordinate.WorkUnitStatus]int)
+	params := queryParams{}
 	query := buildSelect([]string{
 		attemptStatus,
+		workUnitTooSoon(&params, now) + " AS delayed",
 		"COUNT(*)",
 	}, []string{
 		workUnitAttemptJoin,
 	}, []string{
-		inThisWorkSpec,
-	}) + " GROUP BY " + attemptStatus
-	rows, err := theDB(spec).Query(query, spec.id)
+		workUnitInOtherSpec(&params, spec.id),
+	}) + " GROUP BY " + attemptStatus + ", delayed"
+	rows, err := theDB(spec).Query(query, params...)
 	if err != nil {
 		return nil, err
 	}
@@ -229,18 +248,22 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 			status     sql.NullString
 			unitStatus coordinate.WorkUnitStatus
 			count      int
+			delayed    bool
 			err        error
 		)
-		err = rows.Scan(&status, &count)
+		err = rows.Scan(&status, &delayed, &count)
 		if err != nil {
 			return err
 		}
-		if !status.Valid {
-			unitStatus = coordinate.AvailableUnit
+		if delayed {
+			unitStatus = coordinate.DelayedUnit
 		} else {
+			unitStatus = coordinate.AvailableUnit
+		}
+		if status.Valid {
 			switch status.String {
 			case "expired", "retryable":
-				unitStatus = coordinate.AvailableUnit
+				// same as "available" more or less
 			case "pending":
 				unitStatus = coordinate.PendingUnit
 			case "finished":
@@ -261,11 +284,13 @@ func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority
 	_ = withTx(spec, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
-	cte, args := spec.selectUnits(q)
-	dollars := fmt.Sprintf("$%v", len(args)+1)
-	args = append(args, priority)
-	query := "UPDATE work_unit SET priority=" + dollars + " WHERE id IN (" + cte + ")"
-	_, err := theDB(spec).Exec(query, args...)
+	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
+	fields := fieldList{}
+	fields.Add(&params, "priority", priority)
+	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
+		"id IN (" + cte + ")",
+	})
+	_, err := theDB(spec).Exec(query, params...)
 	return err
 }
 
@@ -273,11 +298,13 @@ func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, prior
 	_ = withTx(spec, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
-	cte, args := spec.selectUnits(q)
-	dollars := fmt.Sprintf("$%v", len(args)+1)
-	args = append(args, priority)
-	query := "UPDATE work_unit SET priority=priority+" + dollars + " WHERE id IN (" + cte + ")"
-	_, err := theDB(spec).Exec(query, args...)
+	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
+	fields := fieldList{}
+	fields.AddDirect("priority", "priority+"+params.Param(priority))
+	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
+		"id IN (" + cte + ")",
+	})
+	_, err := theDB(spec).Exec(query, params...)
 	return err
 }
 
@@ -285,9 +312,9 @@ func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (int, error) {
 	_ = withTx(spec, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
-	cte, args := spec.selectUnits(q)
+	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	query := "DELETE FROM work_unit WHERE id IN (" + cte + ")"
-	result, err := theDB(spec).Exec(query, args...)
+	result, err := theDB(spec).Exec(query, params...)
 	if err != nil {
 		return 0, err
 	}
@@ -340,16 +367,27 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	_ = withTx(unit, func(tx *sql.Tx) error {
 		return expireAttempts(unit, tx)
 	})
-	query := buildSelect([]string{attemptStatus},
-		[]string{workUnitAttemptJoin},
-		[]string{isWorkUnit})
-	row := theDB(unit).QueryRow(query, unit.id)
+	now := unit.Coordinate().clock.Now()
+	params := queryParams{}
+	query := buildSelect([]string{
+		attemptStatus,
+		workUnitTooSoon(&params, now) + " AS delayed",
+	}, []string{
+		workUnitAttemptJoin,
+	}, []string{
+		isWorkUnit(&params, unit.id),
+	})
+	row := theDB(unit).QueryRow(query, params...)
 	var ns sql.NullString
-	err := row.Scan(&ns)
+	var delayed bool
+	err := row.Scan(&ns, &delayed)
 	if err != nil {
 		return 0, err
 	}
 	if !ns.Valid {
+		if delayed {
+			return coordinate.DelayedUnit, nil
+		}
 		return coordinate.AvailableUnit, nil
 	}
 	switch ns.String {
@@ -365,6 +403,36 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 		return coordinate.AvailableUnit, nil
 	}
 	return 0, fmt.Errorf("invalid attempt status in database %v", ns.String)
+}
+
+func (unit *workUnit) Meta() (meta coordinate.WorkUnitMeta, err error) {
+	var notBefore pq.NullTime
+	params := queryParams{}
+	query := buildSelect([]string{
+		workUnitPriority,
+		workUnitNotBefore,
+	}, []string{
+		workUnitTable,
+	}, []string{
+		isWorkUnit(&params, unit.id),
+	})
+	row := theDB(unit).QueryRow(query, params...)
+	err = row.Scan(&meta.Priority, &notBefore)
+	meta.NotBefore = nullTimeToTime(notBefore)
+	return
+}
+
+func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) (err error) {
+	notBefore := timeToNullTime(meta.NotBefore)
+	params := queryParams{}
+	query := buildUpdate(workUnitTable, []string{
+		"priority=" + params.Param(meta.Priority),
+		"not_before=" + params.Param(notBefore),
+	}, []string{
+		isWorkUnit(&params, unit.id),
+	})
+	_, err = theDB(unit).Exec(query, params...)
+	return
 }
 
 func (unit *workUnit) Priority() (priority float64, err error) {

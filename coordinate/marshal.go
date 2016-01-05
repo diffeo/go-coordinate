@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinate
@@ -20,6 +20,8 @@ func (status WorkUnitStatus) MarshalJSON() ([]byte, error) {
 		return []byte("\"finished\""), nil
 	case FailedUnit:
 		return []byte("\"failed\""), nil
+	case DelayedUnit:
+		return []byte("\"delayed\""), nil
 	default:
 		return nil, fmt.Errorf("invalid status (marshal, %+v)", status)
 	}
@@ -38,6 +40,8 @@ func (status *WorkUnitStatus) UnmarshalJSON(json []byte) error {
 		*status = FinishedUnit
 	case "\"failed\"":
 		*status = FailedUnit
+	case "\"delayed\"":
+		*status = DelayedUnit
 	default:
 		return fmt.Errorf("invalid status (unmarshal, %+v)", string(json))
 	}

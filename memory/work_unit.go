@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package memory
@@ -10,7 +10,7 @@ import (
 type workUnit struct {
 	name           string
 	data           map[string]interface{}
-	priority       float64
+	meta           coordinate.WorkUnitMeta
 	activeAttempt  *attempt
 	attempts       []*attempt
 	workSpec       *workSpec
@@ -47,7 +47,13 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 // expiry is necessary, it has already been run.
 func (unit *workUnit) status() coordinate.WorkUnitStatus {
 	if unit.activeAttempt == nil {
-		return coordinate.AvailableUnit
+		now := unit.Coordinate().clock.Now()
+		switch {
+		case now.Before(unit.meta.NotBefore):
+			return coordinate.DelayedUnit
+		default:
+			return coordinate.AvailableUnit
+		}
 	}
 	switch unit.activeAttempt.status {
 	case coordinate.Pending:
@@ -65,16 +71,29 @@ func (unit *workUnit) status() coordinate.WorkUnitStatus {
 	}
 }
 
-func (unit *workUnit) Priority() (float64, error) {
+func (unit *workUnit) Meta() (coordinate.WorkUnitMeta, error) {
 	globalLock(unit)
 	defer globalUnlock(unit)
-	return unit.priority, nil
+	return unit.meta, nil
+}
+
+func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) error {
+	globalLock(unit)
+	defer globalUnlock(unit)
+	unit.meta = meta
+	unit.workSpec.available.Reprioritize(unit)
+	return nil
+}
+
+func (unit *workUnit) Priority() (float64, error) {
+	meta, err := unit.Meta() // does the lock itself
+	return meta.Priority, err
 }
 
 func (unit *workUnit) SetPriority(priority float64) error {
 	globalLock(unit)
 	defer globalUnlock(unit)
-	unit.priority = priority
+	unit.meta.Priority = priority
 	unit.workSpec.available.Reprioritize(unit)
 	return nil
 }

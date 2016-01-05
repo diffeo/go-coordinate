@@ -8,6 +8,7 @@
 // migrations/20151019-worker-mode.sql
 // migrations/20151028-index.sql
 // migrations/20151216-work-spec-runtime.sql
+// migrations/20160104-not-before.sql
 // DO NOT EDIT!
 
 package postgres
@@ -235,6 +236,26 @@ func migrations20151216WorkSpecRuntimeSql() (*asset, error) {
 	return a, nil
 }
 
+var _migrations20160104NotBeforeSql = []byte("\x1f\x8b\x08\x00\x00\x09\x6e\x88\x00\xff\x74\x8c\xd1\x4a\xc3\x30\x14\x86\xef\xf3\x14\x3f\xbb\x54\xe2\x03\xac\x57\xd1\x04\x1c\xb4\xeb\x98\x19\x82\x37\xa3\x6d\x62\x5b\x6c\x73\x6a\x72\x4a\x5f\x5f\x5b\x04\x11\x19\x1c\x3e\x38\xf0\xfd\x9f\x94\x90\x77\x12\x23\x39\xbf\x47\xfa\x1c\xb2\x15\x72\x8a\xe4\xe6\x86\xf7\x98\x28\x71\x1b\x7d\x5a\x25\x21\xd7\x83\xed\xfa\x84\xca\xb9\x6f\x60\x17\x88\xaf\xb5\x7f\xa7\xe8\x77\x68\x68\x98\xc7\x00\x26\x70\xe7\xb1\x50\xfc\xc0\x1c\x7a\x06\x57\xf5\xe0\x1f\x7e\xd6\xf7\x63\xdf\xc6\x8a\x3d\x2e\x93\x50\xb9\x35\x67\x58\xf5\x98\x9b\x4d\xbf\x6e\xba\xd2\x1a\x4f\x65\x7e\x29\x8e\xf8\xad\xc3\x1e\x0a\xf3\x62\x55\x71\xc2\xeb\xc1\x3e\x6f\x2f\xde\xca\xa3\xc9\xc4\x9f\xaa\xa6\x25\xdc\xe8\xea\x73\x79\xfa\x1f\xce\xc4\x57\x00\x00\x00\xff\xff\x57\xda\xe1\x0e\x02\x01\x00\x00")
+
+func migrations20160104NotBeforeSqlBytes() ([]byte, error) {
+	return bindataRead(
+		_migrations20160104NotBeforeSql,
+		"migrations/20160104-not-before.sql",
+	)
+}
+
+func migrations20160104NotBeforeSql() (*asset, error) {
+	bytes, err := migrations20160104NotBeforeSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "migrations/20160104-not-before.sql", size: 258, mode: os.FileMode(420), modTime: time.Unix(1451942334, 0)}
+	a := &asset{bytes: bytes, info:  info}
+	return a, nil
+}
+
 // Asset loads and returns the asset for the given name.
 // It returns an error if the asset could not be found or
 // could not be loaded.
@@ -295,6 +316,7 @@ var _bindata = map[string]func() (*asset, error){
 	"migrations/20151019-worker-mode.sql": migrations20151019WorkerModeSql,
 	"migrations/20151028-index.sql": migrations20151028IndexSql,
 	"migrations/20151216-work-spec-runtime.sql": migrations20151216WorkSpecRuntimeSql,
+	"migrations/20160104-not-before.sql": migrations20160104NotBeforeSql,
 }
 
 // AssetDir returns the file names below a certain
@@ -353,6 +375,8 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"20151028-index.sql": &bintree{migrations20151028IndexSql, map[string]*bintree{
 		}},
 		"20151216-work-spec-runtime.sql": &bintree{migrations20151216WorkSpecRuntimeSql, map[string]*bintree{
+		}},
+		"20160104-not-before.sql": &bintree{migrations20160104NotBeforeSql, map[string]*bintree{
 		}},
 	}},
 }}

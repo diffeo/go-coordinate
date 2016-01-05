@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package postgres
@@ -28,7 +28,16 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 		name:      name,
 	}
 	err = withTx(ns, func(tx *sql.Tx) error {
-		row := tx.QueryRow("SELECT work_spec.id FROM work_spec WHERE namespace_id=$1 AND name=$2", ns.id, name)
+		params := queryParams{}
+		query := buildSelect([]string{
+			workSpecID,
+		}, []string{
+			workSpecTable,
+		}, []string{
+			workSpecInNamespace(&params, ns.id),
+			workSpecHasName(&params, name),
+		})
+		row := tx.QueryRow(query, params...)
 		err = row.Scan(&spec.id)
 		if err == nil {
 			err = spec.setData(tx, data, meta)
@@ -38,9 +47,26 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 			if err != nil {
 				return err
 			}
-			interval := durationToSQL(meta.Interval)
-			nextContinuous := timeToNullTime(meta.NextContinuous)
-			row = tx.QueryRow("INSERT INTO work_spec(namespace_id, name, data, priority, weight, paused, continuous, can_be_continuous, min_memory_gb, interval, next_continuous, max_running, max_attempts_returned, next_work_spec_name, next_work_spec_preempts, runtime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING id", ns.id, name, dataBytes, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false, meta.Runtime)
+			params = queryParams{}
+			fields := fieldList{}
+			fields.Add(&params, "namespace_id", ns.id)
+			fields.Add(&params, "name", name)
+			fields.Add(&params, "data", dataBytes)
+			fields.Add(&params, "priority", meta.Priority)
+			fields.Add(&params, "weight", meta.Weight)
+			fields.Add(&params, "paused", meta.Paused)
+			fields.Add(&params, "continuous", meta.Continuous)
+			fields.Add(&params, "can_be_continuous", meta.CanBeContinuous)
+			fields.Add(&params, "min_memory_gb", meta.MinMemoryGb)
+			fields.Add(&params, "interval", durationToSQL(meta.Interval))
+			fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
+			fields.Add(&params, "max_running", meta.MaxRunning)
+			fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+			fields.Add(&params, "next_work_spec_name", meta.NextWorkSpecName)
+			fields.AddDirect("next_work_spec_preempts", "FALSE")
+			fields.Add(&params, "runtime", meta.Runtime)
+			query = fields.InsertStatement(workSpecTable) + "RETURNING id"
+			row = tx.QueryRow(query, params...)
 			err = row.Scan(&spec.id)
 		}
 		return err
@@ -69,14 +95,15 @@ func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 // transaction.  The workSpec object must be populated with its
 // "namespace" and "name" fields.
 func txWorkSpec(tx *sql.Tx, spec *workSpec) error {
+	params := queryParams{}
 	row := tx.QueryRow(buildSelect([]string{
 		workSpecID,
 	}, []string{
 		workSpecTable,
 	}, []string{
-		inThisNamespace,
-		workSpecName + "=$2",
-	}), spec.namespace.id, spec.name)
+		workSpecInNamespace(&params, spec.namespace.id),
+		workSpecHasName(&params, spec.name),
+	}), params...)
 	err := row.Scan(&spec.id)
 	if err == sql.ErrNoRows {
 		return coordinate.ErrNoSuchWorkSpec{Name: spec.name}
@@ -169,6 +196,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	var meta coordinate.WorkSpecMeta
 	err := withTx(spec, func(tx *sql.Tx) error {
 		var (
+			params         queryParams
 			query          string
 			interval       string
 			nextContinuous pq.NullTime
@@ -189,9 +217,9 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 		}, []string{
 			workSpecTable,
 		}, []string{
-			isWorkSpec, // binds $1
+			isWorkSpec(&params, spec.id),
 		})
-		row := tx.QueryRow(query, spec.id)
+		row := tx.QueryRow(query, params...)
 		err := row.Scan(
 			&meta.Priority,
 			&meta.Weight,
@@ -219,16 +247,17 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 		if !withCounts {
 			return nil
 		}
+		params = queryParams{}
 		query = buildSelect([]string{
 			attemptStatus,
 			"COUNT(*)",
 		}, []string{
 			workUnitAttemptJoin,
 		}, []string{
-			inThisWorkSpec, // binds $1
+			workUnitInOtherSpec(&params, spec.id),
 		})
 		query += " GROUP BY " + attemptStatus
-		rows, err := tx.Query(query, spec.id)
+		rows, err := tx.Query(query, params...)
 		if err != nil {
 			return err
 		}
@@ -262,6 +291,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 // returns maps from work spec name to work spec object and to
 // metadata object.
 func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec, map[string]*coordinate.WorkSpecMeta, error) {
+	params := queryParams{}
 	query := buildSelect([]string{
 		workSpecID,
 		workSpecName,
@@ -280,9 +310,9 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 	}, []string{
 		workSpecTable,
 	}, []string{
-		inThisNamespace,
+		workSpecInNamespace(&params, ns.id),
 	})
-	rows, err := tx.Query(query, ns.id)
+	rows, err := tx.Query(query, params...)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -327,16 +357,17 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		// are so long as there are more than zero.
 		//
 		// Pending:
+		params = queryParams{}
 		query = buildSelect([]string{workSpecName, "COUNT(*)"},
 			[]string{workSpecTable, workUnitTable, attemptTable},
 			[]string{
-				inThisNamespace, // binds $1
+				workSpecInNamespace(&params, ns.id),
 				workUnitInSpec,
 				attemptThisWorkUnit,
 				attemptIsPending,
 			})
 		query += " GROUP BY " + workSpecName
-		rows, err = tx.Query(query, ns.id)
+		rows, err = tx.Query(query, params...)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -351,17 +382,26 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		})
 
 		// Available count (0/1):
-		query = buildSelect([]string{"1"},
-			[]string{workUnitTable},
-			[]string{workUnitInSpec, hasNoAttempt})
-		query = buildSelect(
-			[]string{
-				workSpecName,
-				"EXISTS(" + query + ")",
-			},
-			[]string{workSpecTable},
-			[]string{inThisNamespace})
-		rows, err = tx.Query(query, ns.id)
+		now := ns.Coordinate().clock.Now()
+		params = queryParams{}
+		query = buildSelect([]string{
+			"1",
+		}, []string{
+			workUnitTable,
+		}, []string{
+			workUnitInSpec,
+			hasNoAttempt,
+			"NOT " + workUnitTooSoon(&params, now),
+		})
+		query = buildSelect([]string{
+			workSpecName,
+			"EXISTS(" + query + ")",
+		}, []string{
+			workSpecTable,
+		}, []string{
+			workSpecInNamespace(&params, ns.id),
+		})
+		rows, err = tx.Query(query, params...)
 		err = scanRows(rows, func() error {
 			var name string
 			var present bool

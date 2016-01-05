@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package coordinate defines an abstract API to Coordinate.
@@ -237,6 +237,11 @@ const (
 	// attempt, where that attempt is Failed.  The work units have
 	// completed unsuccessfully.
 	FailedUnit
+
+	// DelayedUnit corresponds to work units that do not have
+	// active attempts, but do have a not-before start time that
+	// has not yet been reached.
+	DelayedUnit
 )
 
 // WorkUnitQuery defines terms to select some subset of the work units
@@ -310,7 +315,7 @@ type WorkSpec interface {
 	// AddWorkUnit adds a single work unit to this work spec.  If
 	// a work unit already exists with the specified name, it is
 	// overridden.
-	AddWorkUnit(name string, data map[string]interface{}, priority float64) (WorkUnit, error)
+	AddWorkUnit(name string, data map[string]interface{}, meta WorkUnitMeta) (WorkUnit, error)
 
 	// WorkUnit retrieves a single work unit by name.  If it does
 	// not exist, return ErrNoSuchWorkUnit.
@@ -351,6 +356,20 @@ type WorkSpec interface {
 	DeleteWorkUnits(WorkUnitQuery) (int, error)
 }
 
+// WorkUnitMeta defines control data for a work unit.  This information
+// determines what order work units run in and if they need to be delayed.
+type WorkUnitMeta struct {
+	// Priority is an arbitrary priority score for this work unit.
+	// Higher priority executes sooner.  Zero is the default
+	// priority score.
+	Priority float64 `json:"priority"`
+
+	// NotBefore specifies the earliest time this work unit is
+	// allowed to run.  A zero time allows the work unit to run
+	// immediately.
+	NotBefore time.Time `json:"not_before"`
+}
+
 // A WorkUnit is a single job to perform.  It is associated with a
 // specific WorkSpec.  It could be a map entry, and has a name (key)
 // and a data map.
@@ -368,12 +387,30 @@ type WorkUnit interface {
 	// This information is derived from ActiveAttempt().
 	Status() (WorkUnitStatus, error)
 
+	// Meta retrieves the combined control metadata for this work
+	// unit.
+	Meta() (WorkUnitMeta, error)
+
+	// SetMeta updates the control metadata for this work unit.
+	// Note that zero values for fields here are meaningful, and
+	// so callers will generally want to call Meta() and then
+	// update fields.
+	SetMeta(WorkUnitMeta) error
+
 	// Priority gets a priority score for this work unit.  Higher
 	// priority executes sooner.
+	//
+	// TODO(dmaze): this call is redundant with Meta() and will
+	// be removed in a future version of coordinate, not before
+	// coordinate 0.4.0.
 	Priority() (float64, error)
 
 	// SetPriority changes the priority score for this work unit.
 	// Higher priority executes sooner.
+	//
+	// TODO(dmaze): this call is redundant with SetMeta() and will
+	// be removed in a future version of coordinate, not before
+	// coordinate 0.4.0.
 	SetPriority(float64) error
 
 	// ActiveAttempt returns the current Attempt for this work
@@ -650,13 +687,11 @@ type Attempt interface {
 
 	// Retry transitions an Attempt from Pending to Retryable
 	// status.  If data is non-nil, also updates the work unit
-	// data.
-	//
-	// TODO: This method is likely to gain a time.Duration
-	// parameter to set the earliest time for a retry.
+	// data.  If delay is non-zero, sets the work unit to not
+	// be allowed to restart until this time has passed.
 	//
 	// If the Status() of this attempt is not Pending, or if it
 	// is not both Expired and the current active Attempt, returns
 	// ErrNotPending and has no effect.
-	Retry(data map[string]interface{}) error
+	Retry(data map[string]interface{}, delay time.Duration) error
 }

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restserver
@@ -125,7 +125,7 @@ func (api *restAPI) AttemptRetry(ctx *context, in interface{}) (interface{}, err
 	if !valid {
 		return nil, errUnmarshal
 	}
-	err := ctx.Attempt.Retry(repr.Data)
+	err := ctx.Attempt.Retry(repr.Data, repr.Delay)
 	return nil, err
 }
 

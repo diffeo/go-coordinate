@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restclient
@@ -54,11 +54,11 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	return spec.PutTo(spec.Representation.MetaURL, map[string]interface{}{}, meta, nil)
 }
 
-func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, priority float64) (coordinate.WorkUnit, error) {
+func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (coordinate.WorkUnit, error) {
 	repr := restdata.WorkUnit{}
 	repr.Name = name
 	repr.Data = data
-	repr.Priority = &priority
+	repr.Meta = &meta
 
 	unit := workUnit{workSpec: spec}
 	err := spec.PostTo(spec.Representation.WorkUnitsURL, map[string]interface{}{}, repr, &unit.Representation)
@@ -146,13 +146,17 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 
 func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
 	params := queryToParams(q)
-	repr := restdata.WorkUnit{Priority: &priority}
+	repr := restdata.WorkUnit{Meta: &coordinate.WorkUnitMeta{
+		Priority: priority,
+	}}
 	return spec.PostTo(spec.Representation.WorkUnitChangeURL, params, repr, nil)
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
 	params := queryToParams(q)
-	repr := restdata.WorkUnit{Priority: &priority}
+	repr := restdata.WorkUnit{Meta: &coordinate.WorkUnitMeta{
+		Priority: priority,
+	}}
 	return spec.PostTo(spec.Representation.WorkUnitAdjustURL, params, repr, nil)
 }
 

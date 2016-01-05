@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package memory
@@ -42,10 +42,10 @@ func (q availableUnits) Len() int {
 
 // isUnitHigherPriority returns true if a is more important than b.
 func isUnitHigherPriority(a, b *workUnit) bool {
-	if a.priority > b.priority {
+	if a.meta.Priority > b.meta.Priority {
 		return true
 	}
-	if a.priority < b.priority {
+	if a.meta.Priority < b.meta.Priority {
 		return false
 	}
 	return a.name < b.name

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package jobserver provides a CBOR-RPC interface compatible with
@@ -20,6 +20,7 @@
 package jobserver
 
 import (
+	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"sync"
 )
@@ -35,6 +36,11 @@ type JobServer struct {
 	// GlobalConfig is the configuration that is returned by the
 	// GetConfig RPC call.
 	GlobalConfig map[string]interface{}
+
+	// Clock is the system time source.  This should agree with the
+	// time source for the Coordinate backend, if it was created with
+	// an alternate time source.
+	Clock clock.Clock
 
 	// locks is the root of the tree for the hierarchical lock
 	// subsystem.

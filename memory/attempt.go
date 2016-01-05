@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package memory
@@ -148,7 +148,7 @@ func (attempt *attempt) Finish(data map[string]interface{}) error {
 	var nextWorkSpec *workSpec
 	output, ok := data["output"]
 	if ok {
-		newUnits = coordinate.ExtractWorkUnitOutput(output)
+		newUnits = coordinate.ExtractWorkUnitOutput(output, attempt.Coordinate().clock.Now())
 	}
 	if newUnits != nil {
 		then := attempt.workUnit.workSpec.meta.NextWorkSpecName
@@ -171,13 +171,14 @@ func (attempt *attempt) Fail(data map[string]interface{}) error {
 	return nil
 }
 
-func (attempt *attempt) Retry(data map[string]interface{}) error {
+func (attempt *attempt) Retry(data map[string]interface{}, delay time.Duration) error {
 	globalLock(attempt)
 	defer globalUnlock(attempt)
 	if !attempt.isPending() {
 		return coordinate.ErrNotPending
 	}
 	attempt.finish(coordinate.Retryable, data)
+	attempt.workUnit.meta.NotBefore = attempt.Coordinate().clock.Now().Add(delay)
 	return nil
 }
 

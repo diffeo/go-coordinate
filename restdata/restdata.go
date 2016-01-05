@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package restdata defines common data structures shared between the
@@ -327,16 +327,17 @@ type WorkUnitList struct {
 	WorkUnits []WorkUnitShort `json:"work_units"`
 }
 
-// WorkUnit provides complete static data for a work unit.
+// WorkUnit provides complete static data for a work unit.  (Coordinate
+// 0.3.0 removes a "priority" field and replaces it with "meta".)
 type WorkUnit struct {
 	WorkUnitShort
 
 	// Data is the user-provided work unit data.
 	Data DataDict `json:"data,omitempty"`
 
-	// Priority is a priority score: higher-priority work units
-	// run earlier within a work spec.
-	Priority *float64 `json:"priority"`
+	// Meta describes additional control information for this
+	// work unit, such as its scheduling priority.
+	Meta *coordinate.WorkUnitMeta `json:"meta"`
 
 	// Status describes the overall status of this work unit,
 	// which is a function of its active attempt.  This cannot
@@ -547,6 +548,11 @@ type AttemptCompletion struct {
 	// the attempt, if this is a renew request.  This is a number
 	// in nanoseconds.
 	ExtendDuration time.Duration `json:"extend_duration"`
+
+	// Delay holds the length of time to wait before retrying the
+	// work unit, if this is a retry request.  This is a number in
+	// nanoseconds.  (Added in Coordinate 0.3.0)
+	Delay time.Duration `json:"delay"`
 }
 
 // ErrorResponse can be a response to any method, generally accompanied

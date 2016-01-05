@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver_test
@@ -7,12 +7,12 @@ package jobserver_test
 // from https://github.com/diffeo/coordinate/coordinate/test.
 
 import (
-	"flag"
 	"fmt"
-	"github.com/diffeo/go-coordinate/backend"
+	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/jobserver"
+	"github.com/diffeo/go-coordinate/memory"
 	"github.com/satori/go.uuid"
 	"gopkg.in/check.v1"
 	"os"
@@ -24,19 +24,15 @@ func Test(t *testing.T) { check.TestingT(t) }
 
 // TestMain is called from the command line.
 func TestMain(m *testing.M) {
-	backend := backend.Backend{Implementation: "memory"}
-	flag.Var(&backend, "backend", "impl:address of coordinate storage")
-	flag.Parse()
-	c, err := backend.Coordinate()
-	if err != nil {
-		panic(err)
-	}
-	check.Suite(&PythonSuite{Coordinate: c})
+	check.Suite(&PythonSuite{Clock: clock.NewMock()})
 	os.Exit(m.Run())
 }
 
 // PythonSuite collects together the Python-based tests.
 type PythonSuite struct {
+	// Clock contains the mock time source.
+	Clock *clock.Mock
+
 	// Coordinate contains the top-level interface to the backend
 	// for the job server.
 	Coordinate coordinate.Coordinate
@@ -53,12 +49,17 @@ type PythonSuite struct {
 
 func (s *PythonSuite) SetUpTest(c *check.C) {
 	var err error
+
+	s.Coordinate = memory.NewWithClock(s.Clock)
 	s.Namespace, err = s.Coordinate.Namespace(c.TestName())
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	s.JobServer = jobserver.JobServer{Namespace: s.Namespace}
+	s.JobServer = jobserver.JobServer{
+		Namespace: s.Namespace,
+		Clock:     s.Clock,
+	}
 	// Reset the "default" work spec for every test; some modify it
 	s.WorkSpec = map[string]interface{}{
 		"name":         "test_job_client",

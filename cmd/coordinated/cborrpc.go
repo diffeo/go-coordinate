@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package main
@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/jobserver"
@@ -47,6 +48,7 @@ func ServeCBORRPC(
 		jobd = &jobserver.JobServer{
 			Namespace:    namespace,
 			GlobalConfig: gConfig,
+			Clock:        clock.New(),
 		}
 		ln, err = net.Listen(network, laddr)
 	}

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver
@@ -24,9 +24,10 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 
 	// Unmarshal the work unit list into a []AddWorkUnitItem.
 	// Fail now if any are invalid.
+	now := jobs.Clock.Now()
 	items := make([]coordinate.AddWorkUnitItem, len(workUnitKvp))
 	for i, kvp := range workUnitKvp {
-		items[i], err = coordinate.ExtractAddWorkUnitItem(kvp)
+		items[i], err = coordinate.ExtractAddWorkUnitItem(kvp, now)
 		if err != nil {
 			return false, "", err
 		}
@@ -34,7 +35,7 @@ func (jobs *JobServer) AddWorkUnits(workSpecName string, workUnitKvp []interface
 
 	// Now go through and add them all
 	for _, item := range items {
-		_, err = spec.AddWorkUnit(item.Key, item.Data, item.Priority)
+		_, err = spec.AddWorkUnit(item.Key, item.Data, item.Meta)
 		if err != nil {
 			// Again, Python coordinate expects to never see
 			// a failure here?
@@ -296,6 +297,7 @@ func workUnitStatus(workUnit coordinate.WorkUnit) (status WorkUnitStatus, attemp
 	var attemptStatus coordinate.AttemptStatus
 	attempt, err = workUnit.ActiveAttempt()
 	if err == nil && attempt == nil {
+		// NB: this also includes "delayed" status
 		status = Available
 		return
 	}

@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinate
@@ -124,6 +124,30 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 	return
 }
 
+// AddWorkUnitMeta describes the metadata fields that can appear
+// in work unit output.
+type AddWorkUnitMeta struct {
+	// Priority gives the priority of the created work unit.
+	Priority float64
+
+	// Delay gives the minimum time, in seconds, before the
+	// created work unit can execute.
+	Delay float64
+}
+
+// ToMeta converts an AddWorkUnitMeta to a plain WorkUnitMeta.
+func (awu AddWorkUnitMeta) ToMeta(now time.Time) WorkUnitMeta {
+	delay := time.Duration(awu.Delay) * time.Second
+	then := time.Time{}
+	if delay > 0 {
+		then = now.Add(delay)
+	}
+	return WorkUnitMeta{
+		Priority:  awu.Priority,
+		NotBefore: then,
+	}
+}
+
 // AddWorkUnitItem describes a single work unit to be added.  This is
 // returned from ExtractWorkUnitOutput.  When it appears in a work
 // unit's data "output" field, it is generally as a list or
@@ -135,14 +159,8 @@ type AddWorkUnitItem struct {
 	// Data is the dictionary of per-work-unit data.
 	Data map[string]interface{}
 
-	// Metadata defines additional settings for this work unit.
-	// The only recognized key is "priority", which is used only
-	// if the Priority field is not set.
-	Metadata map[string]interface{}
-
-	// Priority defines a relative priority for this work unit.
-	// Higher priority runs sooner.
-	Priority float64
+	// Meta defines additional settings for this work unit.
+	Meta WorkUnitMeta
 }
 
 // ExtractWorkUnitOutput coerces the "output" key from a work unit into
@@ -151,7 +169,7 @@ type AddWorkUnitItem struct {
 // Backends should call this when an attempt is successfully finished
 // to get new work units to create, if the work spec's metadata's
 // NextWorkSpec field is non-empty.
-func ExtractWorkUnitOutput(output interface{}) map[string]AddWorkUnitItem {
+func ExtractWorkUnitOutput(output interface{}, now time.Time) map[string]AddWorkUnitItem {
 	result := make(map[string]AddWorkUnitItem)
 
 	// Can we decode it as a map?
@@ -183,7 +201,7 @@ func ExtractWorkUnitOutput(output interface{}) map[string]AddWorkUnitItem {
 	// Now run through the list
 	for i := 0; i < list.Len(); i++ {
 		item := list.Index(i).Interface()
-		awuItem, err := ExtractAddWorkUnitItem(item)
+		awuItem, err := ExtractAddWorkUnitItem(item, now)
 		if err == nil {
 			result[awuItem.Key] = awuItem
 		}
@@ -193,26 +211,16 @@ func ExtractWorkUnitOutput(output interface{}) map[string]AddWorkUnitItem {
 
 // ExtractAddWorkUnitItem converts an arbitrary object (which really
 // should be a cborpc.PythonTuple or a list) into an AddWorkUnitItem.
-func ExtractAddWorkUnitItem(obj interface{}) (result AddWorkUnitItem, err error) {
+func ExtractAddWorkUnitItem(obj interface{}, now time.Time) (result AddWorkUnitItem, err error) {
 	var (
-		decoder      *mapstructure.Decoder
-		haveMetadata bool
-		havePriority bool
-		kvpList      []interface{}
-		kvpMap       map[string]interface{}
-		str          string
-		bstr         []byte
-		ok           bool
+		decoder *mapstructure.Decoder
+		kvpList []interface{}
+		kvpMap  map[string]interface{}
+		ok      bool
 	)
 	// If we got handed a string (or a byte string) turn it into
 	// a work unit with no data
-	if str, ok = obj.(string); ok {
-		result.Key = str
-		result.Data = make(map[string]interface{})
-		return
-	}
-	if bstr, ok = obj.([]byte); ok {
-		result.Key = string(bstr)
+	if result.Key, ok = cborrpc.Destringify(obj); ok {
 		result.Data = make(map[string]interface{})
 		return
 	}
@@ -231,30 +239,38 @@ func ExtractAddWorkUnitItem(obj interface{}) (result AddWorkUnitItem, err error)
 	kvpMap["key"] = kvpList[0]
 	kvpMap["data"] = kvpList[1]
 	if len(kvpList) >= 3 && kvpList[2] != nil {
-		kvpMap["metadata"] = kvpList[2]
-		haveMetadata = true
+		kvpMap["meta"] = kvpList[2]
 	}
-	if len(kvpList) >= 4 && kvpList[3] != nil {
-		kvpMap["priority"] = kvpList[3]
-		havePriority = true
+
+	// Now we can invoke mapstructure, on this modified struct
+	var partial struct {
+		Key  string
+		Data map[string]interface{}
+		Meta AddWorkUnitMeta
 	}
-	// Now we can invoke mapstructure
 	config := mapstructure.DecoderConfig{
 		DecodeHook: cborrpc.DecodeBytesAsString,
-		Result:     &result,
+		Result:     &partial,
 	}
 	decoder, err = mapstructure.NewDecoder(&config)
 	if err == nil {
 		err = decoder.Decode(kvpMap)
 	}
-	if err == nil && haveMetadata && !havePriority {
-		// See if the caller passed metadata["priority"]
-		// instead of an explicit priority field.
-		if priority, ok := result.Metadata["priority"]; ok {
-			if result.Priority, ok = priority.(float64); !ok {
-				err = ErrBadPriority
-			}
+
+	// If that worked, copy data over to a real result
+	if err == nil {
+		result.Key = partial.Key
+		result.Data = partial.Data
+		result.Meta = partial.Meta.ToMeta(now)
+	}
+
+	// If a priority value was given in the list, that overrides
+	// what got extracted
+	if err == nil && len(kvpList) >= 4 && kvpList[3] != nil {
+		if result.Meta.Priority, ok = kvpList[3].(float64); !ok {
+			err = ErrBadPriority
 		}
 	}
+
 	return
 }

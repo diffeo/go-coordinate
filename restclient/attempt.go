@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restclient
@@ -131,7 +131,7 @@ func (a *attempt) Fail(data map[string]interface{}) error {
 	return a.PostTo(a.Representation.FailURL, map[string]interface{}{}, repr, nil)
 }
 
-func (a *attempt) Retry(data map[string]interface{}) error {
-	repr := restdata.AttemptCompletion{Data: data}
+func (a *attempt) Retry(data map[string]interface{}, delay time.Duration) error {
+	repr := restdata.AttemptCompletion{Data: data, Delay: delay}
 	return a.PostTo(a.Representation.RetryURL, map[string]interface{}{}, repr, nil)
 }

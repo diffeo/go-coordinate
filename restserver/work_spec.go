@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restserver
@@ -154,8 +154,8 @@ func (api *restAPI) WorkSpecChange(ctx *context, in interface{}) (interface{}, e
 			err = errUnmarshal
 		}
 	}
-	if err == nil && repr.Priority != nil {
-		err = ctx.WorkSpec.SetWorkUnitPriorities(q, *repr.Priority)
+	if err == nil && repr.Meta != nil {
+		err = ctx.WorkSpec.SetWorkUnitPriorities(q, repr.Meta.Priority)
 	}
 	return nil, err
 }
@@ -174,8 +174,8 @@ func (api *restAPI) WorkSpecAdjust(ctx *context, in interface{}) (interface{}, e
 			err = errUnmarshal
 		}
 	}
-	if err == nil && repr.Priority != nil {
-		err = ctx.WorkSpec.AdjustWorkUnitPriorities(q, *repr.Priority)
+	if err == nil && repr.Meta != nil {
+		err = ctx.WorkSpec.AdjustWorkUnitPriorities(q, repr.Meta.Priority)
 	}
 	return nil, err
 }

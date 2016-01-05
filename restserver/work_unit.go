@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restserver
@@ -24,9 +24,9 @@ func (api *restAPI) fillWorkUnit(namespace coordinate.Namespace, spec coordinate
 		repr.Data, err = unit.Data()
 	}
 	if err == nil {
-		var priority float64
-		priority, err = unit.Priority()
-		repr.Priority = &priority
+		var meta coordinate.WorkUnitMeta
+		meta, err = unit.Meta()
+		repr.Meta = &meta
 	}
 	if err == nil {
 		repr.Status, err = unit.Status()
@@ -109,11 +109,11 @@ func (api *restAPI) WorkUnitsPost(ctx *context, in interface{}) (interface{}, er
 		err = errUnmarshal
 	}
 	if err == nil {
-		var priority float64
-		if repr.Priority != nil {
-			priority = *repr.Priority
+		var meta coordinate.WorkUnitMeta
+		if repr.Meta != nil {
+			meta = *repr.Meta
 		}
-		unit, err = ctx.WorkSpec.AddWorkUnit(repr.Name, repr.Data, priority)
+		unit, err = ctx.WorkSpec.AddWorkUnit(repr.Name, repr.Data, meta)
 	}
 	if err == nil {
 		err = api.fillWorkUnitShort(ctx.Namespace, ctx.WorkSpec, unit.Name(), &short)
@@ -149,8 +149,8 @@ func (api *restAPI) WorkUnitPut(ctx *context, in interface{}) (interface{}, erro
 	if err == nil && repr.ActiveAttemptURL == "-" {
 		err = ctx.WorkUnit.ClearActiveAttempt()
 	}
-	if err == nil && repr.Priority != nil {
-		err = ctx.WorkUnit.SetPriority(*repr.Priority)
+	if err == nil && repr.Meta != nil {
+		err = ctx.WorkUnit.SetMeta(*repr.Meta)
 	}
 
 	return nil, err

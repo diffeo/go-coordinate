@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restclient
@@ -59,21 +59,34 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	return 0, err
 }
 
-func (unit *workUnit) Priority() (float64, error) {
-	err := unit.Refresh()
-	if err == nil && unit.Representation.Priority == nil {
+func (unit *workUnit) Meta() (meta coordinate.WorkUnitMeta, err error) {
+	err = unit.Refresh()
+	if err == nil && unit.Representation.Meta == nil {
 		err = errors.New("Invalid work unit response")
 	}
 	if err == nil {
-		return *unit.Representation.Priority, nil
+		meta = *unit.Representation.Meta
 	}
-	return 0, err
+	return
+}
+
+func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) error {
+	repr := restdata.WorkUnit{}
+	repr.Meta = &meta
+	return unit.Put(repr, nil)
+}
+
+func (unit *workUnit) Priority() (float64, error) {
+	meta, err := unit.Meta()
+	return meta.Priority, err
 }
 
 func (unit *workUnit) SetPriority(p float64) error {
-	repr := restdata.WorkUnit{}
-	repr.Priority = &p
-	return unit.Put(repr, nil)
+	// This is a roundabout way to do this; but it is the only
+	// entry point to change *only* the priority
+	return unit.workSpec.SetWorkUnitPriorities(coordinate.WorkUnitQuery{
+		Names: []string{unit.Representation.Name},
+	}, p)
 }
 
 func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {

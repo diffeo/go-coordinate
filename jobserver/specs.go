@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver
@@ -264,5 +264,5 @@ func (jobs *JobServer) GetWorkSpecMeta(workSpecName string) (result map[string]i
 // Now returns the current Unix time as seen by the server.  It can be
 // used as a simple aliveness test for the server.
 func (jobs *JobServer) Now() (int64, error) {
-	return time.Now().Unix(), nil
+	return jobs.Clock.Now().Unix(), nil
 }
