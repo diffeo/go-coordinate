@@ -1,6 +1,17 @@
 Major Changes
 =============
 
+0.3.0 (unreleased)
+------------------
+
+* Adds the ability for work units to declare an earliest time they can
+  run.  Changes `WorkSpec.AddWorkUnit()` to take a new `WorkUnitMeta`
+  structure instead of the existing `priority` parameter, and adds a
+  `time.Duration` parameter to `Attempt.Retry()`.  Generated `output`
+  work units in chained work units can also declare a `delay` before
+  running the next unit.  Makes corresponding (incompatible) changes
+  to the REST API.
+
 0.2.0 (4 Jan 2016)
 ------------------
 
