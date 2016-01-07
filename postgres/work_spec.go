@@ -254,7 +254,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 		}, []string{
 			workUnitAttemptJoin,
 		}, []string{
-			workUnitInOtherSpec(&params, spec.id),
+			workUnitInSpec(&params, spec.id),
 		})
 		query += " GROUP BY " + attemptStatus
 		rows, err := tx.Query(query, params...)
@@ -362,7 +362,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			[]string{workSpecTable, workUnitTable, attemptTable},
 			[]string{
 				workSpecInNamespace(&params, ns.id),
-				workUnitInSpec,
+				workUnitInThisSpec,
 				attemptThisWorkUnit,
 				attemptIsPending,
 			})
@@ -389,8 +389,8 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		}, []string{
 			workUnitTable,
 		}, []string{
-			workUnitInSpec,
-			hasNoAttempt,
+			workUnitInThisSpec,
+			workUnitHasNoAttempt,
 			"NOT " + workUnitTooSoon(&params, now),
 		})
 		query = buildSelect([]string{

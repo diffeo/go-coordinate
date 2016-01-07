@@ -62,7 +62,7 @@ func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, met
 	}, []string{
 		workUnitAttemptJoin,
 	}, []string{
-		workUnitInOtherSpec(&params, spec.id),
+		workUnitInSpec(&params, spec.id),
 		workUnitHasName(&params, name),
 	}) + " FOR UPDATE OF " + workUnitTable
 	row := tx.QueryRow(query, params...)
@@ -112,7 +112,7 @@ func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 	}, []string{
 		workUnitTable,
 	}, []string{
-		workUnitInOtherSpec(&params, spec.id),
+		workUnitInSpec(&params, spec.id),
 		workUnitHasName(&params, name),
 	})
 	row := theDB(spec).QueryRow(query, params...)
@@ -136,7 +136,7 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery, now time.Time) (st
 	outputs := []string{workUnitID}
 	tables := []string{workUnitTable}
 	params := queryParams{}
-	conditions := []string{workUnitInOtherSpec(&params, spec.id)}
+	conditions := []string{workUnitInSpec(&params, spec.id)}
 
 	if len(q.Names) > 0 {
 		nameparams := make([]string, len(q.Names))
@@ -237,7 +237,7 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 	}, []string{
 		workUnitAttemptJoin,
 	}, []string{
-		workUnitInOtherSpec(&params, spec.id),
+		workUnitInSpec(&params, spec.id),
 	}) + " GROUP BY " + attemptStatus + ", delayed"
 	rows, err := theDB(spec).Query(query, params...)
 	if err != nil {

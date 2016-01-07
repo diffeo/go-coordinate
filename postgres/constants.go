@@ -3,6 +3,17 @@
 
 package postgres
 
+// This file contains Coordinate-specific SQL definitions.  It follows
+// the following conventions:
+//
+// tableTable: constant for the table name "table"
+// tableColumn: constant for the column name "table.column"
+// isTable: WHERE test for primary key match of table
+// tableIsColumny: test for some boolean property of table
+// tableHasColumn: equality test for some non-boolean property of table
+// tableIsThing: foreign-key test for some other non-joined table
+// tableIsThisThing: foreign-key test for some other joined table
+
 import (
 	"time"
 )
@@ -60,16 +71,15 @@ const (
 		attemptTable + "  ON " + workUnitAttempt + "=" + attemptID)
 
 	// WHERE clause fragments:
-	hasNoAttempt        = workUnitAttempt + " IS NULL"
-	hasThisParent       = workerParent + "=$1"
-	byThisWorker        = attemptWorkerID + "=$1"
-	workUnitInSpec      = workUnitSpec + "=" + workSpecID
-	attemptIsActive     = attemptActive + "=TRUE"
-	attemptIsPending    = attemptStatus + "='pending'"
-	attemptIsExpired    = attemptExpirationTime + "<$1"
-	attemptThisWorkUnit = attemptWorkUnitID + "=" + workUnitID
-	attemptThisWorker   = attemptWorkerID + "=" + workerID
+	workUnitHasNoAttempt = workUnitAttempt + " IS NULL"
+	workUnitInThisSpec   = workUnitSpec + "=" + workSpecID
+	attemptIsActive      = attemptActive + "=TRUE"
+	attemptIsPending     = attemptStatus + "='pending'"
+	attemptThisWorkUnit  = attemptWorkUnitID + "=" + workUnitID
+	attemptThisWorker    = attemptWorkerID + "=" + workerID
 )
+
+// More WHERE clause fragments, that depend on query params:
 
 func isWorkSpec(params *queryParams, id int) string {
 	return workSpecID + "=" + params.Param(id)
@@ -87,7 +97,7 @@ func isWorkUnit(params *queryParams, id int) string {
 	return workUnitID + "=" + params.Param(id)
 }
 
-func workUnitInOtherSpec(params *queryParams, id int) string {
+func workUnitInSpec(params *queryParams, id int) string {
 	return workUnitSpec + "=" + params.Param(id)
 }
 
@@ -115,4 +125,16 @@ func workUnitDelayed(params *queryParams, now time.Time) string {
 
 func isAttempt(params *queryParams, id int) string {
 	return attemptID + "=" + params.Param(id)
+}
+
+func attemptByWorker(params *queryParams, id int) string {
+	return attemptWorkerID + "=" + params.Param(id)
+}
+
+func attemptIsExpired(params *queryParams, now time.Time) string {
+	return attemptExpirationTime + "<" + params.Param(now)
+}
+
+func workerHasParent(params *queryParams, id int) string {
+	return workerParent + "=" + params.Param(id)
 }

@@ -151,7 +151,7 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 		outputs := []string{workSpecNextWorkSpec, workUnitAttempt}
 		tables := []string{workSpecTable, workUnitTable}
 		params := queryParams{}
-		conditions := []string{isWorkUnit(&params, a.unit.id), workUnitInSpec}
+		conditions := []string{isWorkUnit(&params, a.unit.id), workUnitInThisSpec}
 		if data == nil {
 			outputs = append(outputs, workUnitData, attemptData)
 			tables = append(tables, attemptTable)
@@ -479,8 +479,8 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now t
 	}, []string{
 		workUnitTable,
 	}, []string{
-		workUnitInOtherSpec(&params, spec.id),
-		hasNoAttempt,
+		workUnitInSpec(&params, spec.id),
+		workUnitHasNoAttempt,
 		"NOT " + workUnitTooSoon(&params, now),
 	})
 	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC")
@@ -589,27 +589,30 @@ func makeAttempt(tx *sql.Tx, unit *workUnit, w *worker, length time.Duration) (*
 }
 
 func (w *worker) ActiveAttempts() ([]coordinate.Attempt, error) {
+	qp := queryParams{}
 	return w.findAttempts([]string{
-		byThisWorker,
+		attemptByWorker(&qp, w.id),
 		attemptIsActive,
-	}, false)
+	}, &qp, false)
 }
 
 func (w *worker) AllAttempts() ([]coordinate.Attempt, error) {
+	qp := queryParams{}
 	return w.findAttempts([]string{
-		byThisWorker,
-	}, false)
+		attemptByWorker(&qp, w.id),
+	}, &qp, false)
 }
 
 func (w *worker) ChildAttempts() ([]coordinate.Attempt, error) {
+	qp := queryParams{}
 	return w.findAttempts([]string{
 		attemptThisWorker,
 		attemptIsActive,
-		hasThisParent,
-	}, true)
+		workerHasParent(&qp, w.id),
+	}, &qp, true)
 }
 
-func (w *worker) findAttempts(conditions []string, forOtherWorkers bool) ([]coordinate.Attempt, error) {
+func (w *worker) findAttempts(conditions []string, qp *queryParams, forOtherWorkers bool) ([]coordinate.Attempt, error) {
 	outputs := []string{
 		attemptID,
 		workUnitID,
@@ -624,7 +627,7 @@ func (w *worker) findAttempts(conditions []string, forOtherWorkers bool) ([]coor
 	}
 	conditions = append(conditions,
 		attemptThisWorkUnit,
-		workUnitInSpec,
+		workUnitInThisSpec,
 	)
 	if forOtherWorkers {
 		outputs = append(outputs, workerID, workerName)
@@ -632,7 +635,7 @@ func (w *worker) findAttempts(conditions []string, forOtherWorkers bool) ([]coor
 		conditions = append(conditions, attemptThisWorker)
 	}
 	query := buildSelect(outputs, tables, conditions)
-	rows, err := theDB(w).Query(query, w.id)
+	rows, err := theDB(w).Query(query, *qp...)
 	if err != nil {
 		return nil, err
 	}
@@ -711,14 +714,20 @@ func expireAttempts(c coordinable, tx *sql.Tx) error {
 	now = c.Coordinate().clock.Now()
 
 	// Remove expiring attempts from their work unit
-	cte = buildSelect([]string{attemptID},
-		[]string{attemptTable},
-		[]string{attemptIsPending, attemptIsExpired}) // $1 = "now"
+	qp := queryParams{}
+	cte = buildSelect([]string{
+		attemptID,
+	}, []string{
+		attemptTable,
+	}, []string{
+		attemptIsPending,
+		attemptIsExpired(&qp, now),
+	})
 	cte += " FOR UPDATE"
 	query = buildUpdate(workUnitTable,
 		[]string{"active_attempt_id=NULL"},
 		[]string{"active_attempt_id IN (" + cte + ")"})
-	result, err = tx.Exec(query, now)
+	result, err = tx.Exec(query, qp...)
 	if err != nil {
 		return err
 	}
@@ -733,9 +742,17 @@ func expireAttempts(c coordinable, tx *sql.Tx) error {
 	}
 
 	// Mark attempts as expired
-	query = buildUpdate(attemptTable,
-		[]string{"expiration_time=$1", "status='expired'"},
-		[]string{attemptIsPending, attemptIsExpired})
-	_, err = tx.Exec(query, now)
+	qp = queryParams{}
+	// A slightly exotic setup, since we want to reuse the "now"
+	// param
+	dollarsNow := qp.Param(now)
+	fields := fieldList{}
+	fields.AddDirect("expiration_time", dollarsNow)
+	fields.AddDirect("status", "'expired'")
+	query = buildUpdate(attemptTable, fields.UpdateChanges(), []string{
+		attemptIsPending,
+		attemptExpirationTime + "<" + dollarsNow,
+	})
+	_, err = tx.Exec(query, qp...)
 	return err
 }
