@@ -36,7 +36,7 @@ import (
 // If f panics or returns a non-nil error, rolls the transaction back;
 // otherwise commits it before returning.  Returns the error value from
 // f, or some other error related to transaction management.
-func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
+func withTx(c coordinable, readOnly bool, f func(*sql.Tx) error) (err error) {
 	var (
 		tx   *sql.Tx
 		done bool
@@ -57,14 +57,26 @@ func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
 	// Run in a loop, repeating the work on serialization errors
 	for {
 		// Create the transaction
-		tx, err = theDB(c).Begin()
+		tx, err = c.Coordinate().db.Begin()
 		if err != nil {
 			return
 		}
 
-		// TODO(dmaze): see if there is a more useful way to
-		// set this globally
-		_, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ")
+		// We'd love to make this SERIALIZABLE, and the
+		// documentation suggests that it solves all our
+		// concurrency problems.  In practice, at least on
+		// PostgreSQL 9.3, there are issues with returning
+		// duplicate attempts...even though that's a sequence
+		//
+		// SELECT ... FROM work_units WHERE active_attempt_id IS NULL
+		// UPDATE work_units SET active_attempt_id=$1
+		//
+		// with an obvious conflict?
+		level := "REPEATABLE READ"
+		if readOnly {
+			level += " READ ONLY"
+		}
+		_, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL " + level)
 		if err != nil {
 			return
 		}
@@ -83,11 +95,15 @@ func withTx(c coordinable, f func(*sql.Tx) error) (err error) {
 		if pqerr, ok := err.(*pq.Error); ok {
 			if pqerr.Code == "40001" {
 				err = tx.Rollback()
-				if err != nil {
+				if err == sql.ErrTxDone {
+					// We want to roll back, but we
+					// can't, because we've already
+					// rolled back; not an error
+					err = nil
+				} else if err != nil {
 					return
 				}
 				tx = nil
-				err = nil
 				continue
 			}
 		}
@@ -123,6 +139,31 @@ func scanRows(rows *sql.Rows, f func() error) (err error) {
 	done = true
 	err = rows.Err()
 	return
+}
+
+// queryAndScan establishes a read-only transaction, runs query on it
+// with params, and calls f for each row in it.  It is the common case
+// of combining withTx() and scanRows().
+func queryAndScan(c coordinable, query string, params queryParams, f func(*sql.Rows) error) error {
+	return withTx(c, true, func(tx *sql.Tx) error {
+		rows, err := tx.Query(query, params...)
+		if err != nil {
+			return err
+		}
+		return scanRows(rows, func() error {
+			return f(rows)
+		})
+	})
+}
+
+// execInTx establishes a read-write transaction and executes a
+// statement, dropping the result.  It is the common case of combining
+// withTx() and a simple tx.Exec().
+func execInTx(c coordinable, query string, params queryParams) error {
+	return withTx(c, false, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, params...)
+		return err
+	})
 }
 
 // durationToSQL converts a time.Duration to ISO standard SQL syntax,

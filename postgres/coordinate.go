@@ -83,8 +83,3 @@ type coordinable interface {
 	// Coordinate returns the object at the root of the object tree.
 	Coordinate() *pgCoordinate
 }
-
-// theDB fetches the database handle from some object in the tree.
-func theDB(c coordinable) *sql.DB {
-	return c.Coordinate().db
-}

@@ -21,7 +21,7 @@ func (c *pgCoordinate) Namespace(name string) (coordinate.Namespace, error) {
 		coordinate: c,
 		name:       name,
 	}
-	err := withTx(c, func(tx *sql.Tx) error {
+	err := withTx(c, false, func(tx *sql.Tx) error {
 		row := tx.QueryRow("SELECT id FROM namespace WHERE name=$1", name)
 		err := row.Scan(&ns.id)
 		if err == sql.ErrNoRows {
@@ -39,25 +39,21 @@ func (c *pgCoordinate) Namespace(name string) (coordinate.Namespace, error) {
 
 func (c *pgCoordinate) Namespaces() (map[string]coordinate.Namespace, error) {
 	result := make(map[string]coordinate.Namespace)
-	err := withTx(c, func(tx *sql.Tx) error {
-		rows, err := tx.Query(buildSelect([]string{
-			namespaceName,
-			namespaceID,
-		}, []string{
-			namespaceTable,
-		}, []string{}))
+	params := queryParams{}
+	query := buildSelect([]string{
+		namespaceName,
+		namespaceID,
+	}, []string{
+		namespaceTable,
+	}, []string{})
+	err := queryAndScan(c, query, params, func(rows *sql.Rows) error {
+		ns := namespace{coordinate: c}
+		err := rows.Scan(&ns.name, &ns.id)
 		if err != nil {
 			return err
 		}
-		return scanRows(rows, func() error {
-			ns := namespace{coordinate: c}
-			err := rows.Scan(&ns.name, &ns.id)
-			if err != nil {
-				return err
-			}
-			result[ns.name] = &ns
-			return nil
-		})
+		result[ns.name] = &ns
+		return nil
 	})
 	if err != nil {
 		return nil, err
@@ -72,8 +68,9 @@ func (ns *namespace) Name() string {
 }
 
 func (ns *namespace) Destroy() error {
-	_, err := theDB(ns).Exec("DELETE FROM namespace WHERE id=$1", ns.id)
-	return err
+	params := queryParams{}
+	query := "DELETE FROM NAMESPACE WHERE id=" + params.Param(ns.id)
+	return execInTx(ns, query, params)
 }
 
 // coordinable interface:

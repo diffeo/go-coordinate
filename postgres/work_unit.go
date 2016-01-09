@@ -24,7 +24,7 @@ func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta
 	if err != nil {
 		return nil, err
 	}
-	err = withTx(spec, func(tx *sql.Tx) error {
+	err = withTx(spec, false, func(tx *sql.Tx) error {
 		unit, err = spec.addWorkUnit(tx, name, dataBytes, meta)
 		return err
 	})
@@ -115,8 +115,9 @@ func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
 		workUnitInSpec(&params, spec.id),
 		workUnitHasName(&params, name),
 	})
-	row := theDB(spec).QueryRow(query, params...)
-	err := row.Scan(&unit.id)
+	err := withTx(spec, true, func(tx *sql.Tx) error {
+		return tx.QueryRow(query, params...).Scan(&unit.id)
+	})
 	if err == sql.ErrNoRows {
 		return nil, coordinate.ErrNoSuchWorkUnit{Name: name}
 	}
@@ -193,7 +194,7 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery, now time.Time) (st
 }
 
 func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordinate.WorkUnit, error) {
-	_ = withTx(spec, func(tx *sql.Tx) error {
+	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
@@ -205,14 +206,11 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 	}, []string{
 		"id IN (" + cte + ")",
 	})
-	rows, err := theDB(spec).Query(query, params...)
-	if err != nil {
-		return nil, err
-	}
 	result := make(map[string]coordinate.WorkUnit)
-	err = scanRows(rows, func() error {
+	err := queryAndScan(spec, query, params, func(rows *sql.Rows) error {
 		unit := workUnit{spec: spec}
-		if err := rows.Scan(&unit.id, &unit.name); err == nil {
+		err := rows.Scan(&unit.id, &unit.name)
+		if err == nil {
 			result[unit.name] = &unit
 		}
 		return err
@@ -224,7 +222,7 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 }
 
 func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
-	_ = withTx(spec, func(tx *sql.Tx) error {
+	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
 	now := spec.Coordinate().clock.Now()
@@ -239,11 +237,7 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 	}, []string{
 		workUnitInSpec(&params, spec.id),
 	}) + " GROUP BY " + attemptStatus + ", delayed"
-	rows, err := theDB(spec).Query(query, params...)
-	if err != nil {
-		return nil, err
-	}
-	err = scanRows(rows, func() error {
+	err := queryAndScan(spec, query, params, func(rows *sql.Rows) error {
 		var (
 			status     sql.NullString
 			unitStatus coordinate.WorkUnitStatus
@@ -281,7 +275,7 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 }
 
 func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
-	_ = withTx(spec, func(tx *sql.Tx) error {
+	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
@@ -290,12 +284,11 @@ func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		"id IN (" + cte + ")",
 	})
-	_, err := theDB(spec).Exec(query, params...)
-	return err
+	return execInTx(spec, query, params)
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
-	_ = withTx(spec, func(tx *sql.Tx) error {
+	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
@@ -304,25 +297,25 @@ func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, prior
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		"id IN (" + cte + ")",
 	})
-	_, err := theDB(spec).Exec(query, params...)
-	return err
+	return execInTx(spec, query, params)
 }
 
-func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (int, error) {
-	_ = withTx(spec, func(tx *sql.Tx) error {
+func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (count int, err error) {
+	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	query := "DELETE FROM work_unit WHERE id IN (" + cte + ")"
-	result, err := theDB(spec).Exec(query, params...)
-	if err != nil {
-		return 0, err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return 0, err
-	}
-	return int(count), nil
+	err = withTx(spec, false, func(tx *sql.Tx) error {
+		result, err := tx.Exec(query, params...)
+		if err == nil {
+			var count64 int64
+			count64, err = result.RowsAffected()
+			count = int(count64)
+		}
+		return err
+	})
+	return
 }
 
 // WorkUnit interface
@@ -333,7 +326,7 @@ func (unit *workUnit) Name() string {
 
 func (unit *workUnit) Data() (map[string]interface{}, error) {
 	var result map[string]interface{}
-	err := withTx(unit, func(tx *sql.Tx) error {
+	err := withTx(unit, true, func(tx *sql.Tx) error {
 		var dataBytes []byte
 
 		// First try to get data from the active attempt
@@ -364,7 +357,7 @@ func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 }
 
 func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
-	_ = withTx(unit, func(tx *sql.Tx) error {
+	_ = withTx(unit, false, func(tx *sql.Tx) error {
 		return expireAttempts(unit, tx)
 	})
 	now := unit.Coordinate().clock.Now()
@@ -377,10 +370,11 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	}, []string{
 		isWorkUnit(&params, unit.id),
 	})
-	row := theDB(unit).QueryRow(query, params...)
 	var ns sql.NullString
 	var delayed bool
-	err := row.Scan(&ns, &delayed)
+	err := withTx(unit, true, func(tx *sql.Tx) error {
+		return tx.QueryRow(query, params...).Scan(&ns, &delayed)
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -416,34 +410,43 @@ func (unit *workUnit) Meta() (meta coordinate.WorkUnitMeta, err error) {
 	}, []string{
 		isWorkUnit(&params, unit.id),
 	})
-	row := theDB(unit).QueryRow(query, params...)
-	err = row.Scan(&meta.Priority, &notBefore)
+	err = withTx(unit, true, func(tx *sql.Tx) error {
+		return tx.QueryRow(query, params...).Scan(&meta.Priority, &notBefore)
+	})
 	meta.NotBefore = nullTimeToTime(notBefore)
 	return
 }
 
-func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) (err error) {
-	notBefore := timeToNullTime(meta.NotBefore)
+func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) error {
 	params := queryParams{}
-	query := buildUpdate(workUnitTable, []string{
-		"priority=" + params.Param(meta.Priority),
-		"not_before=" + params.Param(notBefore),
-	}, []string{
+	fields := fieldList{}
+	fields.Add(&params, "priority", meta.Priority)
+	fields.Add(&params, "not_before", timeToNullTime(meta.NotBefore))
+	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		isWorkUnit(&params, unit.id),
 	})
-	_, err = theDB(unit).Exec(query, params...)
-	return
+	return execInTx(unit, query, params)
 }
 
 func (unit *workUnit) Priority() (priority float64, err error) {
-	row := theDB(unit).QueryRow("SELECT priority FROM work_unit WHERE id=$1", unit.id)
-	err = row.Scan(&priority)
+	params := queryParams{}
+	query := buildSelect([]string{workUnitPriority},
+		[]string{workUnitTable},
+		[]string{isWorkUnit(&params, unit.id)})
+	err = withTx(unit, true, func(tx *sql.Tx) error {
+		return tx.QueryRow(query, params...).Scan(&priority)
+	})
 	return
 }
 
 func (unit *workUnit) SetPriority(priority float64) error {
-	_, err := theDB(unit).Exec("UPDATE work_unit SET priority=$2 WHERE id=$1", unit.id, priority)
-	return err
+	params := queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "priority", priority)
+	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
+		isWorkUnit(&params, unit.id),
+	})
+	return execInTx(unit, query, params)
 }
 
 // coordinable interface

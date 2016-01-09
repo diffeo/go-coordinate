@@ -28,13 +28,14 @@ func (a *attempt) Worker() coordinate.Worker {
 }
 
 func (a *attempt) Status() (coordinate.AttemptStatus, error) {
-	_ = withTx(a, func(tx *sql.Tx) error {
+	_ = withTx(a, false, func(tx *sql.Tx) error {
 		return expireAttempts(a, tx)
 	})
 
 	var status string
-	row := theDB(a).QueryRow("SELECT status FROM attempt WHERE id=$1", a.id)
-	err := row.Scan(&status)
+	err := withTx(a, true, func(tx *sql.Tx) error {
+		return tx.QueryRow("SELECT status FROM attempt WHERE id=$1", a.id).Scan(&status)
+	})
 	if err != nil {
 		return 0, err
 	}
@@ -55,7 +56,7 @@ func (a *attempt) Status() (coordinate.AttemptStatus, error) {
 
 func (a *attempt) Data() (map[string]interface{}, error) {
 	var result map[string]interface{}
-	err := withTx(a, func(tx *sql.Tx) error {
+	err := withTx(a, true, func(tx *sql.Tx) error {
 		var dataBytes []byte
 		row := tx.QueryRow("SELECT data FROM attempt WHERE id=$1", a.id)
 		err := row.Scan(&dataBytes)
@@ -81,19 +82,21 @@ func (a *attempt) Data() (map[string]interface{}, error) {
 }
 
 func (a *attempt) StartTime() (result time.Time, err error) {
-	row := theDB(a).QueryRow("SELECT start_time FROM attempt WHERE id=$1", a.id)
-	err = row.Scan(&result)
+	err = withTx(a, true, func(tx *sql.Tx) error {
+		return tx.QueryRow("SELECT start_time FROM attempt WHERE id=$1", a.id).Scan(&result)
+	})
 	return
 }
 
 func (a *attempt) EndTime() (time.Time, error) {
-	_ = withTx(a, func(tx *sql.Tx) error {
+	_ = withTx(a, false, func(tx *sql.Tx) error {
 		return expireAttempts(a, tx)
 	})
 
 	var nt pq.NullTime
-	row := theDB(a).QueryRow("SELECT end_time FROM attempt WHERE id=$1", a.id)
-	err := row.Scan(&nt)
+	err := withTx(a, true, func(tx *sql.Tx) error {
+		return tx.QueryRow("SELECT end_time FROM attempt WHERE id=$1", a.id).Scan(&nt)
+	})
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -102,12 +105,13 @@ func (a *attempt) EndTime() (time.Time, error) {
 }
 
 func (a *attempt) ExpirationTime() (result time.Time, err error) {
-	_ = withTx(a, func(tx *sql.Tx) error {
+	_ = withTx(a, false, func(tx *sql.Tx) error {
 		return expireAttempts(a, tx)
 	})
 
-	row := theDB(a).QueryRow("SELECT expiration_time FROM attempt WHERE id=$1", a.id)
-	err = row.Scan(&result)
+	err = withTx(a, true, func(tx *sql.Tx) error {
+		return tx.QueryRow("SELECT expiration_time FROM attempt WHERE id=$1", a.id).Scan(&result)
+	})
 	return
 }
 
@@ -127,18 +131,20 @@ func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{
 	query := buildUpdate(attemptTable, fields.UpdateChanges(), []string{
 		isAttempt(&params, a.id),
 	})
-	_, err := theDB(a).Exec(query, params...)
-	return err
+	return withTx(a, false, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, params...)
+		return err
+	})
 }
 
 func (a *attempt) Expire(data map[string]interface{}) error {
-	return withTx(a, func(tx *sql.Tx) error {
+	return withTx(a, false, func(tx *sql.Tx) error {
 		return a.complete(tx, data, "expired")
 	})
 }
 
 func (a *attempt) Finish(data map[string]interface{}) error {
-	return withTx(a, func(tx *sql.Tx) error {
+	return withTx(a, false, func(tx *sql.Tx) error {
 		err := a.complete(tx, data, "finished")
 		if err != nil {
 			return err
@@ -222,13 +228,13 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 }
 
 func (a *attempt) Fail(data map[string]interface{}) error {
-	return withTx(a, func(tx *sql.Tx) error {
+	return withTx(a, false, func(tx *sql.Tx) error {
 		return a.complete(tx, data, "failed")
 	})
 }
 
 func (a *attempt) Retry(data map[string]interface{}, delay time.Duration) error {
-	return withTx(a, func(tx *sql.Tx) error {
+	return withTx(a, false, func(tx *sql.Tx) error {
 		err := a.complete(tx, data, "retryable")
 		if err == nil {
 			// Also update the "not before" time on the work unit
@@ -289,7 +295,7 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 // WorkUnit attempt functions
 
 func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
-	_ = withTx(unit, func(tx *sql.Tx) error {
+	_ = withTx(unit, false, func(tx *sql.Tx) error {
 		return expireAttempts(unit, tx)
 	})
 	w := worker{namespace: unit.spec.namespace}
@@ -307,8 +313,9 @@ func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
 		"attempt.id=work_unit.active_attempt_id",
 		"worker.id=attempt.worker_id",
 	})
-	row := theDB(unit).QueryRow(query, unit.id)
-	err := row.Scan(&a.id, &w.id, &w.name)
+	err := withTx(unit, true, func(tx *sql.Tx) error {
+		return tx.QueryRow(query, unit.id).Scan(&a.id, &w.id, &w.name)
+	})
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -324,31 +331,31 @@ func (unit *workUnit) ClearActiveAttempt() error {
 	}, []string{
 		"id=$1",
 	})
-	_, err := theDB(unit).Exec(query, unit.id)
-	return err
+	return withTx(unit, false, func(tx *sql.Tx) error {
+		_, err := tx.Exec(query, unit.id)
+		return err
+	})
 }
 
 func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
+	params := queryParams{}
 	query := buildSelect([]string{
-		"attempt.id",
-		"worker.id",
-		"worker.name",
+		attemptID,
+		workerID,
+		workerName,
 	}, []string{
-		"attempt",
-		"worker",
+		attemptTable,
+		workerTable,
 	}, []string{
-		"attempt.work_unit_id=$1",
-		"worker.id=attempt.worker_id",
+		attemptForUnit(&params, unit.id),
+		attemptThisWorker,
 	})
 	var result []coordinate.Attempt
-	rows, err := theDB(unit).Query(query, unit.id)
-	if err != nil {
-		return nil, err
-	}
-	err = scanRows(rows, func() error {
+	err := queryAndScan(unit, query, params, func(rows *sql.Rows) error {
 		w := worker{namespace: unit.spec.namespace}
 		a := attempt{worker: &w, unit: unit}
-		if err := rows.Scan(&a.id, &w.id, &w.name); err == nil {
+		err := rows.Scan(&a.id, &w.id, &w.name)
+		if err == nil {
 			result = append(result, &a)
 		}
 		return err
@@ -373,7 +380,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	)
 
 	// Run system-global expiry.
-	_ = withTx(w, func(tx *sql.Tx) error {
+	_ = withTx(w, false, func(tx *sql.Tx) error {
 		return expireAttempts(w, tx)
 	})
 
@@ -388,7 +395,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	// could pick something but we then fail to get any work from
 	// it.
 	for {
-		err = withTx(w, func(tx *sql.Tx) (err error) {
+		err = withTx(w, true, func(tx *sql.Tx) (err error) {
 			specs, metas, err = w.namespace.allMetas(tx, true)
 			return
 		})
@@ -444,7 +451,7 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 	}
 
 	// Now choose units and create attempts
-	err = withTx(w, func(tx *sql.Tx) error {
+	err = withTx(w, false, func(tx *sql.Tx) error {
 		now := w.Coordinate().clock.Now()
 		units, err := w.chooseWorkUnits(tx, spec, count, now)
 		if err != nil {
@@ -483,9 +490,9 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now t
 		workUnitHasNoAttempt,
 		"NOT " + workUnitTooSoon(&params, now),
 	})
-	query += fmt.Sprintf(" ORDER BY priority DESC, name ASC")
+	query += " ORDER BY priority DESC, name ASC"
 	query += fmt.Sprintf(" LIMIT %v", numUnits)
-	query += " FOR UPDATE OF work_unit"
+	query += " FOR UPDATE"
 	rows, err := tx.Query(query, params...)
 	if err != nil {
 		return nil, err
@@ -511,12 +518,12 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	// to create this work unit, and we will ultimately want to
 	// update the next-continuous time
 	params := queryParams{}
-	row := tx.QueryRow(buildSelect([]string{workSpecID},
+	row := tx.QueryRow(buildSelect([]string{workSpecNextContinuous},
 		[]string{workSpecTable},
-		[]string{isWorkSpec(&params, spec.id)})+" FOR UPDATE",
+		[]string{isWorkSpec(&params, spec.id)}),
 		params...)
-	var anID int
-	err := row.Scan(&anID)
+	var aTime pq.NullTime
+	err := row.Scan(&aTime)
 	if err != nil {
 		return nil, err
 	}
@@ -565,7 +572,7 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, length time.Duration) (c
 	}
 	var a *attempt
 	var err error
-	err = withTx(w, func(tx *sql.Tx) error {
+	err = withTx(w, false, func(tx *sql.Tx) error {
 		a, err = makeAttempt(tx, unit, w, length)
 		return err
 	})
@@ -577,14 +584,30 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, length time.Duration) (c
 
 func makeAttempt(tx *sql.Tx, unit *workUnit, w *worker, length time.Duration) (*attempt, error) {
 	a := attempt{unit: unit, worker: w}
+
 	now := a.Coordinate().clock.Now()
 	expiration := now.Add(length)
-	row := tx.QueryRow("INSERT INTO attempt(work_unit_id, worker_id, start_time, expiration_time) VALUES ($1, $2, $3, $4) RETURNING id", unit.id, w.id, now, expiration)
+	params := queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "work_unit_id", unit.id)
+	fields.Add(&params, "worker_id", w.id)
+	fields.Add(&params, "start_time", now)
+	fields.Add(&params, "expiration_time", expiration)
+	query := fields.InsertStatement(attemptTable) + " RETURNING id"
+	row := tx.QueryRow(query, params...)
 	err := row.Scan(&a.id)
 	if err != nil {
 		return nil, err
 	}
-	_, err = tx.Exec("UPDATE work_unit SET active_attempt_id=$2 WHERE id=$1", unit.id, a.id)
+
+	params = queryParams{}
+	fields = fieldList{}
+	fields.Add(&params, "active_attempt_id", a.id)
+	query = buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
+		isWorkUnit(&params, unit.id),
+	})
+	_, err = tx.Exec(query, params...)
+
 	return &a, err
 }
 
@@ -635,16 +658,13 @@ func (w *worker) findAttempts(conditions []string, qp *queryParams, forOtherWork
 		conditions = append(conditions, attemptThisWorker)
 	}
 	query := buildSelect(outputs, tables, conditions)
-	rows, err := theDB(w).Query(query, *qp...)
-	if err != nil {
-		return nil, err
-	}
 	var result []coordinate.Attempt
-	err = scanRows(rows, func() error {
+	err := queryAndScan(w, query, *qp, func(rows *sql.Rows) error {
 		spec := workSpec{namespace: w.namespace}
 		unit := workUnit{spec: &spec}
 		a := attempt{worker: w, unit: &unit}
 		theWorker := worker{namespace: w.namespace}
+		var err error
 		if forOtherWorkers {
 			a.worker = &theWorker
 			err = rows.Scan(&a.id,
@@ -682,7 +702,7 @@ func (a *attempt) Coordinate() *pgCoordinate {
 // In general this should be called in its own transaction and its error
 // return ignored:
 //
-//     _ = withTx(self, func(tx *sql.Tx) error {
+//     _ = withTx(self, false, func(tx *sql.Tx) error {
 //              return expireAttempts(self, tx)
 //     })
 //
@@ -723,7 +743,6 @@ func expireAttempts(c coordinable, tx *sql.Tx) error {
 		attemptIsPending,
 		attemptIsExpired(&qp, now),
 	})
-	cte += " FOR UPDATE"
 	query = buildUpdate(workUnitTable,
 		[]string{"active_attempt_id=NULL"},
 		[]string{"active_attempt_id IN (" + cte + ")"})

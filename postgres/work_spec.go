@@ -27,7 +27,7 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 		namespace: ns,
 		name:      name,
 	}
-	err = withTx(ns, func(tx *sql.Tx) error {
+	err = withTx(ns, false, func(tx *sql.Tx) error {
 		params := queryParams{}
 		query := buildSelect([]string{
 			workSpecID,
@@ -82,7 +82,7 @@ func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 		namespace: ns,
 		name:      name,
 	}
-	err := withTx(ns, func(tx *sql.Tx) error {
+	err := withTx(ns, true, func(tx *sql.Tx) error {
 		return txWorkSpec(tx, &spec)
 	})
 	if err != nil {
@@ -92,8 +92,8 @@ func (ns *namespace) WorkSpec(name string) (coordinate.WorkSpec, error) {
 }
 
 // txWorkSpec retrieves a work spec within the context of an existing
-// transaction.  The workSpec object must be populated with its
-// "namespace" and "name" fields.
+// transaction, possibly read-only.  The workSpec object must be
+// populated with its "namespace" and "name" fields.
 func txWorkSpec(tx *sql.Tx, spec *workSpec) error {
 	params := queryParams{}
 	row := tx.QueryRow(buildSelect([]string{
@@ -112,32 +112,40 @@ func txWorkSpec(tx *sql.Tx, spec *workSpec) error {
 }
 
 func (ns *namespace) DestroyWorkSpec(name string) error {
-	row := theDB(ns).QueryRow("DELETE FROM work_spec WHERE namespace_id=$1 AND name=$2 RETURNING id", ns.id, name)
-	var id int
-	err := row.Scan(&id)
-	if err == sql.ErrNoRows {
-		return coordinate.ErrNoSuchWorkSpec{Name: name}
-	}
-	return err
+	return withTx(ns, false, func(tx *sql.Tx) error {
+		params := queryParams{}
+		query := "DELETE FROM " + workSpecTable + " " +
+			"WHERE " + workSpecInNamespace(&params, ns.id) + " " +
+			"AND " + workSpecHasName(&params, name)
+		result, err := tx.Exec(query, params...)
+		if err == nil {
+			var count int64
+			count, err = result.RowsAffected()
+			if err == nil && count == 0 {
+				err = coordinate.ErrNoSuchWorkSpec{Name: name}
+			}
+		}
+		return err
+	})
 }
 
-func (ns *namespace) WorkSpecNames() ([]string, error) {
-	rows, err := theDB(ns).Query("SELECT name FROM work_spec WHERE namespace_id=$1", ns.id)
-	if err != nil {
-		return nil, err
-	}
-	var result []string
-	err = scanRows(rows, func() error {
+func (ns *namespace) WorkSpecNames() (result []string, err error) {
+	params := queryParams{}
+	query := buildSelect([]string{
+		workSpecName,
+	}, []string{
+		workSpecTable,
+	}, []string{
+		workSpecInNamespace(&params, ns.id),
+	})
+	err = queryAndScan(ns, query, params, func(rows *sql.Rows) error {
 		var name string
 		if err := rows.Scan(&name); err == nil {
 			result = append(result, name)
 		}
 		return err
 	})
-	if err != nil {
-		return nil, err
-	}
-	return result, nil
+	return
 }
 
 // WorkSpec functions:
@@ -147,9 +155,11 @@ func (spec *workSpec) Name() string {
 }
 
 func (spec *workSpec) Data() (map[string]interface{}, error) {
-	row := theDB(spec).QueryRow("SELECT data FROM work_spec WHERE id=$1", spec.id)
 	var dataBytes []byte
-	err := row.Scan(&dataBytes)
+	err := withTx(spec, true, func(tx *sql.Tx) error {
+		row := tx.QueryRow("SELECT data FROM work_spec WHERE id=$1", spec.id)
+		return row.Scan(&dataBytes)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +178,7 @@ func (spec *workSpec) SetData(data map[string]interface{}) error {
 	if name != spec.name {
 		return coordinate.ErrChangedName
 	}
-	return withTx(spec, func(tx *sql.Tx) error {
+	return withTx(spec, false, func(tx *sql.Tx) error {
 		return spec.setData(tx, data, meta)
 	})
 }
@@ -179,22 +189,38 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 		return err
 	}
 
-	interval := durationToSQL(meta.Interval)
-	nextContinuous := timeToNullTime(meta.NextContinuous)
-	_, err = tx.Exec("UPDATE work_spec SET data=$2, priority=$3, weight=$4, paused=$5, continuous=$6, can_be_continuous=$7, min_memory_gb=$8, interval=$9, next_continuous=$10, max_running=$11, max_attempts_returned=$12, next_work_spec_name=$13, next_work_spec_preempts=$14, runtime=$15 WHERE id=$1", spec.id, dataBytes, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.CanBeContinuous, meta.MinMemoryGb, interval, nextContinuous, meta.MaxRunning, meta.MaxAttemptsReturned, meta.NextWorkSpecName, false, meta.Runtime)
-	return err
+	params := queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "data", dataBytes)
+	fields.Add(&params, "priority", meta.Priority)
+	fields.Add(&params, "weight", meta.Weight)
+	fields.Add(&params, "paused", meta.Paused)
+	fields.Add(&params, "continuous", meta.Continuous)
+	fields.Add(&params, "can_be_continuous", meta.CanBeContinuous)
+	fields.Add(&params, "min_memory_gb", meta.MinMemoryGb)
+	fields.Add(&params, "interval", durationToSQL(meta.Interval))
+	fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
+	fields.Add(&params, "max_running", meta.MaxRunning)
+	fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+	fields.Add(&params, "next_work_spec_name", meta.NextWorkSpecName)
+	fields.AddDirect("next_work_spec_preempts", "FALSE")
+	fields.Add(&params, "runtime", meta.Runtime)
+	query := buildUpdate(workSpecTable, fields.UpdateChanges(), []string{
+		isWorkSpec(&params, spec.id),
+	})
+	return execInTx(spec, query, params)
 }
 
 func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	// If we need counts, we need to run expiry so that the
 	// available/pending counts are rightish
 	if withCounts {
-		_ = withTx(spec, func(tx *sql.Tx) error {
+		_ = withTx(spec, false, func(tx *sql.Tx) error {
 			return expireAttempts(spec, tx)
 		})
 	}
 	var meta coordinate.WorkSpecMeta
-	err := withTx(spec, func(tx *sql.Tx) error {
+	err := withTx(spec, true, func(tx *sql.Tx) error {
 		var (
 			params         queryParams
 			query          string
@@ -425,8 +451,21 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	// There are a couple of fields we can't set; in this implementation
 	// we can just not update them and be done with it.
-	_, err := theDB(spec).Exec("UPDATE work_spec SET priority=$2, weight=$3, paused=$4, continuous=$5 AND can_be_continuous, min_memory_gb=$6, interval=$7, next_continuous=$8, max_running=$9, max_attempts_returned=$10 WHERE id=$1", spec.id, meta.Priority, meta.Weight, meta.Paused, meta.Continuous, meta.MinMemoryGb, durationToSQL(meta.Interval), timeToNullTime(meta.NextContinuous), meta.MaxRunning, meta.MaxAttemptsReturned)
-	return err
+	params := queryParams{}
+	fields := fieldList{}
+	fields.Add(&params, "priority", meta.Priority)
+	fields.Add(&params, "weight", meta.Weight)
+	fields.Add(&params, "paused", meta.Paused)
+	fields.AddDirect("continuous", params.Param(meta.Continuous)+" AND can_be_continuous")
+	fields.Add(&params, "min_memory_gb", meta.MinMemoryGb)
+	fields.Add(&params, "interval", durationToSQL(meta.Interval))
+	fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
+	fields.Add(&params, "max_running", meta.MaxRunning)
+	fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+	query := buildUpdate(workSpecTable, fields.UpdateChanges(), []string{
+		isWorkSpec(&params, spec.id),
+	})
+	return execInTx(spec, query, params)
 }
 
 // coordinable interface:

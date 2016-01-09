@@ -39,6 +39,7 @@ const (
 	namespaceName               = namespaceTable + ".name"
 	namespaceID                 = namespaceTable + ".id"
 	workerID                    = workerTable + ".id"
+	workerNamespace             = workerTable + ".namespace_id"
 	workerName                  = workerTable + ".name"
 	workerParent                = workerTable + ".parent"
 	workSpecID                  = workSpecTable + ".id"
@@ -65,11 +66,6 @@ const (
 	workUnitPriority            = workUnitTable + ".priority"
 	workUnitNotBefore           = workUnitTable + ".not_before"
 
-	// This join selects all work units and attempts, including
-	// work units with no active attempt
-	workUnitAttemptJoin = (workUnitTable + " LEFT OUTER JOIN " +
-		attemptTable + "  ON " + workUnitAttempt + "=" + attemptID)
-
 	// WHERE clause fragments:
 	workUnitHasNoAttempt = workUnitAttempt + " IS NULL"
 	workUnitInThisSpec   = workUnitSpec + "=" + workSpecID
@@ -77,6 +73,12 @@ const (
 	attemptIsPending     = attemptStatus + "='pending'"
 	attemptThisWorkUnit  = attemptWorkUnitID + "=" + workUnitID
 	attemptThisWorker    = attemptWorkerID + "=" + workerID
+	attemptIsTheActive   = attemptID + "=" + workUnitAttempt
+
+	// This join selects all work units and attempts, including
+	// work units with no active attempt
+	workUnitAttemptJoin = (workUnitTable + " LEFT OUTER JOIN " +
+		attemptTable + "  ON " + attemptIsTheActive)
 )
 
 // More WHERE clause fragments, that depend on query params:
@@ -127,12 +129,28 @@ func isAttempt(params *queryParams, id int) string {
 	return attemptID + "=" + params.Param(id)
 }
 
+func attemptForUnit(params *queryParams, id int) string {
+	return attemptWorkUnitID + "=" + params.Param(id)
+}
+
 func attemptByWorker(params *queryParams, id int) string {
 	return attemptWorkerID + "=" + params.Param(id)
 }
 
 func attemptIsExpired(params *queryParams, now time.Time) string {
 	return attemptExpirationTime + "<" + params.Param(now)
+}
+
+func isWorker(params *queryParams, id int) string {
+	return workerID + "=" + params.Param(id)
+}
+
+func workerInNamespace(params *queryParams, id int) string {
+	return workerNamespace + "=" + params.Param(id)
+}
+
+func workerHasName(params *queryParams, name string) string {
+	return workerName + "=" + params.Param(name)
 }
 
 func workerHasParent(params *queryParams, id int) string {
