@@ -107,6 +107,10 @@ func workUnitHasName(params *queryParams, name string) string {
 	return workUnitName + "=" + params.Param(name)
 }
 
+func workUnitHasAttempt(params *queryParams, id int) string {
+	return workUnitAttempt + "=" + params.Param(id)
+}
+
 // workUnitTooSoon determines whether a work unit cannot run because
 // its not_before time has not arrived yet.  If a work unit looks
 // available and this predicate returns true, it is actually delayed.

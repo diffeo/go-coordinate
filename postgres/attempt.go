@@ -144,33 +144,63 @@ func (a *attempt) Expire(data map[string]interface{}) error {
 }
 
 func (a *attempt) Finish(data map[string]interface{}) error {
-	return withTx(a, false, func(tx *sql.Tx) error {
-		err := a.complete(tx, data, "finished")
-		if err != nil {
-			return err
-		}
+	// Mark the attempt finished, then create any new work units
+	// declared in an "output" key.
+	//
+	// These do not have to happen atomically.  So first, just mark
+	// the attempt as done.
+	err := withTx(a, false, func(tx *sql.Tx) error {
+		return a.complete(tx, data, "finished")
+	})
+	if err != nil {
+		return err
+	}
 
-		// Does the work unit data include an "output" key
-		// that we understand?  We may need to ring back to
-		// the work unit here; we need the next work spec name
-		// too in any case
-		outputs := []string{workSpecNextWorkSpec, workUnitAttempt}
-		tables := []string{workSpecTable, workUnitTable}
-		params := queryParams{}
-		conditions := []string{isWorkUnit(&params, a.unit.id), workUnitInThisSpec}
-		if data == nil {
-			outputs = append(outputs, workUnitData, attemptData)
-			tables = append(tables, attemptTable)
-			conditions = append(conditions, attemptThisWorkUnit)
+	// A fast path: if we have a data dictionary and there is
+	// no "output", stop.
+	if data != nil {
+		if _, present := data["output"]; !present {
+			return nil
 		}
-		query := buildSelect(outputs, tables, conditions)
+	}
 
+	// Otherwise we maybe have "output".  Do one query to the
+	// database that gets back the work unit data (if we need it)
+	// and the matching next work spec.  A join could fail, which
+	// would result in nothing coming back, which would be okay.
+	// This also depends on this attempt still being the active
+	// attempt, which again, we can check in the query.
+	params := queryParams{}
+	outputs := []string{
+		"next.id",
+		"next.name",
+	}
+	tables := []string{
+		workUnitTable,
+		workSpecTable,
+		workSpecTable + " next",
+	}
+	conditions := []string{
+		isWorkUnit(&params, a.unit.id),
+		workUnitHasAttempt(&params, a.id),
+		workUnitInThisSpec,
+		workSpecNextWorkSpec + "=next.name",
+		workSpecNamespace + "=next.namespace_id",
+	}
+	if data == nil {
+		// We need both the most recent attempt data and
+		// the original unit data
+		outputs = append(outputs, workUnitData, attemptData)
+		tables = append(tables, attemptTable)
+		conditions = append(conditions, attemptThisWorkUnit)
+	}
+	query := buildSelect(outputs, tables, conditions)
+	spec := workSpec{namespace: a.unit.spec.namespace}
+	err = withTx(a, true, func(tx *sql.Tx) (err error) {
 		row := tx.QueryRow(query, params...)
-		var attemptID sql.NullInt64
-		var nextWorkSpec string
 		if data == nil {
 			var unitData, attemptData []byte
-			err = row.Scan(&nextWorkSpec, &attemptID, &unitData, &attemptData)
+			err = row.Scan(&spec.id, &spec.name, &unitData, &attemptData)
 			if err == nil {
 				if attemptData != nil {
 					data, err = bytesToMap(attemptData)
@@ -181,50 +211,41 @@ func (a *attempt) Finish(data map[string]interface{}) error {
 				}
 			}
 		} else {
-			err = row.Scan(&nextWorkSpec, &attemptID)
+			err = row.Scan(&spec.id, &spec.name)
 		}
+		return
+	})
+
+	// Now, either that query failed, or we have both work unit
+	// data and a next work spec.
+	if err == sql.ErrNoRows {
+		// As a reminder:
+		// * a isn't the active attempt; or
+		// * spec["then"] points nowhere
+		// In any case, no outputs and we're done
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	units := coordinate.ExtractWorkUnitOutput(data["output"], a.Coordinate().clock.Now())
+	if units == nil {
+		return nil // nothing to do
+	}
+	for name, item := range units {
+		var dataBytes []byte
+		dataBytes, err = mapToBytes(item.Data)
 		if err != nil {
 			return err
 		}
-		if nextWorkSpec == "" {
-			return nil // nothing to do
-		}
-		if !attemptID.Valid || (attemptID.Int64 != int64(a.id)) {
-			return nil // no longer active attempt
-		}
-
-		// Ideally we'd extract the work spec ID in the previous
-		// query with a join too; but this helps share some code
-		spec := workSpec{
-			namespace: a.unit.spec.namespace,
-			name:      nextWorkSpec,
-		}
-		err = txWorkSpec(tx, &spec)
+		_, err = spec.addWorkUnit(name, dataBytes, item.Meta)
 		if err != nil {
-			if _, present := err.(coordinate.ErrNoSuchWorkSpec); !present {
-				return nil // "then" work spec doesn't exist
-			}
-			return err // something else went wrong
+			return err
 		}
+	}
 
-		units := coordinate.ExtractWorkUnitOutput(data["output"], a.Coordinate().clock.Now())
-		if units == nil {
-			return nil // nothing to do
-		}
-		for name, item := range units {
-			var dataBytes []byte
-			dataBytes, err = mapToBytes(item.Data)
-			if err != nil {
-				return err
-			}
-			_, err = spec.addWorkUnit(tx, name, dataBytes, item.Meta)
-			if err != nil {
-				return err
-			}
-		}
-
-		return nil
-	})
+	return nil
 }
 
 func (a *attempt) Fail(data map[string]interface{}) error {
@@ -450,7 +471,7 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		count = meta.MaxRunning - meta.PendingCount
 	}
 
-	// Now choose units and create attempts
+	continuous := false
 	err = withTx(w, false, func(tx *sql.Tx) error {
 		now := w.Coordinate().clock.Now()
 		units, err := w.chooseWorkUnits(tx, spec, count, now)
@@ -458,6 +479,7 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 			return err
 		}
 		if len(units) == 0 && meta.CanStartContinuous(now) {
+			continuous = true
 			units, err = w.createContinuousUnits(tx, spec, meta, now)
 		}
 		if err != nil {
@@ -473,6 +495,15 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		}
 		return nil
 	})
+	// On a very bad day, we could have gone to create continuous
+	// work units, but an outright INSERT failed from a duplicate
+	// key.  If this happened, just pretend we didn't actually get
+	// any attempts back, which will trigger the retry loop in our
+	// caller.
+	if continuous && err != nil && isDuplicateUnitName(err) {
+		attempts = nil
+		err = nil
+	}
 	return attempts, err
 }
 
@@ -537,7 +568,10 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	if err != nil {
 		return nil, err
 	}
-	unit, err := spec.addWorkUnit(tx, name, dataBytes, coordinate.WorkUnitMeta{})
+	// The unit *shouldn't* exist, though on a bad day with lots
+	// of workers it could.  We will probably see the consistency
+	// error in the commit.  :-/
+	unit, err := spec.insertWorkUnit(tx, name, dataBytes, coordinate.WorkUnitMeta{})
 	if err != nil {
 		return nil, err
 	}

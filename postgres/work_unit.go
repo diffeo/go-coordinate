@@ -19,89 +19,129 @@ type workUnit struct {
 }
 
 func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (coordinate.WorkUnit, error) {
-	var unit *workUnit
 	dataBytes, err := mapToBytes(data)
 	if err != nil {
 		return nil, err
 	}
-	err = withTx(spec, false, func(tx *sql.Tx) error {
-		unit, err = spec.addWorkUnit(tx, name, dataBytes, meta)
-		return err
-	})
-	return unit, err
+	return spec.addWorkUnit(name, dataBytes, meta)
 }
 
-// addWorkUnit does the work of AddWorkUnit, assuming a transaction
-// context and that the data dictionary has already been encoded.
-func (spec *workSpec) addWorkUnit(tx *sql.Tx, name string, dataBytes []byte, meta coordinate.WorkUnitMeta) (*workUnit, error) {
+// insertUnit attempts to INSERT a work unit into its table.  Failures
+// include existence of another work unit with the same key; see
+// isDuplicateUnitName() to check.  In addition to the other
+// machinery, this function is intended for use in continuous work
+// unit generation, where the unit is presumed to not already exist
+// and where the transaction context can't be escaped.
+func (spec *workSpec) insertWorkUnit(tx *sql.Tx, name string, dataBytes []byte, meta coordinate.WorkUnitMeta) (*workUnit, error) {
 	unit := workUnit{spec: spec, name: name}
-
-	// Lock the whole work unit table.
-	//
-	// This is a little unfortunate.  The problem we run into is
-	// that SELECT ... FOR UPDATE works fine if the row already
-	// exists, but if it doesn't, then nothing gets locked, and so
-	// this function can hit a constraint violation if two
-	// concurrent calls both SELECT, find nothing, and INSERT the
-	// same work unit.
-	//
-	// Other approaches to this include making transactions
-	// SERIALIZABLE (which causes surprisingly many issues; but
-	// those should probably be addressed too) and trapping the
-	// constraint violation after the INSERT.
-	_, err := tx.Exec("LOCK TABLE " + workUnitTable + " IN SHARE ROW EXCLUSIVE MODE")
-	if err != nil {
-		return nil, err
-	}
-
-	// Does the unit already exist?
 	params := queryParams{}
-	query := buildSelect([]string{
-		workUnitID,
-		attemptStatus,
-	}, []string{
-		workUnitAttemptJoin,
-	}, []string{
-		workUnitInSpec(&params, spec.id),
-		workUnitHasName(&params, name),
-	}) + " FOR UPDATE OF " + workUnitTable
-	row := tx.QueryRow(query, params...)
-	var status sql.NullString
-	err = row.Scan(&unit.id, &status)
-
-	// Before we go too far, start building up whatever query we're
-	// going to do; there are a lot of shared parts
-	params = queryParams{}
 	fields := fieldList{}
+	fields.Add(&params, "work_spec_id", spec.id)
+	fields.Add(&params, "name", name)
 	fields.Add(&params, "data", dataBytes)
 	fields.Add(&params, "priority", meta.Priority)
 	fields.Add(&params, "not_before", timeToNullTime(meta.NotBefore))
+	query := fields.InsertStatement(workUnitTable) + " RETURNING id"
+	err := tx.QueryRow(query, params...).Scan(&unit.id)
+	return &unit, err
+}
 
-	if err == nil {
-		// The unit already exists and we've found its data
-		isPending := status.Valid && (status.String == "pending")
-		// In addition to the shared fields, if the work unit
-		// is not pending, we should reset its active attempt
-		if !isPending {
-			fields.AddDirect("active_attempt_id", "NULL")
+// isDuplicateUnitName decides if an error is specifically a PostgreSQL
+// error due to a duplicate work unit key in workUnit.insert().
+func isDuplicateUnitName(err error) bool {
+	pqError, isPQ := err.(*pq.Error)
+	if !isPQ {
+		return false
+	}
+	if pqError.Code != "23505" {
+		return false
+	}
+	if pqError.Constraint != "work_unit_unique_name" {
+		return false
+	}
+	return true
+}
+
+// addWorkUnit does the work of AddWorkUnit, assuming that the data
+// dictionary has already been encoded.  It creates its own
+// transactions, principally because it needs to be able to retry on a
+// failed INSERT.
+func (spec *workSpec) addWorkUnit(name string, dataBytes []byte, meta coordinate.WorkUnitMeta) (unit *workUnit, err error) {
+	// This is, fundamentally, an UPSERT.  PostgreSQL 9.5 has
+	// support for it but is (as of this writing) extremely new.
+	// SERIALIZABLE transaction mode should in theory help --
+	// SELECT that the unit doesn't exist and then INSERT or
+	// UPDATE it as appropriate, and if someone else did the same
+	// thing, it should show up as a concurrency error -- but
+	// (against PostgreSQL 9.3) this causes other issues,
+	// particularly in retrieving work units for attempts.
+	//
+	// What we will do instead is a client-side loop.  Try to insert
+	// the work unit (this should be the common case).  If it already
+	// exists, try to update it.  If it doesn't exist at that point,
+	// insert it again, and so on.
+	for {
+		// Step one: give the INSERT a shot.
+		err = withTx(spec, false, func(tx *sql.Tx) error {
+			var err error
+			unit, err = spec.insertWorkUnit(tx, name, dataBytes, meta)
+			return err
+		})
+		if err == nil {
+			return
 		}
-		query = buildUpdate(workUnitTable,
+		if !isDuplicateUnitName(err) {
+			return
+		}
+
+		// Okay, so it already exists.  Let's try to UPDATE
+		// an existing unit.
+		unit = &workUnit{spec: spec, name: name}
+		params := queryParams{}
+		fields := fieldList{}
+		fields.Add(&params, "data", dataBytes)
+		fields.Add(&params, "priority", meta.Priority)
+		fields.Add(&params, "not_before", timeToNullTime(meta.NotBefore))
+		query := buildUpdate(workUnitTable,
 			fields.UpdateChanges(),
-			[]string{isWorkUnit(&params, unit.id)})
-		_, err = tx.Exec(query, params...)
-	} else if err == sql.ErrNoRows {
-		// The work unit doesn't exist, yet
-		fields.Add(&params, "work_spec_id", spec.id)
-		fields.Add(&params, "name", name)
-		query := fields.InsertStatement(workUnitTable)
-		query += " RETURNING id"
-		row := tx.QueryRow(query, params...)
-		err = row.Scan(&unit.id)
+			[]string{workUnitHasName(&params, name)}) +
+			" RETURNING id"
+
+		// Let's also set up a second query.  If that UPDATE
+		// does return a work unit, and it has an active
+		// attempt, and the attempt is not pending, then we
+		// need to (within the same transaction) clear the
+		// active attempt.  This is a little more complicated,
+		// and involves some non-default syntax, so let's
+		// write it out:
+		queryAttempt := "UPDATE " + workUnitTable + " " +
+			"SET active_attempt_id=NULL " +
+			"FROM " + attemptTable + " " +
+			"WHERE " + workUnitID + "=$1 " +
+			"AND " + attemptIsTheActive + " " +
+			"AND " + attemptStatus + "!='pending'"
+
+		err = withTx(spec, false, func(tx *sql.Tx) error {
+			row := tx.QueryRow(query, params...)
+			err := row.Scan(&unit.id)
+			// Could be ErrNoRows; we'll just return that
+			// If that is successful, though, do the
+			// second update for the active attempt
+			if err == nil {
+				_, err = tx.Exec(queryAttempt, unit.id)
+			}
+			return err
+		})
+		if err == nil {
+			// Updated an existing unit
+			return
+		}
+		if err != sql.ErrNoRows {
+			// Something went wrong
+			return
+		}
+		// Otherwise the update didn't find anything; reloop
 	}
-	if err != nil {
-		return nil, err
-	}
-	return &unit, nil
 }
 
 func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
