@@ -14,3 +14,4 @@ Features
 * [Python Compatibility](python.md)
 * [Work Unit Runtime Selection](runtime.md)
 * [Work Unit Chaining](chaining.md)
+* [Workers in Go](worker.md)

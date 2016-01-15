@@ -11,6 +11,8 @@ Major Changes
   work units in chained work units can also declare a `delay` before
   running the next unit.  Makes corresponding (incompatible) changes
   to the REST API.
+* Adds a worker framework so that Coordinate work specs can run task
+  implementations written in Go.
 
 0.2.0 (4 Jan 2016)
 ------------------
