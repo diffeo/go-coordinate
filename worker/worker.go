@@ -294,11 +294,10 @@ func (w *Worker) getIdleChild() string {
 func (w *Worker) returnIdleChild(id string) {
 	child := w.childWorkers[id]
 	if w.systemIdle {
+		delete(w.childWorkers, id)
+		delete(w.cancellations, id)
 		err := child.Deactivate()
-		if err == nil {
-			delete(w.childWorkers, id)
-			delete(w.cancellations, id)
-		} else if w.ErrorHandler != nil {
+		if err != nil && w.ErrorHandler != nil {
 			w.ErrorHandler(err)
 		}
 	} else {
