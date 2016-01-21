@@ -38,7 +38,8 @@ func (api *restAPI) fillWorker(namespace coordinate.Namespace, worker coordinate
 		parent, err = worker.Parent()
 	}
 	if err == nil && parent != nil {
-		result.Parent = parent.Name()
+		parentName := parent.Name()
+		result.Parent = &parentName
 		err = buildURLs(api.Router,
 			"namespace", namespace.Name(),
 			"worker", parent.Name(),
@@ -92,24 +93,28 @@ func (api *restAPI) WorkerGet(ctx *context) (interface{}, error) {
 }
 
 func (api *restAPI) WorkerPut(ctx *context, in interface{}) (interface{}, error) {
+	var err error
+
 	repr, valid := in.(restdata.Worker)
 	if !valid {
 		return nil, errUnmarshal
 	}
 
 	// Did the parent change?
-	oldParent, err := ctx.Worker.Parent()
-	oldParentName := ""
-	if err == nil && oldParent != nil {
-		oldParentName = oldParent.Name()
-	}
-	if err == nil && repr.Parent != oldParentName {
-		var parent coordinate.Worker
-		if repr.Parent != "" {
-			parent, err = ctx.Namespace.Worker(repr.Parent)
+	if repr.Parent != nil {
+		var oldParent, newParent coordinate.Worker
+		oldParent, err = ctx.Worker.Parent()
+		oldParentName := ""
+		if err == nil && oldParent != nil {
+			oldParentName = oldParent.Name()
 		}
-		if err == nil {
-			err = ctx.Worker.SetParent(parent)
+		if err == nil && *repr.Parent != oldParentName {
+			if *repr.Parent != "" {
+				newParent, err = ctx.Namespace.Worker(*repr.Parent)
+			}
+			if err == nil {
+				err = ctx.Worker.SetParent(newParent)
+			}
 		}
 	}
 

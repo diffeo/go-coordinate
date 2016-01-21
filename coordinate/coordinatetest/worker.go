@@ -269,3 +269,17 @@ func (s *Suite) TestWorkerAttempts(c *check.C) {
 		c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
 	}
 }
+
+// TestDeactivateChild tests that deactivating a worker with a parent
+// works successfully.  This is a regression test for a specific issue
+// in the REST API.
+func (s *Suite) TestDeactivateChild(c *check.C) {
+	parent, err := s.Namespace.Worker("parent")
+	c.Assert(err, check.IsNil)
+	child, err := s.Namespace.Worker("child")
+	c.Assert(err, check.IsNil)
+	err = child.SetParent(parent)
+	c.Assert(err, check.IsNil)
+	err = child.Deactivate()
+	c.Assert(err, check.IsNil)
+}

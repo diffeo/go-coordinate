@@ -378,10 +378,10 @@ type WorkerShort struct {
 type Worker struct {
 	WorkerShort
 
-	// Parent gives the name of the parent worker.  If absent,
-	// null, or empty string, this worker has no parent.  Setting
-	// this in a PUT request changes the worker's parent.
-	Parent string `json:"parent,omitempty"`
+	// Parent gives the name of the parent worker.  If empty
+	// string, this worker has no parent.  Setting this in a PUT
+	// request changes the worker's parent.
+	Parent *string `json:"parent,omitempty"`
 
 	// ParentURL points at the parent worker object, if any.  If
 	// absent or null, this worker has no parent.

@@ -36,7 +36,7 @@ func (w *worker) Name() string {
 func (w *worker) Parent() (coordinate.Worker, error) {
 	var parent *worker
 	err := w.Refresh()
-	if err == nil && w.Representation.Parent != "" {
+	if err == nil && w.Representation.Parent != nil && *w.Representation.Parent != "" {
 		parent, err = workerFromURL(&w.resource, w.Representation.ParentURL)
 	}
 	if err == nil && parent == nil {
@@ -46,12 +46,11 @@ func (w *worker) Parent() (coordinate.Worker, error) {
 }
 
 func (w *worker) SetParent(parent coordinate.Worker) error {
-	repr := restdata.Worker{}
-	if parent == nil {
-		repr.Parent = ""
-	} else {
-		repr.Parent = parent.Name()
+	parentName := ""
+	if parent != nil {
+		parentName = parent.Name()
 	}
+	repr := restdata.Worker{Parent: &parentName}
 	return w.Put(repr, nil)
 }
 
