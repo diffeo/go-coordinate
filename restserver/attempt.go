@@ -11,20 +11,16 @@ import (
 )
 
 func (api *restAPI) attemptURLBuilder(namespace coordinate.Namespace, attempt coordinate.Attempt, startTime time.Time, err error) *urlBuilder {
-	var startBytes []byte
 	unit := attempt.WorkUnit()
 	spec := unit.WorkSpec()
 	worker := attempt.Worker()
-	if err == nil {
-		startBytes, err = startTime.MarshalText()
-	}
 	if err == nil {
 		return buildURLs(api.Router,
 			"namespace", namespace.Name(),
 			"spec", spec.Name(),
 			"unit", unit.Name(),
 			"worker", worker.Name(),
-			"start", string(startBytes),
+			"start", startTime.Format(time.RFC3339),
 		)
 	}
 	return &urlBuilder{Error: err}

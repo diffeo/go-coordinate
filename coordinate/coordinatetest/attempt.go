@@ -672,3 +672,28 @@ func (s *Suite) TestRetryDelay(c *check.C) {
 	sts.CheckUnitStatus(c, coordinate.AvailableUnit)
 	sts.CheckWorkUnitOrder(s, c, "unit")
 }
+
+// TestAttemptFractionalStart verifies that an attempt that starts at
+// a non-integral time (as most of them are) can find itself.  This is
+// a regression test for a specific issue in restclient.
+func (s *Suite) TestAttemptFractionalStart(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkerName:   "worker",
+		WorkSpecName: "spec",
+		WorkUnitName: "unit",
+	}
+	sts.Do(s, c)
+
+	s.Clock.Add(500 * time.Millisecond)
+
+	attempt := sts.RequestOneAttempt(c)
+	// Since restclient uses the start time as one of its keys to
+	// look up attempts, but the code uses two different ways to
+	// format it, having a fractional second means that this call
+	// will fail when restserver can't find the attempt.  Actually
+	// the call above that adds half a second to the mock clock ruins
+	// a lot of tests without the bug fix since *none* of them can
+	// find their own attempts.
+	err := attempt.Finish(nil)
+	c.Assert(err, check.IsNil)
+}
