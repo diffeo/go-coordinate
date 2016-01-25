@@ -545,12 +545,12 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 	attempts := "INSERT INTO " + attemptTable +
 		"(work_unit_id, worker_id, start_time, expiration_time) " +
 		whatToInsert +
-		" RETURNING id"
+		" RETURNING id, work_unit_id"
 
 	update := "UPDATE " + workUnitTable + " " +
 		"SET active_attempt_id=a.id " +
 		"FROM a, u " +
-		"WHERE " + workUnitID + "=u.id " +
+		"WHERE " + workUnitID + "=u.id AND a.work_unit_id=u.id " +
 		"RETURNING u.id, u.name, a.id"
 
 	query := "WITH u AS (" + choose + "), a AS (" + attempts + ") " + update
