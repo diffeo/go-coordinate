@@ -389,7 +389,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			[]string{
 				workSpecInNamespace(&params, ns.id),
 				workUnitInThisSpec,
-				attemptThisWorkUnit,
+				attemptIsTheActive,
 				attemptIsPending,
 			})
 		query += " GROUP BY " + workSpecName
