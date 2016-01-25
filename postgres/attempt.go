@@ -472,28 +472,35 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 	}
 
 	continuous := false
+	length := time.Duration(15) * time.Minute
 	err = withTx(w, false, func(tx *sql.Tx) error {
+		var err error
 		now := w.Coordinate().clock.Now()
-		units, err := w.chooseWorkUnits(tx, spec, count, now)
-		if err != nil {
+
+		// Try to create attempts from pre-existing work units
+		attempts, err = w.chooseAndMakeAttempts(tx, spec, count, now, length)
+		if err != nil || len(attempts) > 0 {
 			return err
 		}
-		if len(units) == 0 && meta.CanStartContinuous(now) {
+
+		// If there were none, but the selected work spec is
+		// continuous, maybe we can create a work unit and an
+		// attempt
+		if meta.CanStartContinuous(now) {
+			var unit *workUnit
+			var attempt *attempt
 			continuous = true
-			units, err = w.createContinuousUnits(tx, spec, meta, now)
-		}
-		if err != nil {
-			return err
-		}
-		length := time.Duration(15) * time.Minute
-		for _, unit := range units {
-			a, err := makeAttempt(tx, unit, w, length)
-			if err != nil {
-				return err
+			unit, err = w.createContinuousUnit(tx, spec, meta, now)
+			if err == nil {
+				attempt, err = makeAttempt(tx, unit, w, length)
 			}
-			attempts = append(attempts, a)
+			if err == nil {
+				attempts = []coordinate.Attempt{attempt}
+			}
 		}
-		return nil
+
+		// Whatever happened, end of the road
+		return err
 	})
 	// On a very bad day, we could have gone to create continuous
 	// work units, but an outright INSERT failed from a duplicate
@@ -507,11 +514,13 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 	return attempts, err
 }
 
-// chooseWorkUnits chooses up to a specified number of work units from
-// some work spec.
-func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now time.Time) ([]*workUnit, error) {
+// chooseAndMakeAttempts, in one SQL query, finds work units to do for
+// a specific work spec, creates attempts for them, and returns the
+// corresponding attempt objects.
+func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int, now time.Time, length time.Duration) ([]coordinate.Attempt, error) {
 	params := queryParams{}
-	query := buildSelect([]string{
+
+	choose := buildSelect([]string{
 		workUnitID,
 		workUnitName,
 	}, []string{
@@ -521,18 +530,41 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now t
 		workUnitHasNoAttempt,
 		"NOT " + workUnitTooSoon(&params, now),
 	})
-	query += " ORDER BY priority DESC, name ASC"
-	query += fmt.Sprintf(" LIMIT %v", numUnits)
-	query += " FOR UPDATE"
+	choose += " ORDER BY priority DESC, name ASC"
+	choose += fmt.Sprintf(" LIMIT %v", numUnits)
+
+	expiration := now.Add(length)
+	whatToInsert := buildSelect([]string{
+		"id",
+		params.Param(w.id),
+		params.Param(now),
+		params.Param(expiration),
+	}, []string{
+		"u",
+	}, []string{})
+	attempts := "INSERT INTO " + attemptTable +
+		"(work_unit_id, worker_id, start_time, expiration_time) " +
+		whatToInsert +
+		" RETURNING id"
+
+	update := "UPDATE " + workUnitTable + " " +
+		"SET active_attempt_id=a.id " +
+		"FROM a, u " +
+		"WHERE " + workUnitID + "=u.id " +
+		"RETURNING u.id, u.name, a.id"
+
+	query := "WITH u AS (" + choose + "), a AS (" + attempts + ") " + update
+
 	rows, err := tx.Query(query, params...)
 	if err != nil {
 		return nil, err
 	}
-	var result []*workUnit
+	var result []coordinate.Attempt
 	err = scanRows(rows, func() error {
 		unit := workUnit{spec: spec}
-		if err := rows.Scan(&unit.id, &unit.name); err == nil {
-			result = append(result, &unit)
+		attempt := attempt{unit: &unit, worker: w}
+		if err := rows.Scan(&unit.id, &unit.name, &attempt.id); err == nil {
+			result = append(result, &attempt)
 		}
 		return err
 	})
@@ -542,16 +574,16 @@ func (w *worker) chooseWorkUnits(tx *sql.Tx, spec *workSpec, numUnits int, now t
 	return result, nil
 }
 
-// createContinuousUnits tries to create exactly one continuous work
+// createContinuousUnit tries to create exactly one continuous work
 // unit, and returns it.
-func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta, now time.Time) ([]*workUnit, error) {
+func (w *worker) createContinuousUnit(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta, now time.Time) (*workUnit, error) {
 	// We will want to ensure that only one worker is attempting
 	// to create this work unit, and we will ultimately want to
 	// update the next-continuous time
 	params := queryParams{}
 	row := tx.QueryRow(buildSelect([]string{workSpecNextContinuous},
 		[]string{workSpecTable},
-		[]string{isWorkSpec(&params, spec.id)}),
+		[]string{isWorkSpec(&params, spec.id)})+" FOR UPDATE",
 		params...)
 	var aTime pq.NullTime
 	err := row.Scan(&aTime)
@@ -596,7 +628,7 @@ func (w *worker) createContinuousUnits(tx *sql.Tx, spec *workSpec, meta *coordin
 	}
 
 	// We have the single work unit we want to do.
-	return []*workUnit{unit}, nil
+	return unit, nil
 }
 
 func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, length time.Duration) (coordinate.Attempt, error) {
