@@ -91,9 +91,10 @@ func withTx(c coordinable, readOnly bool, f func(*sql.Tx) error) (err error) {
 		}
 
 		// If we specifically got a serialization error,
-		// retry
+		// retry; also trap "deadlock" errors which can happen
+		// with concurrent request attempt/delete units
 		if pqerr, ok := err.(*pq.Error); ok {
-			if pqerr.Code == "40001" {
+			if pqerr.Code == "40001" || pqerr.Code == "40P01" {
 				err = tx.Rollback()
 				if err == sql.ErrTxDone {
 					// We want to roll back, but we

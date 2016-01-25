@@ -344,17 +344,25 @@ func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (count int, er
 	_ = withTx(spec, false, func(tx *sql.Tx) error {
 		return expireAttempts(spec, tx)
 	})
+	// If we're trying to delete *everything*, and work is still
+	// ongoing, this is extremely likely to hit conflicts.  Do this
+	// in smaller batches in a loop.  That makes this non-atomic,
+	// but does mean it's extremely likely to complete.
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
-	query := "DELETE FROM work_unit WHERE id IN (" + cte + ")"
-	err = withTx(spec, false, func(tx *sql.Tx) error {
-		result, err := tx.Exec(query, params...)
-		if err == nil {
-			var count64 int64
-			count64, err = result.RowsAffected()
-			count = int(count64)
-		}
-		return err
-	})
+	query := "DELETE FROM work_unit WHERE id IN (" + cte + " LIMIT 100)"
+	keepGoing := true
+	for keepGoing && err == nil {
+		err = withTx(spec, false, func(tx *sql.Tx) error {
+			result, err := tx.Exec(query, params...)
+			if err == nil {
+				var count64 int64
+				count64, err = result.RowsAffected()
+				count += int(count64)
+				keepGoing = count64 != 0
+			}
+			return err
+		})
+	}
 	return
 }
 
