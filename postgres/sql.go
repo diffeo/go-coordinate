@@ -62,24 +62,10 @@ func withTx(c coordinable, readOnly bool, f func(*sql.Tx) error) (err error) {
 			return
 		}
 
-		// We'd love to make this SERIALIZABLE, and the
-		// documentation suggests that it solves all our
-		// concurrency problems.  In practice, at least on
-		// PostgreSQL 9.3, there are issues with returning
-		// duplicate attempts...even though that's a sequence
-		//
-		// SELECT ... FROM work_units WHERE active_attempt_id IS NULL
-		// UPDATE work_units SET active_attempt_id=$1
-		//
-		// with an obvious conflict?
-		level := "REPEATABLE READ"
-		if readOnly {
-			level += " READ ONLY"
-		}
-		_, err = tx.Exec("SET TRANSACTION ISOLATION LEVEL " + level)
-		if err != nil {
-			return
-		}
+		// Past versions of this code had a SET TRANSACTION
+		// ISOLATION LEVEL call here that could declare the
+		// transaction read-only.  This didn't seem to make a
+		// difference in practice, but this is where it goes.
 
 		// Call the callback function
 		err = f(tx)

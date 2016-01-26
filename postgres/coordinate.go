@@ -10,6 +10,7 @@ import (
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/satori/go.uuid"
+	"strings"
 )
 
 type pgCoordinate struct {
@@ -51,6 +52,33 @@ func NewWithClock(connectionString string, clk clock.Clock) (coordinate.Coordina
 	if len(connectionString) >= 2 && connectionString[0] == '/' && connectionString[1] == '/' {
 		connectionString = "postgres:" + connectionString
 	}
+
+	// Add some custom parameters.
+	//
+	// We'd love to make the transaction isolation level
+	// SERIALIZABLE, and the documentation suggests that it solves
+	// all our concurrency problems.  In practice, at least on
+	// PostgreSQL 9.3, there are issues with returning duplicate
+	// attempts...even though that's a sequence
+	//
+	// SELECT ... FROM work_units WHERE active_attempt_id IS NULL
+	// UPDATE work_units SET active_attempt_id=$1
+	//
+	// with an obvious conflict?
+	if strings.Contains(connectionString, "://") {
+		if strings.Contains(connectionString, "?") {
+			connectionString += "&"
+		} else {
+			connectionString += "?"
+		}
+		connectionString += "default_transaction_isolation=repeatable%20read"
+	} else {
+		if len(connectionString) > 0 {
+			connectionString += " "
+		}
+		connectionString += "default_transaction_isolation='repeatable read'"
+	}
+
 	db, err := sql.Open("postgres", connectionString)
 	if err != nil {
 		return nil, err
