@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinate
@@ -57,6 +57,13 @@ var ErrWorkUnitTooShort = errors.New("too few parameters to work unit")
 // metadata dictionary is supplied and it has a "priority" key but
 // that is not a number.
 var ErrBadPriority = errors.New("priority must be a number")
+
+// ErrGone is returned from various points in the API if the object is
+// determined to not exist, for instance because another caller in a
+// shared database has deleted it.  It makes no commitment as to which
+// object has been deleted; a work unit operation can return ErrGone if
+// its entire work spec is gone.
+var ErrGone = errors.New("Object no longer exists")
 
 // ErrNoSuchWorkSpec is returned by Namespace.WorkSpec() and similar
 // functions that want to look up a work spec, but cannot find it.

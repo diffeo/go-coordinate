@@ -112,14 +112,17 @@ func (w *worker) SetParent(cParent coordinate.Worker) error {
 	if !ok {
 		return coordinate.ErrWrongBackend
 	}
-	return withTx(w, false, func(tx *sql.Tx) (err error) {
-		if parent == nil {
-			_, err = tx.Exec("UPDATE worker SET parent=NULL WHERE id=$1", w.id)
-		} else {
-			_, err = tx.Exec("UPDATE worker SET parent=$2 WHERE id=$1", w.id, parent.id)
-		}
-		return
+	params := queryParams{}
+	fields := fieldList{}
+	if parent == nil {
+		fields.AddDirect("parent", "NULL")
+	} else {
+		fields.Add(&params, "parent", parent.id)
+	}
+	query := buildUpdate(workerTable, fields.UpdateChanges(), []string{
+		isWorker(&params, w.id),
 	})
+	return execInTx(w, query, params, true)
 }
 
 func (w *worker) Children() ([]coordinate.Worker, error) {
@@ -152,14 +155,18 @@ func (w *worker) Active() (result bool, err error) {
 		row := tx.QueryRow("SELECT active FROM worker WHERE id=$1", w.id)
 		return row.Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
 func (w *worker) Deactivate() error {
-	return withTx(w, false, func(tx *sql.Tx) error {
-		_, err := tx.Exec("UPDATE worker SET active=FALSE WHERE id=$1", w.id)
-		return err
-	})
+	params := queryParams{}
+	query := buildUpdate(workerTable,
+		[]string{"active=FALSE"},
+		[]string{isWorker(&params, w.id)})
+	return execInTx(w, query, params, true)
 }
 
 func (w *worker) Mode() (result string, err error) {
@@ -167,6 +174,9 @@ func (w *worker) Mode() (result string, err error) {
 		row := tx.QueryRow("SELECT mode FROM worker WHERE id=$1", w.id)
 		return row.Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -176,6 +186,9 @@ func (w *worker) Data() (map[string]interface{}, error) {
 		row := tx.QueryRow("SELECT data FROM worker WHERE id=$1", w.id)
 		return row.Scan(&dataBytes)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -194,6 +207,9 @@ func (w *worker) Expiration() (result time.Time, err error) {
 		row := tx.QueryRow("SELECT expiration FROM worker WHERE id=$1", w.id)
 		return row.Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -202,6 +218,9 @@ func (w *worker) LastUpdate() (result time.Time, err error) {
 		row := tx.QueryRow("SELECT last_update FROM worker WHERE id=$1", w.id)
 		return row.Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -220,7 +239,7 @@ func (w *worker) Update(data map[string]interface{}, now, expiration time.Time, 
 	query := buildUpdate(workerTable, fields.UpdateChanges(), []string{
 		isWorker(&params, w.id),
 	})
-	return execInTx(w, query, params)
+	return execInTx(w, query, params, true)
 }
 
 // coordinable interface

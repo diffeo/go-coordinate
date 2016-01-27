@@ -36,6 +36,9 @@ func (a *attempt) Status() (coordinate.AttemptStatus, error) {
 	err := withTx(a, true, func(tx *sql.Tx) error {
 		return tx.QueryRow("SELECT status FROM attempt WHERE id=$1", a.id).Scan(&status)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -60,6 +63,9 @@ func (a *attempt) Data() (map[string]interface{}, error) {
 		var dataBytes []byte
 		row := tx.QueryRow("SELECT data FROM attempt WHERE id=$1", a.id)
 		err := row.Scan(&dataBytes)
+		if err == sql.ErrNoRows {
+			err = coordinate.ErrGone
+		}
 		if err != nil {
 			return err
 		}
@@ -68,6 +74,9 @@ func (a *attempt) Data() (map[string]interface{}, error) {
 			// work unit data
 			row = tx.QueryRow("SELECT data FROM work_unit WHERE id=$1", a.unit.id)
 			err = row.Scan(&dataBytes)
+			if err == sql.ErrNoRows {
+				err = coordinate.ErrGone
+			}
 			if err != nil {
 				return err
 			}
@@ -85,6 +94,9 @@ func (a *attempt) StartTime() (result time.Time, err error) {
 	err = withTx(a, true, func(tx *sql.Tx) error {
 		return tx.QueryRow("SELECT start_time FROM attempt WHERE id=$1", a.id).Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -97,6 +109,9 @@ func (a *attempt) EndTime() (time.Time, error) {
 	err := withTx(a, true, func(tx *sql.Tx) error {
 		return tx.QueryRow("SELECT end_time FROM attempt WHERE id=$1", a.id).Scan(&nt)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -112,6 +127,9 @@ func (a *attempt) ExpirationTime() (result time.Time, err error) {
 	err = withTx(a, true, func(tx *sql.Tx) error {
 		return tx.QueryRow("SELECT expiration_time FROM attempt WHERE id=$1", a.id).Scan(&result)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -131,10 +149,7 @@ func (a *attempt) Renew(extendDuration time.Duration, data map[string]interface{
 	query := buildUpdate(attemptTable, fields.UpdateChanges(), []string{
 		isAttempt(&params, a.id),
 	})
-	return withTx(a, false, func(tx *sql.Tx) error {
-		_, err := tx.Exec(query, params...)
-		return err
-	})
+	return execInTx(a, query, params, true)
 }
 
 func (a *attempt) Expire(data map[string]interface{}) error {
@@ -294,7 +309,14 @@ func (a *attempt) complete(tx *sql.Tx, data map[string]interface{}, status strin
 	query := buildUpdate(attemptTable, fields.UpdateChanges(), []string{
 		isAttempt(&params, a.id),
 	})
-	_, err := tx.Exec(query, params...)
+	result, err := tx.Exec(query, params...)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err == nil && count == 0 {
+		err = coordinate.ErrGone
+	}
 	if err != nil {
 		return err
 	}
@@ -347,15 +369,13 @@ func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
 }
 
 func (unit *workUnit) ClearActiveAttempt() error {
+	params := queryParams{}
 	query := buildUpdate("work_unit", []string{
 		"active_attempt_id=NULL",
 	}, []string{
-		"id=$1",
+		isWorkUnit(&params, unit.id),
 	})
-	return withTx(unit, false, func(tx *sql.Tx) error {
-		_, err := tx.Exec(query, unit.id)
-		return err
-	})
+	return execInTx(unit, query, params, true)
 }
 
 func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {

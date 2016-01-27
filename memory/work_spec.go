@@ -15,6 +15,7 @@ type workSpec struct {
 	meta      coordinate.WorkSpecMeta
 	workUnits map[string]*workUnit
 	available availableUnits
+	deleted   bool
 }
 
 func newWorkSpec(namespace *namespace, name string) *workSpec {
@@ -30,18 +31,29 @@ func (spec *workSpec) Name() string {
 	return spec.name
 }
 
-func (spec *workSpec) Data() (map[string]interface{}, error) {
+func (spec *workSpec) do(f func() error) error {
 	globalLock(spec)
 	defer globalUnlock(spec)
 
-	return spec.data, nil
+	if spec.deleted || spec.namespace.deleted {
+		return coordinate.ErrGone
+	}
+
+	return f()
+}
+
+func (spec *workSpec) Data() (data map[string]interface{}, err error) {
+	err = spec.do(func() error {
+		data = spec.data
+		return nil
+	})
+	return
 }
 
 func (spec *workSpec) SetData(data map[string]interface{}) error {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	return spec.setData(data)
+	return spec.do(func() error {
+		return spec.setData(data)
+	})
 }
 
 // setData is an internal version of SetData() with the same constraints,
@@ -60,10 +72,12 @@ func (spec *workSpec) setData(data map[string]interface{}) error {
 	return err
 }
 
-func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-	return spec.getMeta(withCounts), nil
+func (spec *workSpec) Meta(withCounts bool) (meta coordinate.WorkSpecMeta, err error) {
+	err = spec.do(func() error {
+		meta = spec.getMeta(withCounts)
+		return nil
+	})
+	return
 }
 
 // getMeta gets a copy of this spec's metadata, optionally with counts
@@ -87,58 +101,59 @@ func (spec *workSpec) getMeta(withCounts bool) coordinate.WorkSpecMeta {
 }
 
 func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
-	globalLock(spec)
-	defer globalUnlock(spec)
+	return spec.do(func() error {
+		// Preserve immutable fields (taking advantage of meta pass-by-value)
+		meta.CanBeContinuous = spec.meta.CanBeContinuous
+		meta.NextWorkSpecName = spec.meta.NextWorkSpecName
+		meta.Runtime = spec.meta.Runtime
 
-	// Preserve immutable fields (taking advantage of meta pass-by-value)
-	meta.CanBeContinuous = spec.meta.CanBeContinuous
-	meta.NextWorkSpecName = spec.meta.NextWorkSpecName
-	meta.Runtime = spec.meta.Runtime
+		// If this cannot be continuous, force-clear that flag
+		if !meta.CanBeContinuous {
+			meta.Continuous = false
+		}
 
-	// If this cannot be continuous, force-clear that flag
-	if !meta.CanBeContinuous {
-		meta.Continuous = false
-	}
-
-	spec.meta = meta
-	return nil
+		spec.meta = meta
+		return nil
+	})
 }
 
-func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (coordinate.WorkUnit, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	now := spec.Coordinate().clock.Now()
-	unit, exists := spec.workUnits[name]
-	if exists {
-		unit.data = data
-		unit.meta = meta
-		// NB: we do not care if the unit is expired; that would
-		// only cause it to transition pending -> available which
-		// does not affect this case
-		switch unit.status() {
-		case coordinate.AvailableUnit, coordinate.PendingUnit, coordinate.DelayedUnit:
-			// do nothing
-		default:
-			// drop the existing (completed) attempt and
-			// make the work unit be available again
-			unit.activeAttempt = nil
-			if !now.Before(unit.meta.NotBefore) {
-				spec.available.Add(unit)
+func (spec *workSpec) AddWorkUnit(name string, data map[string]interface{}, meta coordinate.WorkUnitMeta) (unit coordinate.WorkUnit, err error) {
+	err = spec.do(func() error {
+		now := spec.Coordinate().clock.Now()
+		theUnit, exists := spec.workUnits[name]
+		if exists {
+			theUnit.data = data
+			theUnit.meta = meta
+			// NB: we do not care if the unit is expired;
+			// that would only cause it to transition
+			// pending -> available which does not affect
+			// this case
+			switch theUnit.status() {
+			case coordinate.AvailableUnit, coordinate.PendingUnit, coordinate.DelayedUnit:
+				// do nothing
+			default:
+				// drop the existing (completed) attempt and
+				// make the work unit be available again
+				theUnit.activeAttempt = nil
+				if !now.Before(theUnit.meta.NotBefore) {
+					spec.available.Add(theUnit)
+				}
+			}
+		} else {
+			theUnit = new(workUnit)
+			theUnit.name = name
+			theUnit.data = data
+			theUnit.meta = meta
+			theUnit.workSpec = spec
+			spec.workUnits[name] = theUnit
+			if !now.Before(theUnit.meta.NotBefore) {
+				spec.available.Add(theUnit)
 			}
 		}
-	} else {
-		unit = new(workUnit)
-		unit.name = name
-		unit.data = data
-		unit.meta = meta
-		unit.workSpec = spec
-		spec.workUnits[name] = unit
-		if !now.Before(unit.meta.NotBefore) {
-			spec.available.Add(unit)
-		}
-	}
-	return unit, nil
+		unit = theUnit
+		return nil
+	})
+	return
 }
 
 func (spec *workSpec) addWorkUnits(units map[string]coordinate.AddWorkUnitItem) {
@@ -157,14 +172,16 @@ func (spec *workSpec) addWorkUnits(units map[string]coordinate.AddWorkUnitItem) 
 	}
 }
 
-func (spec *workSpec) WorkUnit(name string) (coordinate.WorkUnit, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-	workUnit := spec.workUnits[name]
-	if workUnit == nil {
-		return nil, coordinate.ErrNoSuchWorkUnit{Name: name}
-	}
-	return workUnit, nil
+func (spec *workSpec) WorkUnit(name string) (unit coordinate.WorkUnit, err error) {
+	err = spec.do(func() error {
+		var present bool
+		unit, present = spec.workUnits[name]
+		if !present {
+			return coordinate.ErrNoSuchWorkUnit{Name: name}
+		}
+		return nil
+	})
+	return
 }
 
 // queryWithoutLimit calls a callback function for every work unit that
@@ -238,67 +255,68 @@ func (spec *workSpec) query(query coordinate.WorkUnitQuery, f func(*workUnit)) {
 }
 
 func (spec *workSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[string]coordinate.WorkUnit, err error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	result = make(map[string]coordinate.WorkUnit)
-	spec.query(query, func(unit *workUnit) {
-		result[unit.name] = unit
+	err = spec.do(func() error {
+		result = make(map[string]coordinate.WorkUnit)
+		spec.query(query, func(unit *workUnit) {
+			result[unit.name] = unit
+		})
+		return nil
 	})
 	return
 }
 
-func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-
-	spec.expireUnits()
-	result := make(map[coordinate.WorkUnitStatus]int)
-	for _, unit := range spec.workUnits {
-		result[unit.status()]++
-	}
-	return result, nil
+func (spec *workSpec) CountWorkUnitStatus() (result map[coordinate.WorkUnitStatus]int, err error) {
+	err = spec.do(func() error {
+		spec.expireUnits()
+		result = make(map[coordinate.WorkUnitStatus]int)
+		for _, unit := range spec.workUnits {
+			result[unit.status()]++
+		}
+		return nil
+	})
+	return
 }
 
 func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
-	globalLock(spec)
-	defer globalUnlock(spec)
-	spec.query(query, func(unit *workUnit) {
-		unit.meta.Priority = priority
-		spec.available.Reprioritize(unit)
+	return spec.do(func() error {
+		spec.query(query, func(unit *workUnit) {
+			unit.meta.Priority = priority
+			spec.available.Reprioritize(unit)
+		})
+		return nil
 	})
-	return nil
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(query coordinate.WorkUnitQuery, adjustment float64) error {
-	globalLock(spec)
-	defer globalUnlock(spec)
-	spec.query(query, func(unit *workUnit) {
-		unit.meta.Priority += adjustment
-		spec.available.Reprioritize(unit)
+	return spec.do(func() error {
+		spec.query(query, func(unit *workUnit) {
+			unit.meta.Priority += adjustment
+			spec.available.Reprioritize(unit)
+		})
+		return nil
 	})
-	return nil
 }
 
-func (spec *workSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (int, error) {
-	globalLock(spec)
-	defer globalUnlock(spec)
-	// NB: This depends somewhat on Go having good behavior if we
-	// modify the keys of the map of work units while iterating
-	// through it.
-	count := 0
-	deleteWorkUnit := func(workUnit *workUnit) {
-		for _, attempt := range workUnit.attempts {
-			attempt.worker.completeAttempt(attempt)
-			attempt.worker.removeAttempt(attempt)
+func (spec *workSpec) DeleteWorkUnits(query coordinate.WorkUnitQuery) (count int, err error) {
+	err = spec.do(func() error {
+		// NB: This depends somewhat on Go having good behavior if we
+		// modify the keys of the map of work units while iterating
+		// through it.
+		count = 0
+		deleteWorkUnit := func(workUnit *workUnit) {
+			for _, attempt := range workUnit.attempts {
+				attempt.worker.completeAttempt(attempt)
+				attempt.worker.removeAttempt(attempt)
+			}
+			delete(spec.workUnits, workUnit.name)
+			workUnit.deleted = true
+			spec.available.Remove(workUnit)
+			count++
 		}
-		delete(spec.workUnits, workUnit.name)
-		spec.available.Remove(workUnit)
-		count++
-	}
-
-	spec.query(query, deleteWorkUnit)
-	return count, nil
+		spec.query(query, deleteWorkUnit)
+		return nil
+	})
+	return
 }
 
 // expireUnits scans all work units in this work spec, and if any have

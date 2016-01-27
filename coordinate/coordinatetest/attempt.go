@@ -697,3 +697,30 @@ func (s *Suite) TestAttemptFractionalStart(c *check.C) {
 	err := attempt.Finish(nil)
 	c.Assert(err, check.IsNil)
 }
+
+// TestAttemptGone verifies that, if a work unit is deleted, its
+// attempts return ErrGone for things.
+func (s *Suite) TestAttemptGone(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkerName:   "worker",
+		WorkSpecName: "spec",
+		WorkUnitName: "unit",
+	}
+	sts.Do(s, c)
+
+	attempt := sts.RequestOneAttempt(c)
+
+	_, err := sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+
+	_, err = attempt.Status()
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
+		c.Check(nswu.Name, check.Equals, sts.WorkUnitName)
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+}

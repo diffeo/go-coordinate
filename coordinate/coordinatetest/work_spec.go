@@ -433,3 +433,65 @@ func (s *Suite) TestMetaCounts(c *check.C) {
 	c.Assert(err, check.IsNil)
 	checkCounts(0, 0)
 }
+
+// TestSpecDeletedGone validates that, if you delete a work spec,
+// subsequent attempts to use it return ErrGone.
+func (s *Suite) TestSpecDeletedGone(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkSpecName: "spec",
+	}
+	sts.Do(s, c)
+
+	err := s.Namespace.DestroyWorkSpec(sts.WorkSpecName)
+	c.Assert(err, check.IsNil)
+
+	// Test a couple of basic things
+	_, err = sts.WorkSpec.Meta(false)
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+
+	_, err = sts.WorkSpec.AddWorkUnit("foo", map[string]interface{}{}, coordinate.WorkUnitMeta{})
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+}
+
+// TestSpecInNamespaceGone validates that, if you delete a work spec's
+// namespace, attempts to use the work spec return ErrGone.
+func (s *Suite) TestSpecInNamespaceGone(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkSpecName: "spec",
+	}
+	sts.Do(s, c)
+
+	err := s.Namespace.Destroy()
+	c.Assert(err, check.IsNil)
+
+	// Test a couple of basic things
+	_, err = sts.WorkSpec.Meta(false)
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+
+	_, err = sts.WorkSpec.AddWorkUnit("foo", map[string]interface{}{}, coordinate.WorkUnitMeta{})
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+}

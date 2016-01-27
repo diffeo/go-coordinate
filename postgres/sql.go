@@ -26,6 +26,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/lib/pq"
 	"math"
 	"strings"
@@ -76,11 +77,15 @@ func withTx(c coordinable, readOnly bool, f func(*sql.Tx) error) (err error) {
 			done = true
 		}
 
-		// If we specifically got a serialization error,
-		// retry; also trap "deadlock" errors which can happen
-		// with concurrent request attempt/delete units
+		// Handle interesting PostgreSQL-specific errors
 		if pqerr, ok := err.(*pq.Error); ok {
-			if pqerr.Code == "40001" || pqerr.Code == "40P01" {
+			switch pqerr.Code {
+			case "40001", "40P01":
+				// If we specifically got a
+				// serialization error, retry; also
+				// trap "deadlock" errors which can
+				// happen with concurrent request
+				// attempt/delete units
 				err = tx.Rollback()
 				if err == sql.ErrTxDone {
 					// We want to roll back, but we
@@ -92,6 +97,16 @@ func withTx(c coordinable, readOnly bool, f func(*sql.Tx) error) (err error) {
 				}
 				tx = nil
 				continue
+
+			case "23503":
+				// This is a foreign key violation.
+				// Pretty much the only way to get
+				// here is to have a stale reference
+				// to something that got deleted, then
+				// try to insert something derived
+				// from it; but we have an error for
+				// that
+				err = coordinate.ErrGone
 			}
 		}
 
@@ -144,11 +159,22 @@ func queryAndScan(c coordinable, query string, params queryParams, f func(*sql.R
 }
 
 // execInTx establishes a read-write transaction and executes a
-// statement, dropping the result.  It is the common case of combining
-// withTx() and a simple tx.Exec().
-func execInTx(c coordinable, query string, params queryParams) error {
+// statement.  It is the common case of combining withTx() and a
+// simple tx.Exec().
+//
+// If checkResult is true, then actually look at the result, and if it
+// affected no rows, return coordinate.ErrGone.  Otherwise the result
+// is ignored.
+func execInTx(c coordinable, query string, params queryParams, checkResult bool) error {
 	return withTx(c, false, func(tx *sql.Tx) error {
-		_, err := tx.Exec(query, params...)
+		result, err := tx.Exec(query, params...)
+		if err == nil && checkResult {
+			var count int64
+			count, err = result.RowsAffected()
+			if err == nil && count == 0 {
+				err = coordinate.ErrGone
+			}
+		}
 		return err
 	})
 }

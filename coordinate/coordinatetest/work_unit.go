@@ -919,3 +919,59 @@ func (s *Suite) TestDelayedOutput(c *check.C) {
 	sts.WorkSpec = two
 	sts.CheckWorkUnitOrder(s, c, "u2")
 }
+
+// TestUnitDeletedGone validates that deleting a work unit causes
+// operations on it to return ErrGone.
+func (s *Suite) TestUnitDeletedGone(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkSpecName: "spec",
+		WorkUnitName: "unit",
+	}
+	sts.Do(s, c)
+
+	// Delete all the work units
+	_, err := sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
+	c.Assert(err, check.IsNil)
+
+	_, err = sts.WorkUnit.Status()
+	// If the backend does name-based lookup (restclient) we will get
+	// ErrNoSuchWorkUnit; if it does object-based lookup (memory,
+	// postgres) we will get ErrGone
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
+		c.Check(nswu.Name, check.Equals, sts.WorkUnitName)
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+}
+
+// TestUnitSpecDeletedGone validates that deleting a work unit's work
+// spec causes operations on the unit to return ErrGone.
+func (s *Suite) TestUnitSpecDeletedGone(c *check.C) {
+	sts := SimpleTestSetup{
+		WorkSpecName: "spec",
+		WorkUnitName: "unit",
+	}
+	sts.Do(s, c)
+
+	// Delete the work spec
+	err := s.Namespace.DestroyWorkSpec(sts.WorkSpecName)
+	c.Assert(err, check.IsNil)
+
+	_, err = sts.WorkUnit.Status()
+	// If the backend does name-based lookup (restclient) we will get
+	// ErrNoSuchWorkUnit; if it does object-based lookup (memory,
+	// postgres) we will get ErrGone
+	if err == coordinate.ErrGone {
+		// okay
+	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
+		c.Check(nswu.Name, check.Equals, sts.WorkUnitName)
+	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
+		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+	} else {
+		c.Errorf("deleted work spec produced error %+v", err)
+	}
+}

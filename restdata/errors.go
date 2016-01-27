@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restdata
@@ -91,6 +91,8 @@ func (e *ErrorResponse) FromError(err error) {
 		e.Error = "ErrWorkUnitTooShort"
 	case coordinate.ErrBadPriority:
 		e.Error = "ErrBadPriority"
+	case coordinate.ErrGone:
+		e.Error = "ErrGone"
 	}
 	switch et := err.(type) {
 	case coordinate.ErrNoSuchWorkSpec:
@@ -133,6 +135,8 @@ func (e *ErrorResponse) ToError() error {
 		return coordinate.ErrWorkUnitTooShort
 	case "ErrBadPriority":
 		return coordinate.ErrBadPriority
+	case "ErrGone":
+		return coordinate.ErrGone
 	case "ErrNoSuchWorkSpec":
 		return coordinate.ErrNoSuchWorkSpec{Name: e.Value}
 	case "ErrNoSuchWorkUnit":

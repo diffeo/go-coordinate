@@ -216,6 +216,9 @@ func (w *worker) MakeAttempt(cUnit coordinate.WorkUnit, duration time.Duration) 
 	if !ok {
 		return nil, coordinate.ErrWrongBackend
 	}
+	if unit.deleted || unit.workSpec.deleted || unit.workSpec.namespace.deleted {
+		return nil, coordinate.ErrGone
+	}
 	attempt := w.makeAttempt(unit, duration)
 	return attempt, nil
 }

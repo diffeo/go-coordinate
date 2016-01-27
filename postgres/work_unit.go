@@ -87,6 +87,9 @@ func (spec *workSpec) addWorkUnit(name string, dataBytes []byte, meta coordinate
 			unit, err = spec.insertWorkUnit(tx, name, dataBytes, meta)
 			return err
 		})
+		if err == sql.ErrNoRows {
+			err = coordinate.ErrGone
+		}
 		if err == nil {
 			return
 		}
@@ -324,7 +327,7 @@ func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		"id IN (" + cte + ")",
 	})
-	return execInTx(spec, query, params)
+	return execInTx(spec, query, params, false)
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
@@ -337,7 +340,7 @@ func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, prior
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		"id IN (" + cte + ")",
 	})
-	return execInTx(spec, query, params)
+	return execInTx(spec, query, params, false)
 }
 
 func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (count int, err error) {
@@ -388,6 +391,10 @@ func (unit *workUnit) Data() (map[string]interface{}, error) {
 			row = tx.QueryRow("SELECT data FROM work_unit WHERE id=$1", unit.id)
 			err = row.Scan(&dataBytes)
 		}
+		if err == sql.ErrNoRows {
+			// The work unit isn't there either
+			err = coordinate.ErrGone
+		}
 		if err != nil {
 			return err
 		}
@@ -423,6 +430,9 @@ func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
 	err := withTx(unit, true, func(tx *sql.Tx) error {
 		return tx.QueryRow(query, params...).Scan(&ns, &delayed)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -461,6 +471,9 @@ func (unit *workUnit) Meta() (meta coordinate.WorkUnitMeta, err error) {
 	err = withTx(unit, true, func(tx *sql.Tx) error {
 		return tx.QueryRow(query, params...).Scan(&meta.Priority, &notBefore)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	meta.NotBefore = nullTimeToTime(notBefore)
 	return
 }
@@ -473,7 +486,7 @@ func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) error {
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		isWorkUnit(&params, unit.id),
 	})
-	return execInTx(unit, query, params)
+	return execInTx(unit, query, params, true)
 }
 
 func (unit *workUnit) Priority() (priority float64, err error) {
@@ -484,6 +497,9 @@ func (unit *workUnit) Priority() (priority float64, err error) {
 	err = withTx(unit, true, func(tx *sql.Tx) error {
 		return tx.QueryRow(query, params...).Scan(&priority)
 	})
+	if err == sql.ErrNoRows {
+		err = coordinate.ErrGone
+	}
 	return
 }
 
@@ -494,7 +510,7 @@ func (unit *workUnit) SetPriority(priority float64) error {
 	query := buildUpdate(workUnitTable, fields.UpdateChanges(), []string{
 		isWorkUnit(&params, unit.id),
 	})
-	return execInTx(unit, query, params)
+	return execInTx(unit, query, params, true)
 }
 
 // coordinable interface

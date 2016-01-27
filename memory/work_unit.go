@@ -15,6 +15,7 @@ type workUnit struct {
 	attempts       []*attempt
 	workSpec       *workSpec
 	availableIndex int
+	deleted        bool
 }
 
 // coordinate.WorkUnit interface:
@@ -34,11 +35,22 @@ func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 	return unit.workSpec
 }
 
-func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
+func (unit *workUnit) do(f func() error) error {
 	globalLock(unit)
 	defer globalUnlock(unit)
-	unit.workSpec.expireUnits()
-	return unit.status(), nil
+	if unit.deleted || unit.workSpec.deleted || unit.workSpec.namespace.deleted {
+		return coordinate.ErrGone
+	}
+	return f()
+}
+
+func (unit *workUnit) Status() (status coordinate.WorkUnitStatus, err error) {
+	err = unit.do(func() error {
+		unit.workSpec.expireUnits()
+		status = unit.status()
+		return nil
+	})
+	return
 }
 
 // status is an internal helper that converts a single unit's attempt
@@ -71,18 +83,20 @@ func (unit *workUnit) status() coordinate.WorkUnitStatus {
 	}
 }
 
-func (unit *workUnit) Meta() (coordinate.WorkUnitMeta, error) {
-	globalLock(unit)
-	defer globalUnlock(unit)
-	return unit.meta, nil
+func (unit *workUnit) Meta() (meta coordinate.WorkUnitMeta, err error) {
+	err = unit.do(func() error {
+		meta = unit.meta
+		return nil
+	})
+	return
 }
 
 func (unit *workUnit) SetMeta(meta coordinate.WorkUnitMeta) error {
-	globalLock(unit)
-	defer globalUnlock(unit)
-	unit.meta = meta
-	unit.workSpec.available.Reprioritize(unit)
-	return nil
+	return unit.do(func() error {
+		unit.meta = meta
+		unit.workSpec.available.Reprioritize(unit)
+		return nil
+	})
 }
 
 func (unit *workUnit) Priority() (float64, error) {
@@ -91,25 +105,26 @@ func (unit *workUnit) Priority() (float64, error) {
 }
 
 func (unit *workUnit) SetPriority(priority float64) error {
-	globalLock(unit)
-	defer globalUnlock(unit)
-	unit.meta.Priority = priority
-	unit.workSpec.available.Reprioritize(unit)
-	return nil
+	return unit.do(func() error {
+		unit.meta.Priority = priority
+		unit.workSpec.available.Reprioritize(unit)
+		return nil
+	})
 }
 
-func (unit *workUnit) ActiveAttempt() (coordinate.Attempt, error) {
-	globalLock(unit)
-	defer globalUnlock(unit)
-	unit.workSpec.expireUnits()
-	// Since this returns an interface type, if we just return
-	// unit.activeAttempt, we will get back a nil with a concrete
-	// type which is not equal to nil with interface type. Go Go
-	// go!
-	if unit.activeAttempt == nil {
-		return nil, nil
-	}
-	return unit.activeAttempt, nil
+func (unit *workUnit) ActiveAttempt() (attempt coordinate.Attempt, err error) {
+	err = unit.do(func() error {
+		unit.workSpec.expireUnits()
+		// Since this returns an interface type, if we just
+		// return unit.activeAttempt, we will get back a nil
+		// with a concrete type which is not equal to nil with
+		// interface type. Go Go go!
+		if unit.activeAttempt != nil {
+			attempt = unit.activeAttempt
+		}
+		return nil
+	})
+	return
 }
 
 // resetAttempt clears the active attempt for a unit and returns it
@@ -122,21 +137,21 @@ func (unit *workUnit) resetAttempt() {
 }
 
 func (unit *workUnit) ClearActiveAttempt() error {
-	globalLock(unit)
-	defer globalUnlock(unit)
-	unit.resetAttempt()
-	return nil
+	return unit.do(func() error {
+		unit.resetAttempt()
+		return nil
+	})
 }
 
-func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
-	globalLock(unit)
-	defer globalUnlock(unit)
-
-	result := make([]coordinate.Attempt, len(unit.attempts))
-	for i, attempt := range unit.attempts {
-		result[i] = attempt
-	}
-	return result, nil
+func (unit *workUnit) Attempts() (attempts []coordinate.Attempt, err error) {
+	err = unit.do(func() error {
+		attempts = make([]coordinate.Attempt, len(unit.attempts))
+		for i, attempt := range unit.attempts {
+			attempts[i] = attempt
+		}
+		return nil
+	})
+	return
 }
 
 // memory.coordinable interface:

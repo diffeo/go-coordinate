@@ -70,7 +70,7 @@ func (ns *namespace) Name() string {
 func (ns *namespace) Destroy() error {
 	params := queryParams{}
 	query := "DELETE FROM NAMESPACE WHERE id=" + params.Param(ns.id)
-	return execInTx(ns, query, params)
+	return execInTx(ns, query, params, false)
 }
 
 // coordinable interface:

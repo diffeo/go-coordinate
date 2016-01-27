@@ -112,21 +112,15 @@ func txWorkSpec(tx *sql.Tx, spec *workSpec) error {
 }
 
 func (ns *namespace) DestroyWorkSpec(name string) error {
-	return withTx(ns, false, func(tx *sql.Tx) error {
-		params := queryParams{}
-		query := "DELETE FROM " + workSpecTable + " " +
-			"WHERE " + workSpecInNamespace(&params, ns.id) + " " +
-			"AND " + workSpecHasName(&params, name)
-		result, err := tx.Exec(query, params...)
-		if err == nil {
-			var count int64
-			count, err = result.RowsAffected()
-			if err == nil && count == 0 {
-				err = coordinate.ErrNoSuchWorkSpec{Name: name}
-			}
-		}
-		return err
-	})
+	params := queryParams{}
+	query := "DELETE FROM " + workSpecTable + " " +
+		"WHERE " + workSpecInNamespace(&params, ns.id) + " " +
+		"AND " + workSpecHasName(&params, name)
+	err := execInTx(ns, query, params, true)
+	if err == coordinate.ErrGone {
+		err = coordinate.ErrNoSuchWorkSpec{Name: name}
+	}
+	return err
 }
 
 func (ns *namespace) WorkSpecNames() (result []string, err error) {
@@ -160,6 +154,9 @@ func (spec *workSpec) Data() (map[string]interface{}, error) {
 		row := tx.QueryRow("SELECT data FROM work_spec WHERE id=$1", spec.id)
 		return row.Scan(&dataBytes)
 	})
+	if err == sql.ErrNoRows {
+		return nil, coordinate.ErrGone
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -208,7 +205,7 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 	query := buildUpdate(workSpecTable, fields.UpdateChanges(), []string{
 		isWorkSpec(&params, spec.id),
 	})
-	return execInTx(spec, query, params)
+	return execInTx(spec, query, params, true)
 }
 
 func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
@@ -260,6 +257,9 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 			&meta.NextWorkSpecName,
 			&meta.Runtime,
 		)
+		if err == sql.ErrNoRows {
+			return coordinate.ErrGone
+		}
 		if err != nil {
 			return err
 		}
@@ -465,7 +465,7 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	query := buildUpdate(workSpecTable, fields.UpdateChanges(), []string{
 		isWorkSpec(&params, spec.id),
 	})
-	return execInTx(spec, query, params)
+	return execInTx(spec, query, params, true)
 }
 
 // coordinable interface:

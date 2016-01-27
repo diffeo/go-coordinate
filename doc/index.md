@@ -15,3 +15,4 @@ Features
 * [Work Unit Runtime Selection](runtime.md)
 * [Work Unit Chaining](chaining.md)
 * [Workers in Go](worker.md)
+* [Concurrency and Deletion](errgone.md)

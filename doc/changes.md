@@ -13,6 +13,8 @@ Major Changes
   to the REST API.
 * Adds a worker framework so that Coordinate work specs can run task
   implementations written in Go.
+* Add a `coordbench` tool to measure the performance of the Coordinate
+  system.
 
 0.2.0 (4 Jan 2016)
 ------------------
