@@ -7,16 +7,18 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
-	"github.com/benbjohnson/clock"
-	"github.com/diffeo/go-coordinate/cborrpc"
-	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/diffeo/go-coordinate/jobserver"
-	"github.com/ugorji/go/codec"
 	"io"
 	"net"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/Sirupsen/logrus"
+	"github.com/benbjohnson/clock"
+	"github.com/diffeo/go-coordinate/cborrpc"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/diffeo/go-coordinate/jobserver"
+	"github.com/ugorji/go/codec"
 )
 
 // ServeCBORRPC runs a CBOR-RPC server on the specified local address.
@@ -27,6 +29,7 @@ func ServeCBORRPC(
 	coord coordinate.Coordinate,
 	gConfig map[string]interface{},
 	network, laddr string,
+	reqLogger *logrus.Logger,
 ) {
 	var (
 		cbor      *codec.CborHandle
@@ -55,7 +58,7 @@ func ServeCBORRPC(
 	for err == nil {
 		conn, err = ln.Accept()
 		if err == nil {
-			go handleConnection(conn, jobd, cbor)
+			go handleConnection(conn, jobd, cbor, reqLogger)
 		}
 	}
 	panic(err)
@@ -71,8 +74,17 @@ func snakeToCamel(s string) string {
 	return strings.Join(words, "")
 }
 
-func handleConnection(conn net.Conn, jobd *jobserver.JobServer, cbor *codec.CborHandle) {
+func handleConnection(conn net.Conn, jobd *jobserver.JobServer, cbor *codec.CborHandle, reqLogger *logrus.Logger) {
 	defer conn.Close()
+
+	var reqLog, errLog *logrus.Entry
+	fields := logrus.Fields{
+		"remote": conn.RemoteAddr(),
+	}
+	errLog = logrus.WithFields(fields)
+	if reqLogger != nil {
+		reqLog = reqLogger.WithFields(fields)
+	}
 
 	jobdv := reflect.ValueOf(jobd)
 
@@ -85,20 +97,36 @@ func handleConnection(conn net.Conn, jobd *jobserver.JobServer, cbor *codec.Cbor
 		var request cborrpc.Request
 		err := decoder.Decode(&request)
 		if err == io.EOF {
+			if reqLog != nil {
+				reqLog.Debug("Connection closed")
+			}
 			return
 		} else if err != nil {
-			fmt.Printf("Error reading message: %v\n", err)
+			errLog.WithError(err).Error("Error reading message")
 			return
 		}
+		if reqLog != nil {
+			reqLog.WithFields(logrus.Fields{
+				"id":     request.ID,
+				"method": request.Method,
+			}).Debug("Request")
+		}
 		response := doRequest(jobdv, request)
+		if reqLog != nil {
+			entry := reqLog.WithField("id", response.ID)
+			if response.Error != "" {
+				entry = entry.WithField("error", response.Error)
+			}
+			entry.Debug("Response")
+		}
 		err = encoder.Encode(response)
 		if err != nil {
-			fmt.Printf("Error encoding response: %v\n", err)
+			errLog.WithError(err).Error("Error encoding response")
 			return
 		}
 		err = writer.Flush()
 		if err != nil {
-			fmt.Printf("Error writing response: %v\n", err)
+			errLog.WithError(err).Error("Error writing response")
 			return
 		}
 	}
@@ -112,7 +140,10 @@ func doRequest(jobdv reflect.Value, request cborrpc.Request) (response cborrpc.R
 		if oops := recover(); oops != nil {
 			buf := make([]byte, 65536)
 			runtime.Stack(buf, false)
-			fmt.Printf("%v\n%v\n", oops, string(buf))
+			logrus.WithFields(logrus.Fields{
+				"panic": oops,
+				"stack": string(buf),
+			}).Error("Panic in job server")
 			response.Error = fmt.Sprintf("%v", oops)
 		}
 	}()

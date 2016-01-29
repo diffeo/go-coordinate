@@ -13,6 +13,7 @@ import (
 	"flag"
 	"io/ioutil"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/diffeo/go-coordinate/backend"
 	"github.com/diffeo/go-coordinate/cache"
 	"gopkg.in/yaml.v2"
@@ -28,23 +29,41 @@ func main() {
 	backend := backend.Backend{Implementation: "memory", Address: ""}
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
 	config := flag.String("config", "", "global configuration YAML file")
+	logRequests := flag.Bool("log-requests", false, "log all requests")
 	flag.Parse()
 
 	var gConfig map[string]interface{}
 	if *config != "" {
 		gConfig, err = loadConfigYaml(*config)
 		if err != nil {
-			panic(err)
+			logrus.WithFields(logrus.Fields{
+				"err": err,
+			}).Fatal("Could not load YAML configuration")
+			return
 		}
 	}
 
 	coordinate, err := backend.Coordinate()
 	if err != nil {
-		panic(err)
+		logrus.WithFields(logrus.Fields{
+			"err": err,
+		}).Fatal("Could not create Coordinate backend")
+		return
 	}
 	coordinate = cache.New(coordinate)
 
-	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind)
+	var reqLogger *logrus.Logger
+	if *logRequests {
+		stdlog := logrus.StandardLogger()
+		reqLogger = &logrus.Logger{
+			Out:       stdlog.Out,
+			Formatter: stdlog.Formatter,
+			Hooks:     stdlog.Hooks,
+			Level:     logrus.DebugLevel,
+		}
+	}
+
+	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind, reqLogger)
 	go ServeHTTP(coordinate, *httpBind)
 	select {}
 }
