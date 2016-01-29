@@ -24,11 +24,15 @@ func (unit *workUnit) Name() string {
 	return unit.name
 }
 
-func (unit *workUnit) Data() (map[string]interface{}, error) {
-	if unit.activeAttempt != nil && unit.activeAttempt.data != nil {
-		return unit.activeAttempt.data, nil
-	}
-	return unit.data, nil
+func (unit *workUnit) Data() (data map[string]interface{}, err error) {
+	err = unit.do(func() error {
+		data = unit.data
+		if unit.activeAttempt != nil && unit.activeAttempt.data != nil {
+			data = unit.activeAttempt.data
+		}
+		return nil
+	})
+	return
 }
 
 func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
