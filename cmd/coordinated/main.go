@@ -14,6 +14,7 @@ import (
 	"io/ioutil"
 
 	"github.com/diffeo/go-coordinate/backend"
+	"github.com/diffeo/go-coordinate/cache"
 	"gopkg.in/yaml.v2"
 )
 
@@ -41,6 +42,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	coordinate = cache.New(coordinate)
 
 	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind)
 	go ServeHTTP(coordinate, *httpBind)
