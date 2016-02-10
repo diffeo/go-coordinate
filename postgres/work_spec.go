@@ -418,7 +418,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			workUnitInThisSpec,
 			workUnitHasNoAttempt,
 			"NOT " + workUnitTooSoon(&params, now),
-		})
+		}) + " LIMIT 1"
 		query = buildSelect([]string{
 			workSpecName,
 			"EXISTS(" + query + ")",
