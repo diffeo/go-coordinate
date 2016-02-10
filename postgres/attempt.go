@@ -498,7 +498,10 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		now := w.Coordinate().clock.Now()
 
 		// Try to create attempts from pre-existing work units
-		attempts, err = w.chooseAndMakeAttempts(tx, spec, count, now, length)
+		// (assuming we expect there to be some)
+		if meta.AvailableCount > 0 {
+			attempts, err = w.chooseAndMakeAttempts(tx, spec, count, now, length)
+		}
 		if err != nil || len(attempts) > 0 {
 			return err
 		}
@@ -511,10 +514,10 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 			var attempt *attempt
 			continuous = true
 			unit, err = w.createContinuousUnit(tx, spec, meta, now)
-			if err == nil {
+			if err == nil && unit != nil {
 				attempt, err = makeAttempt(tx, unit, w, length)
 			}
-			if err == nil {
+			if err == nil && attempt != nil {
 				attempts = []coordinate.Attempt{attempt}
 			}
 		}
@@ -609,6 +612,12 @@ func (w *worker) createContinuousUnit(tx *sql.Tx, spec *workSpec, meta *coordina
 	err := row.Scan(&aTime)
 	if err != nil {
 		return nil, err
+	}
+
+	// If someone else is also doing this, and there's a non-zero
+	// interval, this might have gotten updated before us.
+	if aTime.Valid && now.Before(aTime.Time) {
+		return nil, nil
 	}
 
 	// Create the work unit
