@@ -34,7 +34,7 @@ func (ns *namespace) wrapWorker(upstream coordinate.Worker) *worker {
 	// This cannot fail: it can only fail if the embedded function
 	// returns an error, and the embedded function never fails
 	downstream, _ := ns.workers.Get(upstream.Name(), func(string) (named, error) {
-		return upstream, nil
+		return newWorker(upstream, ns), nil
 	})
 	return downstream.(*worker)
 }

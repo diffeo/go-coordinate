@@ -155,14 +155,35 @@ func TestWorkUnitDeletion(t *testing.T) {
 			a.Contains(data, "k", "got back the old work unit data")
 		}
 	}
+}
 
-	// YOU ARE HERE: The above test fails.  It fails because, right
-	// now, work units are unwrapped objects, and so the last call
-	// to spec.WorkUnit() returns the same memory.workUnit object
-	// which is flagged as "deleted".  If we wrap work units then
-	// we will capture the ErrGone and refresh ourselves, and this
-	// will pass.
-	//
-	// Having written that, it is also interesting to note that
-	// the call to Data() does not return ErrGone.
+func TestWorkerChildren(t *testing.T) {
+	a := NewCacheAssertions(t)
+	ns := a.Namespace("")
+
+	bns, err := a.Backend.Namespace("")
+	if !a.NoError(err) {
+		return
+	}
+	bparent, err := bns.Worker("parent")
+	if !a.NoError(err) {
+		return
+	}
+	bchild, err := bns.Worker("child")
+	if !a.NoError(err) {
+		return
+	}
+	err = bchild.SetParent(bparent)
+	if !a.NoError(err) {
+		return
+	}
+
+	parent, err := ns.Worker("parent")
+	if a.NoError(err) {
+		a.Equal(bparent.Name(), parent.Name())
+		children, err := parent.Children()
+		if a.NoError(err) && a.Len(children, 1) {
+			a.Equal("child", children[0].Name())
+		}
+	}
 }
