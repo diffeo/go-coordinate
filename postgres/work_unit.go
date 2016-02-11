@@ -237,9 +237,7 @@ func (spec *workSpec) selectUnits(q coordinate.WorkUnitQuery, now time.Time) (st
 }
 
 func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordinate.WorkUnit, error) {
-	_ = withTx(spec, false, func(tx *sql.Tx) error {
-		return expireAttempts(spec, tx)
-	})
+	spec.Coordinate().Expiry.Do(spec)
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	query := buildSelect([]string{
 		"id",
@@ -265,9 +263,7 @@ func (spec *workSpec) WorkUnits(q coordinate.WorkUnitQuery) (map[string]coordina
 }
 
 func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, error) {
-	_ = withTx(spec, false, func(tx *sql.Tx) error {
-		return expireAttempts(spec, tx)
-	})
+	spec.Coordinate().Expiry.Do(spec)
 	now := spec.Coordinate().clock.Now()
 	result := make(map[coordinate.WorkUnitStatus]int)
 	params := queryParams{}
@@ -318,9 +314,7 @@ func (spec *workSpec) CountWorkUnitStatus() (map[coordinate.WorkUnitStatus]int, 
 }
 
 func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
-	_ = withTx(spec, false, func(tx *sql.Tx) error {
-		return expireAttempts(spec, tx)
-	})
+	spec.Coordinate().Expiry.Do(spec)
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	fields := fieldList{}
 	fields.Add(&params, "priority", priority)
@@ -331,9 +325,7 @@ func (spec *workSpec) SetWorkUnitPriorities(q coordinate.WorkUnitQuery, priority
 }
 
 func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, priority float64) error {
-	_ = withTx(spec, false, func(tx *sql.Tx) error {
-		return expireAttempts(spec, tx)
-	})
+	spec.Coordinate().Expiry.Do(spec)
 	cte, params := spec.selectUnits(q, spec.Coordinate().clock.Now())
 	fields := fieldList{}
 	fields.AddDirect("priority", "priority+"+params.Param(priority))
@@ -344,9 +336,7 @@ func (spec *workSpec) AdjustWorkUnitPriorities(q coordinate.WorkUnitQuery, prior
 }
 
 func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (count int, err error) {
-	_ = withTx(spec, false, func(tx *sql.Tx) error {
-		return expireAttempts(spec, tx)
-	})
+	spec.Coordinate().Expiry.Do(spec)
 	// If we're trying to delete *everything*, and work is still
 	// ongoing, this is extremely likely to hit conflicts.  Do this
 	// in smaller batches in a loop.  That makes this non-atomic,
@@ -412,9 +402,7 @@ func (unit *workUnit) WorkSpec() coordinate.WorkSpec {
 }
 
 func (unit *workUnit) Status() (coordinate.WorkUnitStatus, error) {
-	_ = withTx(unit, false, func(tx *sql.Tx) error {
-		return expireAttempts(unit, tx)
-	})
+	unit.Coordinate().Expiry.Do(unit)
 	now := unit.Coordinate().clock.Now()
 	params := queryParams{}
 	query := buildSelect([]string{

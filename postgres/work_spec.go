@@ -212,9 +212,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 	// If we need counts, we need to run expiry so that the
 	// available/pending counts are rightish
 	if withCounts {
-		_ = withTx(spec, false, func(tx *sql.Tx) error {
-			return expireAttempts(spec, tx)
-		})
+		spec.Coordinate().Expiry.Do(spec)
 	}
 	var meta coordinate.WorkSpecMeta
 	err := withTx(spec, true, func(tx *sql.Tx) error {

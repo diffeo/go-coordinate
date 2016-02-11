@@ -14,8 +14,9 @@ import (
 )
 
 type pgCoordinate struct {
-	db    *sql.DB
-	clock clock.Clock
+	db     *sql.DB
+	clock  clock.Clock
+	Expiry expiry
 }
 
 // New creates a new coordinate.Coordinate connection object using
@@ -95,10 +96,13 @@ func NewWithClock(connectionString string, clk clock.Clock) (coordinate.Coordina
 	gob.Register(cborrpc.PythonTuple{})
 	gob.Register(uuid.UUID{})
 
-	return &pgCoordinate{
+	c := pgCoordinate{
 		db:    db,
 		clock: clk,
-	}, nil
+	}
+	c.Expiry.Init()
+
+	return &c, nil
 }
 
 func (c *pgCoordinate) Coordinate() *pgCoordinate {
