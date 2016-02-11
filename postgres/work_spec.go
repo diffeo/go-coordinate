@@ -409,33 +409,27 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		now := ns.Coordinate().clock.Now()
 		params = queryParams{}
 		query = buildSelect([]string{
-			"1",
+			workUnitSpec,
 		}, []string{
 			workUnitTable,
 		}, []string{
-			workUnitInThisSpec,
 			workUnitHasNoAttempt,
 			"NOT " + workUnitTooSoon(&params, now),
-		}) + " LIMIT 1"
+		})
 		query = buildSelect([]string{
 			workSpecName,
-			"EXISTS(" + query + ")",
 		}, []string{
 			workSpecTable,
 		}, []string{
 			workSpecInNamespace(&params, ns.id),
+			workSpecID + " IN (" + query + ")",
 		})
 		rows, err = tx.Query(query, params...)
 		err = scanRows(rows, func() error {
 			var name string
-			var present bool
-			err := rows.Scan(&name, &present)
+			err := rows.Scan(&name)
 			if err == nil {
-				if present {
-					metas[name].AvailableCount = 1
-				} else {
-					metas[name].AvailableCount = 0
-				}
+				metas[name].AvailableCount = 1
 			}
 			return err
 		})
