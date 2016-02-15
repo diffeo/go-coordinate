@@ -4,24 +4,17 @@
 package coordinate
 
 import (
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
-// HelperSuite encapsulates the helper tests.
-type HelperSuite struct {
-	Now time.Time
-}
+// now is a reference datestamp for tests.
+var now = time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC)
 
-func init() {
-	check.Suite(&HelperSuite{
-		Now: time.Date(2006, 1, 2, 15, 4, 5, 0, time.UTC),
-	})
-}
-
-func (s *HelperSuite) TestOutputStrings(c *check.C) {
-	items := ExtractWorkUnitOutput([]interface{}{"first", "second"}, s.Now)
-	c.Check(items, check.DeepEquals, map[string]AddWorkUnitItem{
+func TestOutputStrings(t *testing.T) {
+	items := ExtractWorkUnitOutput([]interface{}{"first", "second"}, now)
+	assert.Equal(t, map[string]AddWorkUnitItem{
 		"first": AddWorkUnitItem{
 			Key:  "first",
 			Data: map[string]interface{}{},
@@ -30,15 +23,15 @@ func (s *HelperSuite) TestOutputStrings(c *check.C) {
 			Key:  "second",
 			Data: map[string]interface{}{},
 		},
-	})
+	}, items)
 }
 
-func (s *HelperSuite) TestOutputMap(c *check.C) {
+func TestOutputMap(t *testing.T) {
 	items := ExtractWorkUnitOutput(map[string]interface{}{
 		"first":  map[string]interface{}{},
 		"second": map[string]interface{}{"k": "v"},
-	}, s.Now)
-	c.Check(items, check.DeepEquals, map[string]AddWorkUnitItem{
+	}, now)
+	assert.Equal(t, map[string]AddWorkUnitItem{
 		"first": AddWorkUnitItem{
 			Key:  "first",
 			Data: map[string]interface{}{},
@@ -47,19 +40,19 @@ func (s *HelperSuite) TestOutputMap(c *check.C) {
 			Key:  "second",
 			Data: map[string]interface{}{"k": "v"},
 		},
-	})
+	}, items)
 }
 
-func (s *HelperSuite) TestOutputLists(c *check.C) {
+func TestOutputLists(t *testing.T) {
 	items := ExtractWorkUnitOutput([]interface{}{
 		[]interface{}{"a"},
 		[]interface{}{"b", map[string]interface{}{"k": "v"}},
 		[]interface{}{"c", map[string]interface{}{}, map[string]interface{}{"priority": 10}},
 		[]interface{}{"d", map[string]interface{}{}, map[string]interface{}{"delay": 90}},
 		[]interface{}{"e", map[string]interface{}{}, map[string]interface{}{}, 20.0},
-	}, s.Now)
-	then := s.Now.Add(time.Duration(90) * time.Second)
-	c.Check(items, check.DeepEquals, map[string]AddWorkUnitItem{
+	}, now)
+	then := now.Add(90 * time.Second)
+	assert.Equal(t, map[string]AddWorkUnitItem{
 		"b": AddWorkUnitItem{
 			Key:  "b",
 			Data: map[string]interface{}{"k": "v"},
@@ -79,5 +72,5 @@ func (s *HelperSuite) TestOutputLists(c *check.C) {
 			Data: map[string]interface{}{},
 			Meta: WorkUnitMeta{Priority: 20},
 		},
-	})
+	}, items)
 }

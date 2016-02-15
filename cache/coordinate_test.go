@@ -3,34 +3,21 @@
 
 package cache_test
 
+//go:generate cptest --output coordinatetest_test.go --package cache_test --except TestTrivialWorkUnitFlow github.com/diffeo/go-coordinate/coordinate/coordinatetest
+
+// TestTrivialWorkUnitFlow creates a work unit, issues a "delete
+// everything" query, and then asserts that fetching the unit returns
+// ErrNoSuchWorkUnit.  This implementation's behavior is explicitly
+// different for this case.
+
 import (
-	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/cache"
 	"github.com/diffeo/go-coordinate/coordinate/coordinatetest"
 	"github.com/diffeo/go-coordinate/memory"
-	"gopkg.in/check.v1"
-	"testing"
 )
 
-type Suite struct {
-	coordinatetest.Suite
-}
-
-func (s *Suite) TestTrivialWorkUnitFlow(c *check.C) {
-	c.Log("skipping; tests a flow that is explicitly different in cache")
-}
-
-// Test is the top-level entry point to run tests.
-func Test(t *testing.T) { check.TestingT(t) }
-
 func init() {
-	clock := clock.NewMock()
-	backend := memory.NewWithClock(clock)
+	backend := memory.NewWithClock(coordinatetest.Clock)
 	backend = cache.New(backend)
-	check.Suite(&Suite{
-		coordinatetest.Suite{
-			Coordinate: backend,
-			Clock:      clock,
-		},
-	})
+	coordinatetest.Coordinate = backend
 }

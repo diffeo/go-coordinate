@@ -8,25 +8,30 @@ package jobserver_test
 import (
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/jobserver"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
 // TestUpdateAvailable tries to transition a work unit from "available"
 // to "failed" state.
-func (s *PythonSuite) TestUpdateAvailable(c *check.C) {
-	workSpecName := s.setWorkSpec(c, s.WorkSpec)
-	s.addWorkUnit(c, workSpecName, "unit", map[string]interface{}{})
+func TestUpdateAvailable(t *testing.T) {
+	j := setUpTest(t, "TestUpdateAvailable")
+	defer tearDownTest(t, j)
 
-	ok, msg, err := s.JobServer.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
+	workSpecName := setWorkSpec(t, j, WorkSpecData)
+	addWorkUnit(t, j, workSpecName, "unit", map[string]interface{}{})
+
+	ok, msg, err := j.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
 		"status":    jobserver.Failed,
 		"worker_id": "child",
 	})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(ok, check.Equals, true)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Failed)
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Failed)
 }
 
 // TestUpdateAvailableFull verifies a specific race condition that can
@@ -37,80 +42,93 @@ func (s *PythonSuite) TestUpdateAvailable(c *check.C) {
 // unit transitions back to "available".
 //
 // This test validates this specific sequence of things.
-func (s *PythonSuite) TestUpdateAvailableFull(c *check.C) {
+func TestUpdateAvailableFull(t *testing.T) {
+	j := setUpTest(t, "TestUpdateAvailableFull")
+	defer tearDownTest(t, j)
+
 	empty := map[string]interface{}{}
-	workSpecName := s.setWorkSpec(c, s.WorkSpec)
-	s.addWorkUnit(c, workSpecName, "unit", empty)
+	workSpecName := setWorkSpec(t, j, WorkSpecData)
+	addWorkUnit(t, j, workSpecName, "unit", empty)
 
-	ok, msg, err := s.JobServer.WorkerHeartbeat("parent", "RUN", 900, empty, "")
-	c.Assert(err, check.IsNil)
-	c.Assert(ok, check.Equals, true)
+	ok, msg, err := j.WorkerHeartbeat("parent", "RUN", 900, empty, "")
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+	}
 
-	ok, msg, err = s.JobServer.WorkerHeartbeat("child", "RUN", 900, empty, "parent")
-	c.Assert(err, check.IsNil)
-	c.Assert(ok, check.Equals, true)
+	ok, msg, err = j.WorkerHeartbeat("child", "RUN", 900, empty, "parent")
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+	}
 
-	work, msg, err := s.JobServer.GetWork("child", map[string]interface{}{"available_gb": 1})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Assert(work, check.NotNil)
-	tuple, ok := work.(cborrpc.PythonTuple)
-	c.Assert(ok, check.Equals, true)
-	c.Assert(tuple.Items, check.HasLen, 3)
-	c.Assert(tuple.Items[0], check.Equals, workSpecName)
-	c.Assert(tuple.Items[1], check.DeepEquals, []byte("unit"))
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Pending)
+	work, msg, err := j.GetWork("child", map[string]interface{}{"available_gb": 1})
+	if assert.NoError(t, err) {
+		assert.Empty(t, msg)
+		if assert.NotNil(t, work) && assert.IsType(t, cborrpc.PythonTuple{}, work) {
+			tuple := work.(cborrpc.PythonTuple)
+			if assert.Len(t, tuple.Items, 3) {
+				assert.Equal(t, workSpecName, tuple.Items[0])
+				assert.Equal(t, []byte("unit"), tuple.Items[1])
+			}
+		}
+	}
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Pending)
 
 	// Force the work unit back to "available" to simulate expiry
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
+	ok, msg, err = j.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
 		"status":    jobserver.Available,
 		"worker_id": "child",
 	})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(ok, check.Equals, true)
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Available)
 
 	// Now kill it from the parent
-	ok, msg, err = s.JobServer.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
+	ok, msg, err = j.UpdateWorkUnit(workSpecName, "unit", map[string]interface{}{
 		"status":    jobserver.Failed,
 		"worker_id": "parent",
 	})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(ok, check.Equals, true)
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Failed)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Failed)
 }
 
-// TestDelayedUnit creates a work unit to run in the future,
-func (s *PythonSuite) TestDelayedUnit(c *check.C) {
-	empty := map[string]interface{}{}
-	workSpecName := s.setWorkSpec(c, s.WorkSpec)
+// TestDelayedUnit creates a work unit to run in the future.
+func TestDelayedUnit(t *testing.T) {
+	j := setUpTest(t, "TestDelayedUnit")
+	defer tearDownTest(t, j)
 
-	ok, msg, err := s.JobServer.AddWorkUnits(workSpecName, []interface{}{
+	empty := map[string]interface{}{}
+	workSpecName := setWorkSpec(t, j, WorkSpecData)
+
+	ok, msg, err := j.AddWorkUnits(workSpecName, []interface{}{
 		cborrpc.PythonTuple{Items: []interface{}{
 			"unit",
 			empty,
 			map[string]interface{}{"delay": 90},
 		}},
 	})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(ok, check.Equals, true)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
 	// Even though it is delayed, we should report it as available
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Available)
 
 	// Get-work should return nothing
-	s.doNoWork(c)
+	doNoWork(t, j)
 
 	// If we wait 60 seconds (out of 90) we should still get nothing
-	s.Clock.Add(time.Duration(60) * time.Second)
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
-	s.doNoWork(c)
+	Clock.Add(60 * time.Second)
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Available)
+	doNoWork(t, j)
 
 	// If we wait another 60 seconds we should be able to do it
-	s.Clock.Add(time.Duration(60) * time.Second)
-	s.checkWorkUnitStatus(c, workSpecName, "unit", jobserver.Available)
-	s.doOneWork(c, workSpecName, "unit")
+	Clock.Add(60 * time.Second)
+	checkWorkUnitStatus(t, j, workSpecName, "unit", jobserver.Available)
+	doOneWork(t, j, workSpecName, "unit")
 }

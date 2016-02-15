@@ -7,8 +7,8 @@ import (
 	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/memory"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/net/context"
-	"gopkg.in/check.v1"
 	"testing"
 	"time"
 )
@@ -23,20 +23,14 @@ type Suite struct {
 	Stop      chan struct{}
 }
 
-func init() {
-	check.Suite(&Suite{})
-}
-
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-func (s *Suite) SetUpTest(c *check.C) {
+func (s *Suite) SetUpTest(t *testing.T) {
 	s.Clock = clock.NewMock()
 	backend := memory.NewWithClock(s.Clock)
 	var err error
-	s.Namespace, err = backend.Namespace(c.TestName())
-	c.Assert(err, check.IsNil)
+	s.Namespace, err = backend.Namespace("")
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 	s.Worker = Worker{
 		Namespace: s.Namespace,
 	}
@@ -47,195 +41,234 @@ func (s *Suite) SetUpTest(c *check.C) {
 
 	s.Worker.Tasks = map[string]func(context.Context, []coordinate.Attempt){
 		"sanity": func(ctx context.Context, attempts []coordinate.Attempt) {
-			c.Assert(attempts, check.HasLen, 1)
-			c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "unit")
-			c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
-			s.Bit = true
-			err := attempts[0].Finish(nil)
-			c.Assert(err, check.IsNil)
+			if assert.Len(t, attempts, 1) {
+				assert.Equal(t, "unit", attempts[0].WorkUnit().Name())
+				assert.Equal(t, "spec", attempts[0].WorkUnit().WorkSpec().Name())
+				s.Bit = true
+				err := attempts[0].Finish(nil)
+				assert.NoError(t, err, "finishing attempt in sanity")
+			}
 		},
 
 		"timeout": func(ctx context.Context, attempts []coordinate.Attempt) {
-			c.Assert(attempts, check.HasLen, 1)
-			var err error
+			if !assert.Len(t, attempts, 1) {
+				return
+			}
 			select {
 			case <-ctx.Done():
 				s.Bit = false
-				err = attempts[0].Fail(nil)
-				c.Assert(err, check.IsNil)
+				status, err := attempts[0].Status()
+				if assert.NoError(t, err) && status == coordinate.Pending {
+					err = attempts[0].Fail(nil)
+					assert.NoError(t, err, "failing attempt in timeout (status=%v)", status)
+				}
 			case <-s.Stop:
 				s.Bit = true
-				err = attempts[0].Finish(nil)
-				c.Assert(err, check.IsNil)
+				status, err := attempts[0].Status()
+				if assert.NoError(t, err) && status == coordinate.Pending {
+					err = attempts[0].Finish(nil)
+					assert.NoError(t, err, "finishing attempt in timeout (status=%v)", status)
+				}
 			}
 		},
 	}
 
 }
 
-func (s *Suite) BootstrapWorker(c *check.C) {
+func (s *Suite) BootstrapWorker(t *testing.T) {
 	s.Worker.setDefaults()
 	err := s.Worker.bootstrap()
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 }
 
-func (s *Suite) CreateSpecAndUnit(c *check.C, task string) {
+func (s *Suite) CreateSpecAndUnit(t *testing.T, task string) {
 	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":    "spec",
 		"runtime": "go",
 		"task":    task,
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 
 	_, err = spec.AddWorkUnit("unit", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		t.FailNow()
+	}
 }
 
-func (s *Suite) GoDoWork(c *check.C) {
+func (s *Suite) GoDoWork(t *testing.T) {
 	id := "child"
 	worker, err := s.Namespace.Worker(id)
-	c.Assert(err, check.IsNil)
-	err = worker.SetParent(s.Worker.parentWorker)
-	c.Assert(err, check.IsNil)
-	s.Worker.childWorkers[id] = worker
-	go s.Worker.doWork(id, context.Background(), s.GotWork, s.Finished)
+	if assert.NoError(t, err) {
+		err = worker.SetParent(s.Worker.parentWorker)
+		if assert.NoError(t, err) {
+			s.Worker.childWorkers[id] = worker
+			go s.Worker.doWork(id, context.Background(),
+				s.GotWork, s.Finished)
+		}
+	}
 }
 
-func (s *Suite) GetWork(c *check.C, shouldHaveWork bool) {
+func (s *Suite) GetWork(t *testing.T, shouldHaveWork bool) {
 	select {
 	case work := <-s.GotWork:
-		c.Check(work, check.Equals, shouldHaveWork)
+		assert.Equal(t, shouldHaveWork, work)
 	case <-s.Finished:
-		c.Fatalf("got finished flag before gotWork")
+		assert.Fail(t, "got finished flag before gotWork")
 	}
 }
 
-func (s *Suite) Finish(c *check.C) {
+func (s *Suite) Finish(t *testing.T) {
 	select {
 	case <-s.GotWork:
-		c.Fatalf("got gotWork flag twice")
+		assert.Fail(t, "got gotWork flag twice")
 	case id := <-s.Finished:
-		c.Check(id, check.Equals, "child")
+		assert.Equal(t, "child", id)
 	}
 }
 
-func (s *Suite) TestIdleChildren(c *check.C) {
+func TestIdleChildren(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
 	s.Worker.Concurrency = 2
-	s.BootstrapWorker(c)
+	s.BootstrapWorker(t)
 
 	w1 := s.Worker.getIdleChild()
-	c.Assert(w1, check.Not(check.Equals), "")
+	assert.NotEmpty(t, w1)
 	w2 := s.Worker.getIdleChild()
-	c.Assert(w2, check.Not(check.Equals), "")
+	assert.NotEmpty(t, w2)
 	w3 := s.Worker.getIdleChild()
-	c.Assert(w3, check.Equals, "")
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
-	c.Assert(s.Worker.childWorkers, check.HasLen, 2)
+	assert.Empty(t, w3)
+	assert.Len(t, s.Worker.idleWorkers, 0)
+	assert.Len(t, s.Worker.childWorkers, 2)
 
 	s.Worker.returnIdleChild(w1)
 	w4 := s.Worker.getIdleChild()
-	c.Assert(w4, check.Equals, w1)
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
-	c.Assert(s.Worker.childWorkers, check.HasLen, 2)
+	assert.Equal(t, w1, w4)
+	assert.Len(t, s.Worker.idleWorkers, 0)
+	assert.Len(t, s.Worker.childWorkers, 2)
 
 	s.Worker.returnIdleChild(w1)
 	s.Worker.returnIdleChild(w2)
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 2)
-	c.Assert(s.Worker.childWorkers, check.HasLen, 2)
+	assert.Len(t, s.Worker.idleWorkers, 2)
+	assert.Len(t, s.Worker.childWorkers, 2)
 }
 
-func (s *Suite) TestIdleChildrenIdleSystem(c *check.C) {
+func TestIdleChildrenIdleSystem(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
 	s.Worker.Concurrency = 2
-	s.BootstrapWorker(c)
+	s.BootstrapWorker(t)
 
 	w1 := s.Worker.getIdleChild()
-	c.Assert(w1, check.Not(check.Equals), "")
+	assert.NotEmpty(t, w1)
 	w2 := s.Worker.getIdleChild()
-	c.Assert(w2, check.Not(check.Equals), "")
+	assert.NotEmpty(t, w2)
 	w3 := s.Worker.getIdleChild()
-	c.Assert(w3, check.Equals, "")
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
-	c.Assert(s.Worker.childWorkers, check.HasLen, 2)
+	assert.Empty(t, w3)
+	assert.Len(t, s.Worker.idleWorkers, 0)
+	assert.Len(t, s.Worker.childWorkers, 2)
 
 	s.Worker.systemIdle = true
 
 	s.Worker.returnIdleChild(w1)
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
-	c.Assert(s.Worker.childWorkers, check.HasLen, 1)
+	assert.Len(t, s.Worker.idleWorkers, 0)
+	assert.Len(t, s.Worker.childWorkers, 1)
 
 	s.Worker.returnIdleChild(w2)
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
-	c.Assert(s.Worker.idleWorkers, check.HasLen, 0)
+	assert.Len(t, s.Worker.idleWorkers, 0)
+	assert.Len(t, s.Worker.childWorkers, 0)
 }
 
-func (s *Suite) TestDoNoWork(c *check.C) {
-	s.BootstrapWorker(c)
+func TestDoNoWork(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.BootstrapWorker(t)
 
-	s.GoDoWork(c)
-	s.GetWork(c, false)
-	s.Finish(c)
+	s.GoDoWork(t)
+	s.GetWork(t, false)
+	s.Finish(t)
 }
 
-func (s *Suite) TestDoOneWork(c *check.C) {
-	s.CreateSpecAndUnit(c, "sanity")
-	s.BootstrapWorker(c)
+func TestDoOneWork(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.CreateSpecAndUnit(t, "sanity")
+	s.BootstrapWorker(t)
 
-	c.Assert(s.Bit, check.Equals, false)
+	assert.False(t, s.Bit)
 
-	s.GoDoWork(c)
-	s.GetWork(c, true)
-	s.Finish(c)
+	s.GoDoWork(t)
+	s.GetWork(t, true)
+	s.Finish(t)
 
-	c.Assert(s.Bit, check.Equals, true)
+	assert.True(t, s.Bit)
 
-	s.GoDoWork(c)
-	s.GetWork(c, false)
-	s.Finish(c)
+	s.GoDoWork(t)
+	s.GetWork(t, false)
+	s.Finish(t)
 }
 
-func (s *Suite) TestHeartbeat(c *check.C) {
-	s.BootstrapWorker(c)
+func TestHeartbeat(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.BootstrapWorker(t)
 
 	s.Worker.heartbeat()
 
 	worker, err := s.Namespace.Worker(s.Worker.WorkerID)
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	data, err := worker.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data["cpus"], check.NotNil)
-	c.Check(data["go"], check.NotNil)
-	c.Check(data["goroutines"], check.NotNil)
-	c.Check(data["pid"], check.NotNil)
+	if assert.NoError(t, err) {
+		assert.Contains(t, data, "cpus")
+		assert.Contains(t, data, "go")
+		assert.Contains(t, data, "goroutines")
+		assert.Contains(t, data, "pid")
+	}
 }
 
-func (s *Suite) TestNonExpiration(c *check.C) {
-	s.CreateSpecAndUnit(c, "timeout")
-	s.BootstrapWorker(c)
+func TestNonExpiration(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.CreateSpecAndUnit(t, "timeout")
+	s.BootstrapWorker(t)
 
-	s.GoDoWork(c)
-	s.GetWork(c, true)
+	s.GoDoWork(t)
+	s.GetWork(t, true)
 
 	// Non-test: if we signal the "stop" flag, then this should finish
 	s.Stop <- struct{}{}
-	s.Finish(c)
+	s.Finish(t)
 
-	c.Check(s.Bit, check.Equals, true)
+	assert.True(t, s.Bit)
 
 	spec, err := s.Namespace.WorkSpec("spec")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	unit, err := spec.WorkUnit("unit")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	status, err := unit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.FinishedUnit)
+	if assert.NoError(t, err) {
+		assert.Equal(t, coordinate.FinishedUnit, status)
+	}
 }
 
-func (s *Suite) TestExpirationCooperating(c *check.C) {
-	s.CreateSpecAndUnit(c, "timeout")
-	s.BootstrapWorker(c)
+func TestExpirationCooperating(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.CreateSpecAndUnit(t, "timeout")
+	s.BootstrapWorker(t)
 
-	s.GoDoWork(c)
-	s.GetWork(c, true)
+	s.GoDoWork(t)
+	s.GetWork(t, true)
 
 	// Push the clock up into the range where the work unit will
 	// be considered almost dead, and so findStaleUnits() will flag
@@ -244,25 +277,32 @@ func (s *Suite) TestExpirationCooperating(c *check.C) {
 	s.Worker.findStaleUnits()
 
 	// That should have caused the unit to clean itself up
-	s.Finish(c)
+	s.Finish(t)
 
-	c.Check(s.Bit, check.Equals, false)
+	assert.False(t, s.Bit)
 
 	spec, err := s.Namespace.WorkSpec("spec")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	unit, err := spec.WorkUnit("unit")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	status, err := unit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.FailedUnit)
+	if assert.NoError(t, err) {
+		assert.Equal(t, coordinate.FailedUnit, status)
+	}
 }
 
-func (s *Suite) TestExpirationIgnoring(c *check.C) {
-	s.CreateSpecAndUnit(c, "timeout")
-	s.BootstrapWorker(c)
+func TestExpirationIgnoring(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.CreateSpecAndUnit(t, "timeout")
+	s.BootstrapWorker(t)
 
-	s.GoDoWork(c)
-	s.GetWork(c, true)
+	s.GoDoWork(t)
+	s.GetWork(t, true)
 
 	// Push the clock up into the range where the work unit will
 	// be considered even closer to dead, to the point where it is
@@ -272,14 +312,19 @@ func (s *Suite) TestExpirationIgnoring(c *check.C) {
 
 	// Now the unit should be failed
 	spec, err := s.Namespace.WorkSpec("spec")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	unit, err := spec.WorkUnit("unit")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 	status, err := unit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.FailedUnit)
+	if assert.NoError(t, err) {
+		assert.Equal(t, coordinate.FailedUnit, status)
+	}
 
 	// Run the rest of the cleanup anyways
-	s.Finish(c)
-	c.Check(s.Bit, check.Equals, false)
+	s.Finish(t)
+	assert.False(t, s.Bit)
 }

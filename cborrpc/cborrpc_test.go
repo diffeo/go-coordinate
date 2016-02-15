@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package cborrpc
@@ -6,28 +6,28 @@ package cborrpc
 import (
 	"bytes"
 	"github.com/satori/go.uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/ugorji/go/codec"
-	"gopkg.in/check.v1"
-	"reflect"
 	"testing"
 )
 
-type Suite struct {
-	cbor *codec.CborHandle
+var cbor *codec.CborHandle
+
+func init() {
+	cbor = new(codec.CborHandle)
+	err := SetExts(cbor)
+	if err != nil {
+		panic(err)
+	}
 }
 
-func (s *Suite) SetUpTest(c *check.C) {
-	s.cbor = new(codec.CborHandle)
-	err := SetExts(s.cbor)
-	c.Assert(err, check.IsNil)
-}
-
-func (s *Suite) encoderTest(c *check.C, obj interface{}, expecteds ...[]byte) {
+func encoderTest(t *testing.T, obj interface{}, expecteds ...[]byte) {
 	var actual []byte
-	encoder := codec.NewEncoderBytes(&actual, s.cbor)
+	encoder := codec.NewEncoderBytes(&actual, cbor)
 	err := encoder.Encode(obj)
-	c.Assert(err, check.IsNil)
-	c.Check(actual, DeepEqualAny, expecteds)
+	if assert.NoError(t, err) {
+		assert.Contains(t, expecteds, actual)
+	}
 }
 
 func concat(slices ...[]byte) (result []byte) {
@@ -37,7 +37,7 @@ func concat(slices ...[]byte) (result []byte) {
 	return
 }
 
-func (s *Suite) TestRpcRequestToBytes(c *check.C) {
+func TestRpcRequestToBytes(t *testing.T) {
 	req := Request{
 		Method: "test",
 		ID:     1,
@@ -85,10 +85,10 @@ func (s *Suite) TestRpcRequestToBytes(c *check.C) {
 		concat(header, params, method, id),
 		concat(header, params, id, method),
 	}
-	s.encoderTest(c, req, expecteds...)
+	encoderTest(t, req, expecteds...)
 }
 
-func (s *Suite) TestEmptyTupleToBytes(c *check.C) {
+func TestEmptyTupleToBytes(t *testing.T) {
 	tuple := PythonTuple{[]interface{}{}}
 	expected := []byte{
 		// tag 128
@@ -96,10 +96,10 @@ func (s *Suite) TestEmptyTupleToBytes(c *check.C) {
 		// array of length 0
 		0x80,
 	}
-	s.encoderTest(c, tuple, expected)
+	encoderTest(t, tuple, expected)
 }
 
-func (s *Suite) TestReallyEmptyTupleToBytes(c *check.C) {
+func TestReallyEmptyTupleToBytes(t *testing.T) {
 	tuple := PythonTuple{}
 	expected := []byte{
 		// tag 128
@@ -107,10 +107,10 @@ func (s *Suite) TestReallyEmptyTupleToBytes(c *check.C) {
 		// array of length 0
 		0x80,
 	}
-	s.encoderTest(c, tuple, expected)
+	encoderTest(t, tuple, expected)
 }
 
-func (s *Suite) TestListOfTupleToBytes(c *check.C) {
+func TestListOfTupleToBytes(t *testing.T) {
 	tuple := PythonTuple{[]interface{}{}}
 	list := []PythonTuple{tuple}
 	expected := []byte{
@@ -121,10 +121,10 @@ func (s *Suite) TestListOfTupleToBytes(c *check.C) {
 		// array of length 0
 		0x80,
 	}
-	s.encoderTest(c, list, expected)
+	encoderTest(t, list, expected)
 }
 
-func (s *Suite) TestBytesToEmptyTuple(c *check.C) {
+func TestBytesToEmptyTuple(t *testing.T) {
 	bytes := []byte{
 		// tag 128
 		0xD8, 0x80,
@@ -133,13 +133,14 @@ func (s *Suite) TestBytesToEmptyTuple(c *check.C) {
 	}
 	expected := PythonTuple{[]interface{}{}}
 	var actual PythonTuple
-	encoder := codec.NewDecoderBytes(bytes, s.cbor)
+	encoder := codec.NewDecoderBytes(bytes, cbor)
 	err := encoder.Decode(&actual)
-	c.Assert(err, check.IsNil)
-	c.Check(actual, check.DeepEquals, expected)
+	if assert.NoError(t, err) {
+		assert.Equal(t, expected, actual)
+	}
 }
 
-func (s *Suite) TestDecodeTupleReq(c *check.C) {
+func TestDecodeTupleReq(t *testing.T) {
 	bytes := []byte{
 		// tag 24
 		0xD8, 0x18,
@@ -168,19 +169,22 @@ func (s *Suite) TestDecodeTupleReq(c *check.C) {
 		// map of 0 pairs
 		0xA0,
 	}
-	encoder := codec.NewDecoderBytes(bytes, s.cbor)
+	encoder := codec.NewDecoderBytes(bytes, cbor)
 	var req Request
 	err := encoder.Decode(&req)
-	c.Assert(err, check.IsNil)
-	c.Check(req.Method, check.Equals, "test")
-	c.Check(req.ID, check.Equals, uint(1))
-	c.Check(req.Params, check.HasLen, 1)
-	if len(req.Params) > 0 {
-		c.Check(req.Params[0], check.DeepEquals, PythonTuple{Items: []interface{}{"k", map[interface{}]interface{}{}}})
+	if assert.NoError(t, err) {
+		assert.Equal(t, "test", req.Method)
+		assert.EqualValues(t, 1, req.ID)
+		if assert.Len(t, req.Params, 1) {
+			assert.Equal(t, PythonTuple{Items: []interface{}{
+				"k",
+				map[interface{}]interface{}{},
+			}}, req.Params[0])
+		}
 	}
 }
 
-func (s *Suite) TestEncodeUUID(c *check.C) {
+func TestEncodeUUID(t *testing.T) {
 	aUUID := uuid.NewV4()
 	expected := []byte{
 		// tag 37
@@ -189,10 +193,10 @@ func (s *Suite) TestEncodeUUID(c *check.C) {
 		0x50,
 	}
 	expected = append(expected, aUUID.Bytes()...)
-	s.encoderTest(c, aUUID, expected)
+	encoderTest(t, aUUID, expected)
 }
 
-func (s *Suite) TestDecodeUUID(c *check.C) {
+func TestDecodeUUID(t *testing.T) {
 	bytes := []byte{
 		// tag 37
 		0xD8, 0x25,
@@ -205,10 +209,11 @@ func (s *Suite) TestDecodeUUID(c *check.C) {
 		0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
 		0x0E, 0x0F}
 	var actual uuid.UUID
-	encoder := codec.NewDecoderBytes(bytes, s.cbor)
+	encoder := codec.NewDecoderBytes(bytes, cbor)
 	err := encoder.Decode(&actual)
-	c.Assert(err, check.IsNil)
-	c.Check(actual, check.DeepEquals, expected)
+	if assert.NoError(t, err) {
+		assert.Equal(t, expected, actual)
+	}
 }
 
 // DeTest holds data for a decoding test.
@@ -225,7 +230,7 @@ func DeTestByteString(v string) DeTest {
 }
 
 // TestDecodeRegressions checks various bits of the codec library.
-func (s *Suite) TestDecodeRegressions(c *check.C) {
+func TestDecodeRegressions(t *testing.T) {
 	tests := make(map[string]DeTest)
 	tests["kList"] = DeTestByteString("list")
 	tests["vList"] = DeTest{
@@ -374,56 +379,11 @@ func (s *Suite) TestDecodeRegressions(c *check.C) {
 	}
 
 	for name, test := range tests {
-		decoder := codec.NewDecoderBytes(test.Data, s.cbor)
+		decoder := codec.NewDecoderBytes(test.Data, cbor)
 		var actual interface{}
 		err := decoder.Decode(&actual)
-		c.Check(err, check.IsNil, check.Commentf("%v", name))
-		if err == nil {
-			c.Check(actual, check.DeepEquals, test.Value, check.Commentf("%v", name))
+		if assert.NoError(t, err, "%v", name) {
+			assert.Equal(t, test.Value, actual, "%v", name)
 		}
 	}
-}
-
-// deepEqualAny is a gocheck checker that passes if the provided value
-// is reflect.DeepEqual any of a provided set of expected values.
-type deepEqualAny struct {
-	*check.CheckerInfo
-}
-
-func (checker *deepEqualAny) Info() *check.CheckerInfo {
-	return checker.CheckerInfo
-}
-
-func (checker *deepEqualAny) Check(params []interface{}, names []string) (bool, string) {
-	obtained := params[0]
-	// We can't blindly cast params[1] to a []interface{}; we need
-	// to do an intermediate reflect
-	expecteds := reflect.ValueOf(params[1])
-	if expecteds.Kind() != reflect.Slice {
-		return false, "DeepEqualAny needs a slice of expecteds"
-	}
-	for i := 0; i < expecteds.Len(); i++ {
-		expected := expecteds.Index(i).Interface()
-		if reflect.DeepEqual(obtained, expected) {
-			return true, ""
-		}
-	}
-	return false, ""
-}
-
-var DeepEqualAny check.Checker = &deepEqualAny{
-	&check.CheckerInfo{
-		Name:   "DeepEqualAny",
-		Params: []string{"obtained", "expecteds"},
-	},
-}
-
-// gocheck boilerplate
-
-func Test(t *testing.T) {
-	check.TestingT(t)
-}
-
-func init() {
-	check.Suite(&Suite{})
 }

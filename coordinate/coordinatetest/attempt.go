@@ -6,368 +6,360 @@ package coordinatetest
 import (
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
 	"reflect"
+	"testing"
 	"time"
 )
 
 // TestAttemptLifetime validates a basic attempt lifetime.
-func (s *Suite) TestAttemptLifetime(c *check.C) {
+func TestAttemptLifetime(t *testing.T) {
 	var (
 		err               error
 		data              map[string]interface{}
 		attempt, attempt2 coordinate.Attempt
-		aStatus           coordinate.AttemptStatus
-		uStatus           coordinate.WorkUnitStatus
 	)
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "a",
+		NamespaceName: "TestAttemptLifetime",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "a",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
 	// The work unit should be "available"
-	uStatus, err = sts.WorkUnit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(uStatus, check.Equals, coordinate.AvailableUnit)
+	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
 
 	// The work unit data should be defined but empty
-	data, err = sts.WorkUnit.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.HasLen, 0)
+	DataEmpty(t, sts.WorkUnit)
 
 	// Get an attempt for it
-	attempt = sts.RequestOneAttempt(c)
+	attempt = sts.RequestOneAttempt(t)
 
-	// The work unit should be "pending"
-	uStatus, err = sts.WorkUnit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(uStatus, check.Equals, coordinate.PendingUnit)
-
-	// The attempt should be "pending" too
-	aStatus, err = attempt.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(aStatus, check.Equals, coordinate.Pending)
+	// The work unit and attempt should both be "pending"
+	sts.CheckUnitStatus(t, coordinate.PendingUnit)
+	AttemptStatus(t, coordinate.Pending, attempt)
 
 	// The active attempt for the unit should match this
 	attempt2, err = sts.WorkUnit.ActiveAttempt()
-	c.Assert(err, check.IsNil)
-	c.Check(attempt2, AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		AttemptMatches(t, attempt, attempt2)
+	}
 
 	// There should be one active attempt for the worker and it should
 	// also match
 	attempts, err := sts.Worker.ActiveAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0], AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 1) {
+			AttemptMatches(t, attempt, attempts[0])
+		}
 	}
 
 	// The work unit data should (still) be defined but empty
-	data, err = sts.WorkUnit.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.HasLen, 0)
+	DataEmpty(t, sts.WorkUnit)
 
 	// Now finish the attempt with some updated data
 	err = attempt.Finish(map[string]interface{}{
 		"outputs": []string{"yes"},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	// The unit should report "finished"
-	uStatus, err = sts.WorkUnit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(uStatus, check.Equals, coordinate.FinishedUnit)
-
-	// The attempt should report "finished"
-	aStatus, err = attempt.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(aStatus, check.Equals, coordinate.Finished)
+	// The unit and should report "finished"
+	sts.CheckUnitStatus(t, coordinate.FinishedUnit)
+	AttemptStatus(t, coordinate.Finished, attempt)
 
 	// The attempt should still be the active attempt for the unit
 	attempt2, err = sts.WorkUnit.ActiveAttempt()
-	c.Assert(err, check.IsNil)
-	c.Check(attempt2, AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		AttemptMatches(t, attempt, attempt2)
+	}
 
 	// The attempt should not be in the active attempt list for the worker
 	attempts, err = sts.Worker.ActiveAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, attempts)
+	}
 
 	// Both the unit and the worker should have one archived attempt
 	attempts, err = sts.WorkUnit.Attempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0], AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 1) {
+			AttemptMatches(t, attempt, attempts[0])
+		}
 	}
 
 	attempts, err = sts.Worker.AllAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0], AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 1) {
+			AttemptMatches(t, attempt, attempts[0])
+		}
 	}
 
 	// This should have updated the visible work unit data too
 	data, err = sts.WorkUnit.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.HasLen, 1)
-	c.Check(data["outputs"], check.HasLen, 1)
-	c.Check(reflect.ValueOf(data["outputs"]).Index(0).Interface(),
-		check.Equals, "yes")
+	if assert.NoError(t, err) {
+		assert.Len(t, data, 1)
+		if assert.Contains(t, data, "outputs") {
+			if assert.Len(t, data["outputs"], 1) {
+				assert.Equal(t, "yes", reflect.ValueOf(data["outputs"]).Index(0).Interface())
+			}
+		}
+	}
 
 	// For bonus points, force-clear the active attempt
 	err = sts.WorkUnit.ClearActiveAttempt()
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// This should have pushed the unit back to available
-	uStatus, err = sts.WorkUnit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(uStatus, check.Equals, coordinate.AvailableUnit)
+	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
 
 	// This also should have reset the work unit data
-	data, err = sts.WorkUnit.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.HasLen, 0)
+	DataEmpty(t, sts.WorkUnit)
 
 	// But, this should not have reset the historical attempts
 	attempts, err = sts.WorkUnit.Attempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0], AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 1) {
+			AttemptMatches(t, attempt, attempts[0])
+		}
 	}
 
 	attempts, err = sts.Worker.AllAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0], AttemptMatches, attempt)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 1) {
+			AttemptMatches(t, attempt, attempts[0])
+		}
 	}
 }
 
 // TestAttemptMetadata validates the various bits of data associated
 // with a single attempt.
-func (s *Suite) TestAttemptMetadata(c *check.C) {
+func TestAttemptMetadata(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "a",
-		WorkUnitData: map[string]interface{}{"from": "wu"},
+		NamespaceName: "TestAttemptMetadata",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "a",
+		WorkUnitData:  map[string]interface{}{"from": "wu"},
 	}
-	sts.Do(s, c)
-	attempt := sts.RequestOneAttempt(c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+	attempt := sts.RequestOneAttempt(t)
 
 	// Start checking things
-	start := s.Clock.Now()
+	start := Clock.Now()
 	startTime, err := attempt.StartTime()
-	c.Assert(err, check.IsNil)
-	c.Check(startTime, SameTime, start)
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, start, startTime, 1*time.Millisecond)
+	}
 
-	data, err := attempt.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "wu"})
+	DataMatches(t, attempt, map[string]interface{}{"from": "wu"})
 
 	endTime, err := attempt.EndTime()
-	c.Assert(err, check.IsNil)
-	c.Check(endTime, SameTime, time.Time{})
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, time.Time{}, endTime, 1*time.Millisecond)
+	}
 
 	expirationTime, err := attempt.ExpirationTime()
-	c.Assert(err, check.IsNil)
-	c.Check(expirationTime.Sub(startTime), check.Equals, time.Duration(15)*time.Minute)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 15*time.Minute, expirationTime.Sub(startTime))
+	}
 
 	// Renew the lease, giving new work unit data
-	s.Clock.Add(time.Duration(10) * time.Second)
-	renewTime := s.Clock.Now()
-	renewDuration := time.Duration(5) * time.Minute
+	Clock.Add(10 * time.Second)
+	renewTime := Clock.Now()
+	renewDuration := 5 * time.Minute
 	err = attempt.Renew(renewDuration,
 		map[string]interface{}{"from": "renew"})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	startTime, err = attempt.StartTime()
-	c.Assert(err, check.IsNil)
-	c.Check(startTime, SameTime, start) // no change from above
+	if assert.NoError(t, err) {
+		// no change from above
+		assert.WithinDuration(t, start, startTime, 1*time.Millisecond)
+	}
 
-	data, err = attempt.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "renew"})
+	DataMatches(t, attempt, map[string]interface{}{"from": "renew"})
 
 	endTime, err = attempt.EndTime()
-	c.Assert(err, check.IsNil)
-	c.Check(endTime, SameTime, time.Time{})
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, time.Time{}, endTime, 1*time.Millisecond)
+	}
 
-	expirationTime, err = attempt.ExpirationTime()
-	c.Assert(err, check.IsNil)
 	expectedExpiration := renewTime.Add(renewDuration)
-	c.Check(expirationTime, SameTime, expectedExpiration)
+	expirationTime, err = attempt.ExpirationTime()
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, expectedExpiration, expirationTime, 1*time.Millisecond)
+	}
 
 	// Finish the attempt
 	err = attempt.Finish(map[string]interface{}{"from": "finish"})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	startTime, err = attempt.StartTime()
-	c.Assert(err, check.IsNil)
-	c.Check(startTime, SameTime, start) // no change from above
+	if assert.NoError(t, err) {
+		// no change from above
+		assert.WithinDuration(t, start, startTime, 1*time.Millisecond)
+	}
 
-	data, err = attempt.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.DeepEquals, map[string]interface{}{"from": "finish"})
+	DataMatches(t, attempt, map[string]interface{}{"from": "finish"})
 
 	endTime, err = attempt.EndTime()
-	c.Assert(err, check.IsNil)
-	c.Check(endTime.After(startTime), check.Equals, true,
-		check.Commentf("start time %+v end time %+v", startTime, endTime))
+	if assert.NoError(t, err) {
+		assert.True(t, endTime.After(startTime),
+			"start time %+v end time %+v", startTime, endTime)
+	}
 
 	// don't check expiration time here
 }
 
 // TestWorkUnitChaining tests that completing work units in one work spec
 // will cause work units to appear in another, if so configured.
-func (s *Suite) TestWorkUnitChaining(c *check.C) {
+func TestWorkUnitChaining(t *testing.T) {
 	var (
 		err      error
-		worker   coordinate.Worker
 		one, two coordinate.WorkSpec
 		units    map[string]coordinate.WorkUnit
-		attempts []coordinate.Attempt
-		data     map[string]interface{}
-		ok       bool
+		attempt  coordinate.Attempt
 	)
 
-	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	sts := SimpleTestSetup{
+		NamespaceName: "TestWorkUnitChaining",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	one, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "one",
 		"then": "two",
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
+	// RequestAttempts always returns this
+	sts.WorkSpec = one
 
-	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	two, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "two",
 		"disabled": true,
 	})
-	c.Assert(err, check.IsNil)
-
-	worker, err = s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// Create and perform a work unit, with no output
 	_, err = one.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Finish(nil)
-	c.Assert(err, check.IsNil)
+	sts.WorkSpec = one
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Finish(nil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{})
+	if assert.NoError(t, err) {
+		assert.Empty(t, units)
+	}
 
 	// Create and perform a work unit, with a map output
 	_, err = one.AddWorkUnit("b", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Finish(map[string]interface{}{
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Finish(map[string]interface{}{
 		"output": map[string]interface{}{
 			"two_b": map[string]interface{}{"k": "v"},
 		},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{"two_b"})
-
-	if _, ok = units["two_b"]; ok {
-		data, err = units["two_b"].Data()
-		c.Assert(err, check.IsNil)
-		c.Check(data, check.DeepEquals, map[string]interface{}{"k": "v"})
+	if assert.NoError(t, err) {
+		assert.Len(t, units, 1)
+		if assert.Contains(t, units, "two_b") {
+			DataMatches(t, units["two_b"], map[string]interface{}{"k": "v"})
+		}
 	}
 
 	// Create and perform a work unit, with a slice output
 	_, err = one.AddWorkUnit("c", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Finish(map[string]interface{}{
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Finish(map[string]interface{}{
 		"output": []string{"two_c", "two_cc"},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc"})
-
-	if _, ok = units["two_c"]; ok {
-		data, err = units["two_c"].Data()
-		c.Assert(err, check.IsNil)
-		c.Check(data, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Len(t, units, 3)
+		assert.Contains(t, units, "two_b")
+		assert.Contains(t, units, "two_cc")
+		if assert.Contains(t, units, "two_c") {
+			DataEmpty(t, units["two_c"])
+		}
 	}
 
 	// Put the output in the original work unit data
 	_, err = one.AddWorkUnit("d", map[string]interface{}{
 		"output": []string{"two_d"},
 	}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Finish(nil)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Finish(nil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{"two_b", "two_c", "two_cc", "two_d"})
+	if assert.NoError(t, err) {
+		assert.Len(t, units, 4)
+		assert.Contains(t, units, "two_b")
+		assert.Contains(t, units, "two_c")
+		assert.Contains(t, units, "two_cc")
+		assert.Contains(t, units, "two_d")
+	}
 }
 
 // TestChainingMixed uses a combination of strings and tuples in its
 // "output" data.
-func (s *Suite) TestChainingMixed(c *check.C) {
+func TestChainingMixed(t *testing.T) {
 	var (
 		one, two coordinate.WorkSpec
-		worker   coordinate.Worker
-		attempts []coordinate.Attempt
+		attempt  coordinate.Attempt
 		units    map[string]coordinate.WorkUnit
-		unit     coordinate.WorkUnit
-		data     map[string]interface{}
-		priority float64
-		ok       bool
 		err      error
 	)
 
-	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	sts := SimpleTestSetup{
+		NamespaceName: "TestChainingMixed",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	one, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "one",
 		"then": "two",
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
-	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	two, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "two",
 	})
-	c.Assert(err, check.IsNil)
-
-	worker, err = s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	_, err = one.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Finish(map[string]interface{}{
+	sts.WorkSpec = one
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Finish(map[string]interface{}{
 		"output": []interface{}{
 			"key",
 			cborrpc.PythonTuple{Items: []interface{}{
@@ -381,59 +373,56 @@ func (s *Suite) TestChainingMixed(c *check.C) {
 			}},
 		},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{"key"})
-	if unit, ok = units["key"]; ok {
-		data, err = unit.Data()
-		c.Assert(err, check.IsNil)
-		c.Check(data, check.DeepEquals, map[string]interface{}{"data": "x"})
-
-		priority, err = unit.Priority()
-		c.Assert(err, check.IsNil)
-		c.Check(priority, check.Equals, 10.0)
+	if assert.NoError(t, err) {
+		if assert.Contains(t, units, "key") {
+			DataMatches(t, units["key"], map[string]interface{}{"data": "x"})
+			UnitHasPriority(t, units["key"], 10.0)
+		}
 	}
 }
 
 // TestChainingTwoStep separately renews an attempt to insert an output
 // key, then finishes the work unit; it should still chain.
-func (s *Suite) TestChainingTwoStep(c *check.C) {
+func TestChainingTwoStep(t *testing.T) {
 	var (
 		one, two coordinate.WorkSpec
-		worker   coordinate.Worker
-		attempts []coordinate.Attempt
+		attempt  coordinate.Attempt
 		units    map[string]coordinate.WorkUnit
 		unit     coordinate.WorkUnit
-		data     map[string]interface{}
-		priority float64
-		ok       bool
 		err      error
 	)
 
-	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	sts := SimpleTestSetup{
+		NamespaceName: "TestChainingTwoStep",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	one, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "one",
 		"then": "two",
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
-	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	two, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "two",
 	})
-	c.Assert(err, check.IsNil)
-
-	worker, err = s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	_, err = one.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	err = attempts[0].Renew(time.Duration(900)*time.Second,
+	sts.WorkSpec = one
+	attempt = sts.RequestOneAttempt(t)
+	err = attempt.Renew(900*time.Second,
 		map[string]interface{}{
 			"output": []interface{}{
 				[]byte{1, 2, 3, 4},
@@ -446,247 +435,247 @@ func (s *Suite) TestChainingTwoStep(c *check.C) {
 				}},
 			},
 		})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	err = attempts[0].Finish(nil)
+	err = attempt.Finish(nil)
+	assert.NoError(t, err)
 
 	units, err = two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, HasKeys, []string{"\x01\x02\x03\x04"})
-	if unit, ok = units["\x01\x02\x03\x04"]; ok {
-		data, err = unit.Data()
-		c.Assert(err, check.IsNil)
-		c.Check(data, check.HasLen, 0)
-
-		priority, err = unit.Priority()
-		c.Assert(err, check.IsNil)
-		c.Check(priority, check.Equals, 0.0)
+	if assert.NoError(t, err) {
+		if assert.Contains(t, units, "\x01\x02\x03\x04") {
+			unit = units["\x01\x02\x03\x04"]
+			DataEmpty(t, unit)
+			UnitHasPriority(t, unit, 0.0)
+		}
 	}
 }
 
 // TestChainingExpiry tests that, if an attempt finishes but is no
 // longer the active attempt, then its successor work units will not
 // be created.
-func (s *Suite) TestChainingExpiry(c *check.C) {
+func TestChainingExpiry(t *testing.T) {
 	var (
 		one, two coordinate.WorkSpec
 		err      error
-		worker   coordinate.Worker
 		unit     coordinate.WorkUnit
-		attempts []coordinate.Attempt
 	)
 
-	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	sts := SimpleTestSetup{
+		NamespaceName: "TestChainingExpiry",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	one, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "one",
 		"then": "two",
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
+	sts.WorkSpec = one
 
-	two, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	two, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "two",
 		"disabled": true,
 	})
-	c.Assert(err, check.IsNil)
-
-	worker, err = s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// Create and perform a work unit, with no output
 	unit, err = one.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	attempt := attempts[0]
+	attempt := sts.RequestOneAttempt(t)
 
 	// But wait!  We got preempted
 	err = unit.ClearActiveAttempt()
-	c.Assert(err, check.IsNil)
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
+	assert.NoError(t, err)
+	sts.RequestOneAttempt(t)
 
 	// Now, let the original attempt finish, trying to generate
 	// more outputs
 	err = attempt.Finish(map[string]interface{}{
 		"output": []string{"unit"},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// Since attempt is no longer active, this shouldn't generate
 	// new outputs
 	units, err := two.WorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
-	c.Check(units, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, units)
+	}
 }
 
 // TestChainingDuplicate tests that work unit chaining still works
 // even when the same output work unit is generated twice (it should
 // get retried).
-func (s *Suite) TestChainingDuplicate(c *check.C) {
+func TestChainingDuplicate(t *testing.T) {
 	var (
 		err      error
-		one      coordinate.WorkSpec
-		worker   coordinate.Worker
-		attempts []coordinate.Attempt
+		one, two coordinate.WorkSpec
+		attempt  coordinate.Attempt
 	)
-	one, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+
+	sts := SimpleTestSetup{
+		NamespaceName: "TestChainingDuplicate",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	one, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "one",
 		"then":     "two",
 		"priority": 1,
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
-	_, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	two, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "two",
 		"priority": 2,
 	})
-	c.Assert(err, check.IsNil)
-
-	worker, err = s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	_, err = one.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	_, err = one.AddWorkUnit("b", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "one")
-	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "a")
+	sts.WorkSpec = one
+	attempt = sts.RequestOneAttempt(t)
+	assert.Equal(t, "a", attempt.WorkUnit().Name())
 
-	err = attempts[0].Finish(map[string]interface{}{
+	err = attempt.Finish(map[string]interface{}{
 		"output": []string{"z"},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "two")
-	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "z")
+	sts.WorkSpec = two
+	attempt = sts.RequestOneAttempt(t)
+	assert.Equal(t, "z", attempt.WorkUnit().Name())
 
-	err = attempts[0].Finish(map[string]interface{}{})
-	c.Assert(err, check.IsNil)
+	err = attempt.Finish(map[string]interface{}{})
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "one")
-	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "b")
+	sts.WorkSpec = one
+	attempt = sts.RequestOneAttempt(t)
+	assert.Equal(t, "b", attempt.WorkUnit().Name())
 
-	err = attempts[0].Finish(map[string]interface{}{
+	err = attempt.Finish(map[string]interface{}{
 		"output": []string{"z"},
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Assert(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "two")
-	c.Assert(attempts[0].WorkUnit().Name(), check.Equals, "z")
+	sts.WorkSpec = two
+	attempt = sts.RequestOneAttempt(t)
+	assert.Equal(t, "z", attempt.WorkUnit().Name())
 
-	err = attempts[0].Finish(map[string]interface{}{})
-	c.Assert(err, check.IsNil)
+	err = attempt.Finish(map[string]interface{}{})
+	assert.NoError(t, err)
 
-	attempts, err = worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 0)
+	sts.RequestNoAttempts(t)
 }
 
 // TestAttemptExpiration validates that an attempt's status will switch
 // (on its own) to "expired" after a timeout.
-func (s *Suite) TestAttemptExpiration(c *check.C) {
+func TestAttemptExpiration(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "a",
+		NamespaceName: "TestAttemptExpiration",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "a",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
 	attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
+	if !(assert.NoError(t, err) && assert.Len(t, attempts, 1)) {
+		return
+	}
 	attempt := attempts[0]
 
 	status, err := attempt.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.Pending)
+	if assert.NoError(t, err) {
+		assert.Equal(t, coordinate.Pending, status)
+	}
 
-	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	sts.RequestNoAttempts(t)
 
 	// There is a default expiration of 15 minutes (checked elsewhere)
 	// So if we wait for, say, 20 minutes we should become expired
-	s.Clock.Add(time.Duration(20) * time.Minute)
+	Clock.Add(time.Duration(20) * time.Minute)
 	status, err = attempt.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.Expired)
+	if assert.NoError(t, err) {
+		assert.Equal(t, coordinate.Expired, status)
+	}
 
 	// The work unit should be "available" for all purposes
 	meta, err := sts.WorkSpec.Meta(true)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.AvailableCount, check.Equals, 1)
-	c.Check(meta.PendingCount, check.Equals, 0)
-
-	uStatus, err := sts.WorkUnit.Status()
-	c.Assert(err, check.IsNil)
-	c.Check(uStatus, check.Equals, coordinate.AvailableUnit)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 1, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+	}
+	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
 
 	// If we request more attempts we should get back the expired
 	// unit again
-	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-
-	status, err = attempts[0].Status()
-	c.Assert(err, check.IsNil)
-	c.Check(status, check.Equals, coordinate.Pending)
+	attempt = sts.RequestOneAttempt(t)
+	AttemptStatus(t, coordinate.Pending, attempt)
 }
 
 // TestRetryDelay verifies that the delay option on the Retry() call works.
-func (s *Suite) TestRetryDelay(c *check.C) {
+func TestRetryDelay(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "unit",
+		NamespaceName: "TestRetryDelay",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "unit",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	sts.CheckUnitStatus(c, coordinate.AvailableUnit)
+	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
 
-	attempt := sts.RequestOneAttempt(c)
-	err := attempt.Retry(nil, time.Duration(90)*time.Second)
-	c.Assert(err, check.IsNil)
+	attempt := sts.RequestOneAttempt(t)
+	err := attempt.Retry(nil, 90*time.Second)
+	assert.NoError(t, err)
 
-	s.Clock.Add(time.Duration(60) * time.Second)
-	sts.CheckUnitStatus(c, coordinate.DelayedUnit)
-	sts.RequestNoAttempts(c)
+	Clock.Add(60 * time.Second)
+	sts.CheckUnitStatus(t, coordinate.DelayedUnit)
+	sts.RequestNoAttempts(t)
 
-	s.Clock.Add(time.Duration(60) * time.Second)
-	sts.CheckUnitStatus(c, coordinate.AvailableUnit)
-	sts.CheckWorkUnitOrder(s, c, "unit")
+	Clock.Add(60 * time.Second)
+	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
+	sts.CheckWorkUnitOrder(t, "unit")
 }
 
 // TestAttemptFractionalStart verifies that an attempt that starts at
 // a non-integral time (as most of them are) can find itself.  This is
 // a regression test for a specific issue in restclient.
-func (s *Suite) TestAttemptFractionalStart(c *check.C) {
+func TestAttemptFractionalStart(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "unit",
+		NamespaceName: "TestAttemptFractionalStart",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "unit",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	s.Clock.Add(500 * time.Millisecond)
+	Clock.Add(500 * time.Millisecond)
 
-	attempt := sts.RequestOneAttempt(c)
+	attempt := sts.RequestOneAttempt(t)
 	// Since restclient uses the start time as one of its keys to
 	// look up attempts, but the code uses two different ways to
 	// format it, having a fractional second means that this call
@@ -695,32 +684,35 @@ func (s *Suite) TestAttemptFractionalStart(c *check.C) {
 	// a lot of tests without the bug fix since *none* of them can
 	// find their own attempts.
 	err := attempt.Finish(nil)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 }
 
 // TestAttemptGone verifies that, if a work unit is deleted, its
 // attempts return ErrGone for things.
-func (s *Suite) TestAttemptGone(c *check.C) {
+func TestAttemptGone(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
-		WorkUnitName: "unit",
+		NamespaceName: "TestAttemptGone",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkUnitName:  "unit",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	attempt := sts.RequestOneAttempt(c)
+	attempt := sts.RequestOneAttempt(t)
 
 	_, err := sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	_, err = attempt.Status()
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
-		c.Check(nswu.Name, check.Equals, sts.WorkUnitName)
+		assert.Equal(t, sts.WorkUnitName, nswu.Name)
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+		assert.Equal(t, sts.WorkSpecName, nsws.Name)
 	} else {
-		c.Errorf("deleted work spec produced error %+v", err)
+		assert.Fail(t, "unexpected error deleting work spec",
+			"%+v", err)
 	}
 }

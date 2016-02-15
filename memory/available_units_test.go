@@ -5,122 +5,119 @@ package memory
 
 import (
 	"github.com/diffeo/go-coordinate/coordinate"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
-
-type Suite struct {
-	q *availableUnits
-	c *check.C
-}
-
-func (s *Suite) SetUpTest(c *check.C) {
-	s.q = new(availableUnits)
-	s.c = c
-}
 
 // push adds any number of work units to the priority queue, in the order
 // of their parameters.
-func (s *Suite) push(units ...*workUnit) {
+func push(q *availableUnits, units ...*workUnit) {
 	for _, unit := range units {
-		s.q.Add(unit)
+		q.Add(unit)
 	}
 }
 
 // popSpecific pulls a single unit out of the priority queue and asserts
 // that it is exactly u.
-func (s *Suite) popSpecific(u *workUnit) {
-	s.c.Assert(s.q.Len(), check.Not(check.Equals), 0)
-	out := s.q.Next()
-	s.c.Check(out, check.DeepEquals, u)
+func popSpecific(t *testing.T, q *availableUnits, u *workUnit) {
+	if assert.NotZero(t, q.Len()) {
+		out := q.Next()
+		assert.Equal(t, u, out)
+	}
 }
 
 // checkEmpty asserts that the priority queue is empty.
-func (s *Suite) checkEmpty() {
-	s.c.Assert(s.q.Len(), check.Equals, 0)
+func checkEmpty(t *testing.T, q *availableUnits) {
+	assert.Zero(t, q.Len())
 }
 
 // popAll pops units off the priority queue one at a time, comparing
 // them to each of the parameters in turn, and asserts that the queue
 // is empty at the end.
-func (s *Suite) popAll(units ...*workUnit) {
+func popAll(t *testing.T, q *availableUnits, units ...*workUnit) {
 	for _, unit := range units {
-		s.popSpecific(unit)
+		popSpecific(t, q, unit)
 	}
-	s.checkEmpty()
+	checkEmpty(t, q)
 }
 
-func (s *Suite) TestQueueOfOne(c *check.C) {
+func TestQueueOfOne(t *testing.T) {
+	q := new(availableUnits)
 	unit := &workUnit{name: "unit"}
-	s.push(unit)
-	s.popAll(unit)
+	q.Add(unit)
+	popAll(t, q, unit)
 }
 
-func (s *Suite) TestQueueOfTwoInOrder(c *check.C) {
+func TestQueueOfTwoInOrder(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "first"}
 	second := &workUnit{name: "second"}
-	s.push(first, second)
-	s.popAll(first, second)
+	push(q, first, second)
+	popAll(t, q, first, second)
 }
 
-func (s *Suite) TestQueueOfTwoInWrongOrder(c *check.C) {
+func TestQueueOfTwoInWrongOrder(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "first"}
 	second := &workUnit{name: "second"}
-	s.push(second, first)
-	s.popAll(first, second)
+	push(q, second, first)
+	popAll(t, q, first, second)
 }
 
-func (s *Suite) TestQueueOfThreeWithPriorities(c *check.C) {
+func TestQueueOfThreeWithPriorities(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "z", meta: coordinate.WorkUnitMeta{Priority: 100}}
 	second := &workUnit{name: "a"}
 	third := &workUnit{name: "m"}
-	s.push(second, third, first)
-	s.popAll(first, second, third)
+	push(q, second, third, first)
+	popAll(t, q, first, second, third)
 }
 
-func (s *Suite) TestDeleteJustOne(c *check.C) {
+func TestDeleteJustOne(t *testing.T) {
+	q := new(availableUnits)
 	unit := &workUnit{name: "unit"}
-	s.push(unit)
-	s.q.Remove(unit)
-	s.popAll()
+	q.Add(unit)
+	q.Remove(unit)
+	popAll(t, q)
 }
 
-func (s *Suite) TestDeleteFirstOfThree(c *check.C) {
+func TestDeleteFirstOfThree(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "a"}
 	second := &workUnit{name: "b"}
 	third := &workUnit{name: "c"}
-	s.push(first, second, third)
-	s.q.Remove(first)
-	s.popAll(second, third)
+	push(q, first, second, third)
+	q.Remove(first)
+	popAll(t, q, second, third)
 }
 
-func (s *Suite) TestDeleteOther(c *check.C) {
+func TestDeleteOther(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "a"}
 	second := &workUnit{name: "b"}
-	s.push(first)
-	s.q.Remove(second)
-	s.popAll(first)
+	q.Add(first)
+	q.Remove(second)
+	popAll(t, q, first)
 }
 
-func (s *Suite) TestReprioritizeFirst(c *check.C) {
+func TestReprioritizeFirst(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "a"}
 	second := &workUnit{name: "b"}
 	third := &workUnit{name: "c"}
-	s.push(first, second, third)
+	push(q, first, second, third)
 	first.meta.Priority = -1
-	s.q.Reprioritize(first)
-	s.popAll(second, third, first)
+	q.Reprioritize(first)
+	popAll(t, q, second, third, first)
 }
 
-func (s *Suite) TestReprioritizeMiddle(c *check.C) {
+func TestReprioritizeMiddle(t *testing.T) {
+	q := new(availableUnits)
 	first := &workUnit{name: "a"}
 	second := &workUnit{name: "b"}
 	third := &workUnit{name: "c"}
-	s.push(first, second, third)
+	push(q, first, second, third)
 	second.meta.Priority = 100
-	s.q.Reprioritize(second)
-	s.popAll(second, first, third)
-}
-
-func init() {
-	check.Suite(&Suite{})
+	q.Reprioritize(second)
+	popAll(t, q, second, first, third)
 }

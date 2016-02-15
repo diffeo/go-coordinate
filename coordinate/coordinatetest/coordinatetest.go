@@ -1,66 +1,32 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package coordinatetest provides generic functional tests for the
-// Coordinate interface.  These are implemented via the
-// http://labix.org/gocheck support library, so a typical backend test
-// module will look like
+// Coordinate interface.  These need to be copied into individual
+// backends' test directories, perhaps by using the cptest support
+// program.  A typical backend test module additionally needs to set
+// Clock and Coordinate in either an init or TestMain function.
 //
 //     package mybackend
 //
 //     import (
-//         "testing"
-//         "github.com/diffeo/go-coordinate/coordinate/coordinatetest"
-//         "gopkg.in/check.v1"
+//             "github.com/diffeo/go-coordinate/coordinate/coordinatetest"
 //     )
 //
-//     // Test is the top-level entry point to run tests.
-//     func Test(t *testing.T) { check.TestingT(t) }
-//
-//     var _ = check.Suite(&coordinatetest.Suite{Coordinate: New()})
+//     func init() {
+//             coordinatetest.Coordinate = NewWithClock(coordinatetest.Clock)
+//     }
 package coordinatetest
 
 import (
 	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/coordinate"
-	"gopkg.in/check.v1"
 )
 
-// Suite is a gocheck-compatible test suite for Coordinate
-// backends.
-type Suite struct {
-	// Coordinate contains the top-level interface to the backend
-	// under test.
-	Coordinate coordinate.Coordinate
+// Clock contains the alternate time source to be used in tests.  It
+// is pre-initialized to a mock clock.
+var Clock = clock.NewMock()
 
-	// Namespace contains the namespace object for the current test.
-	// It is set up by the gocheck fixture code, and is only valid
-	// during a test execution.
-	Namespace coordinate.Namespace
-
-	// Clock contains the alternate time source to be used in the
-	// test.
-	Clock *clock.Mock
-}
-
-// SetUpTest does per-test setup; specifically it creates a unique
-// namespace per test.
-func (s *Suite) SetUpTest(c *check.C) {
-	var err error
-	s.Namespace, err = s.Coordinate.Namespace(c.TestName())
-	if err != nil {
-		c.Error(err)
-	}
-}
-
-// TearDownTest destroys the namespace created in SetUpTest.
-func (s *Suite) TearDownTest(c *check.C) {
-	var err error
-	if s.Namespace != nil {
-		err = s.Namespace.Destroy()
-	}
-	if err != nil {
-		c.Error(err)
-	}
-	s.Namespace = nil
-}
+// Coordinate contains the top-level interface to the backend under
+// test.  It is set by importing packages.
+var Coordinate coordinate.Coordinate

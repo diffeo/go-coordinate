@@ -1,131 +1,171 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package jobserver_test
 
 import (
 	"github.com/diffeo/go-coordinate/cborrpc"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
-func (s *PythonSuite) TestBasic(c *check.C) {
+func TestBasic(t *testing.T) {
+	j := setUpTest(t, "TestBasic")
+	defer tearDownTest(t, j)
+
 	foo := cborrpc.PythonTuple{Items: []interface{}{"foo"}}
 	barbaz := cborrpc.PythonTuple{Items: []interface{}{"bar", "baz"}}
 	bar := cborrpc.PythonTuple{Items: []interface{}{"bar"}}
 
-	ok, msg, err := s.JobServer.Lock("id", 0, []interface{}{foo, barbaz})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	ok, msg, err := j.Lock("id", 0, []interface{}{foo, barbaz})
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
-	lockid, err := s.JobServer.Readlock([]interface{}{foo})
-	c.Assert(err, check.IsNil)
-	c.Check(lockid, check.DeepEquals, []interface{}{"id"})
+	lockid, err := j.Readlock([]interface{}{foo})
+	if assert.NoError(t, err) {
+		assert.Equal(t, []interface{}{"id"}, lockid)
+	}
 
-	lockid, err = s.JobServer.Readlock([]interface{}{bar})
-	c.Assert(err, check.IsNil)
-	c.Check(lockid, check.DeepEquals, []interface{}{nil})
+	lockid, err = j.Readlock([]interface{}{bar})
+	if assert.NoError(t, err) {
+		assert.Equal(t, []interface{}{nil}, lockid)
+	}
 
-	lockid, err = s.JobServer.Readlock([]interface{}{barbaz, foo})
-	c.Assert(err, check.IsNil)
-	c.Check(lockid, check.DeepEquals, []interface{}{"id", "id"})
+	lockid, err = j.Readlock([]interface{}{barbaz, foo})
+	if assert.NoError(t, err) {
+		assert.Equal(t, []interface{}{"id", "id"}, lockid)
+	}
 
-	ok, msg, err = s.JobServer.Unlock("id", []interface{}{foo, barbaz})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	ok, msg, err = j.Unlock("id", []interface{}{foo, barbaz})
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
-	lockid, err = s.JobServer.Readlock([]interface{}{foo, bar, barbaz})
-	c.Assert(err, check.IsNil)
-	c.Check(lockid, check.DeepEquals, []interface{}{nil, nil, nil})
+	lockid, err = j.Readlock([]interface{}{foo, bar, barbaz})
+	if assert.NoError(t, err) {
+		assert.Equal(t, []interface{}{nil, nil, nil}, lockid)
+	}
 }
 
-func (s *PythonSuite) TestConflict(c *check.C) {
-	ok, msg, err := s.JobServer.Lock("id", 0,
+func TestConflict(t *testing.T) {
+	j := setUpTest(t, "TestConflict")
+	defer tearDownTest(t, j)
+
+	ok, msg, err := j.Lock("id", 0,
 		[]interface{}{[]interface{}{"foo"}})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
 	// should not be able to lock foo.bar when foo is held
-	ok, msg, err = s.JobServer.Lock("id", 0,
+	ok, msg, err = j.Lock("id", 0,
 		[]interface{}{[]interface{}{"foo", "bar"}})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, false)
-	c.Check(msg, check.Not(check.Equals), "")
+	if assert.NoError(t, err) {
+		assert.False(t, ok)
+		assert.NotEmpty(t, msg)
+	}
 }
 
-func (s *PythonSuite) TestConflict2(c *check.C) {
-	ok, msg, err := s.JobServer.Lock("id", 0,
+func TestConflict2(t *testing.T) {
+	j := setUpTest(t, "TestConflict2")
+	defer tearDownTest(t, j)
+
+	ok, msg, err := j.Lock("id", 0,
 		[]interface{}{[]interface{}{"foo", "bar"}})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
 	// should not be able to lock foo when foo.bar is held
-	ok, msg, err = s.JobServer.Lock("id", 0,
+	ok, msg, err = j.Lock("id", 0,
 		[]interface{}{[]interface{}{"foo"}})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, false)
-	c.Check(msg, check.Not(check.Equals), "")
+	if assert.NoError(t, err) {
+		assert.False(t, ok)
+		assert.NotEmpty(t, msg)
+	}
 }
 
-func (s *PythonSuite) TestLocksome(c *check.C) {
-	ok, msg, err := s.JobServer.Lock("id", 0,
-		[]interface{}{[]interface{}{"foo"}})
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+func TestLocksome(t *testing.T) {
+	j := setUpTest(t, "TestLocksome")
+	defer tearDownTest(t, j)
 
-	locked, msg, err := s.JobServer.Locksome("id", 0, []interface{}{
+	ok, msg, err := j.Lock("id", 0,
+		[]interface{}{[]interface{}{"foo"}})
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
+
+	locked, msg, err := j.Locksome("id", 0, []interface{}{
 		[]interface{}{"foo"},
 		[]interface{}{"bar"},
 		[]interface{}{"baz"},
 	})
-	c.Assert(err, check.IsNil)
-	c.Check(msg, check.Equals, "")
-	c.Check(locked, check.DeepEquals, [][]interface{}{
-		nil,
-		[]interface{}{"bar"},
-		[]interface{}{"baz"},
-	})
+	if assert.NoError(t, err) {
+		assert.Empty(t, msg)
+		assert.Equal(t, [][]interface{}{
+			nil,
+			[]interface{}{"bar"},
+			[]interface{}{"baz"},
+		}, locked)
+	}
 }
 
-func (s *PythonSuite) TestUnlockSanity(c *check.C) {
+func TestUnlockSanity(t *testing.T) {
+	j := setUpTest(t, "TestUnlockSanity")
+	defer tearDownTest(t, j)
+
 	keys := []interface{}{[]interface{}{"foo"}, []interface{}{"bar"}}
 
-	ok, msg, err := s.JobServer.Lock("id", 0, keys)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	ok, msg, err := j.Lock("id", 0, keys)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 
 	// Should not be able to unlock something a different locker locked
-	ok, msg, err = s.JobServer.Unlock("id2", keys)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, false)
-	c.Check(msg, check.Not(check.Equals), "")
+	ok, msg, err = j.Unlock("id2", keys)
+	if assert.NoError(t, err) {
+		assert.False(t, ok)
+		assert.NotEmpty(t, msg)
+	}
 
 	// Should be able to read original lock
-	lockid, err := s.JobServer.Readlock(keys)
-	c.Assert(err, check.IsNil)
-	c.Check(lockid, check.DeepEquals, []interface{}{"id", "id"})
+	lockid, err := j.Readlock(keys)
+	if assert.NoError(t, err) {
+		assert.Equal(t, []interface{}{"id", "id"}, lockid)
+	}
 
-	ok, msg, err = s.JobServer.Unlock("id", keys)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, true)
-	c.Check(msg, check.Equals, "")
+	ok, msg, err = j.Unlock("id", keys)
+	if assert.NoError(t, err) {
+		assert.True(t, ok)
+		assert.Empty(t, msg)
+	}
 }
 
-func (s *PythonSuite) TestReadlockNotNil(c *check.C) {
-	locks, err := s.JobServer.Readlock([]interface{}{})
-	c.Assert(err, check.IsNil)
-	c.Check(locks, check.NotNil)
-	c.Check(locks, check.HasLen, 0)
+func TestReadlockNotNil(t *testing.T) {
+	j := setUpTest(t, "TestReadlockNotNil")
+	defer tearDownTest(t, j)
+
+	locks, err := j.Readlock([]interface{}{})
+	if assert.NoError(t, err) {
+		assert.NotNil(t, locks)
+		assert.Len(t, locks, 0)
+	}
 }
 
-func (s *PythonSuite) TestUnlockNotLocked(c *check.C) {
+func TestUnlockNotLocked(t *testing.T) {
+	j := setUpTest(t, "TestUnlockNotLocked")
+	defer tearDownTest(t, j)
+
 	keys := []interface{}{[]interface{}{"foo"}, []interface{}{"bar"}}
-	ok, _, err := s.JobServer.Unlock("id", keys)
-	c.Assert(err, check.IsNil)
-	c.Check(ok, check.Equals, false)
+	ok, _, err := j.Unlock("id", keys)
+	if assert.NoError(t, err) {
+		assert.False(t, ok)
+	}
 }

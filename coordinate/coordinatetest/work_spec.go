@@ -5,189 +5,188 @@ package coordinatetest
 
 import (
 	"github.com/diffeo/go-coordinate/coordinate"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
 // TestChangeSpecData tests WorkSpec.SetData().
-func (s *Suite) TestChangeSpecData(c *check.C) {
+func TestChangeSpecData(t *testing.T) {
 	var (
 		err  error
 		data map[string]interface{}
-		spec coordinate.WorkSpec
 	)
 
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":   "spec",
-		"min_gb": 1,
-	})
-	c.Assert(err, check.IsNil)
-	c.Check(spec.Name(), check.Equals, "spec")
+	sts := SimpleTestSetup{
+		NamespaceName: "TestTwoWorkSpecsBasic",
+		WorkSpecName:  "spec",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	err = spec.SetData(map[string]interface{}{
+	err = sts.WorkSpec.SetData(map[string]interface{}{
 		"name":   "spec",
 		"min_gb": 2,
 		"foo":    "bar",
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	data, err = spec.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data["name"], check.Equals, "spec")
-	c.Check(data["min_gb"], Like, 2)
-	c.Check(data["foo"], check.Equals, "bar")
+	data, err = sts.WorkSpec.Data()
+	if assert.NoError(t, err) {
+		assert.Equal(t, "spec", data["name"])
+		assert.EqualValues(t, 2, data["min_gb"])
+		assert.Equal(t, "bar", data["foo"])
+	}
 
-	err = spec.SetData(map[string]interface{}{})
-	c.Assert(err, check.NotNil)
-	c.Check(err, check.Equals, coordinate.ErrNoWorkSpecName)
+	err = sts.WorkSpec.SetData(map[string]interface{}{})
+	assert.Exactly(t, coordinate.ErrNoWorkSpecName, err)
 
-	err = spec.SetData(map[string]interface{}{
+	err = sts.WorkSpec.SetData(map[string]interface{}{
 		"name":   "name",
 		"min_gb": 3,
 	})
-	c.Assert(err, check.NotNil)
-	c.Check(err, check.Equals, coordinate.ErrChangedName)
+	assert.Exactly(t, coordinate.ErrChangedName, err)
 
-	data, err = spec.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data["name"], check.Equals, "spec")
-	c.Check(data["min_gb"], Like, 2)
-	c.Check(data["foo"], check.Equals, "bar")
+	data, err = sts.WorkSpec.Data()
+	if assert.NoError(t, err) {
+		assert.Equal(t, "spec", data["name"])
+		assert.EqualValues(t, 2, data["min_gb"])
+		assert.Equal(t, "bar", data["foo"])
+	}
 }
 
 // TestDataEmptyList verifies that an empty list gets preserved in the
 // work spec data, and not remapped to nil.
-func (s *Suite) TestDataEmptyList(c *check.C) {
+func TestDataEmptyList(t *testing.T) {
 	emptyList := []string{}
-	c.Assert(emptyList, check.NotNil)
-	c.Assert(emptyList, check.HasLen, 0)
+	assert.NotNil(t, emptyList)
+	assert.Len(t, emptyList, 0)
 
-	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name": "spec",
-		"config": map[string]interface{}{
-			"empty_list": emptyList,
+	sts := SimpleTestSetup{
+		NamespaceName: "TestDataEmptyList",
+		WorkSpecData: map[string]interface{}{
+			"name": "spec",
+			"config": map[string]interface{}{
+				"empty_list": emptyList,
+			},
 		},
-	})
-	c.Assert(err, check.IsNil)
-
-	data, err := spec.Data()
-	c.Assert(err, check.IsNil)
-	c.Assert(data, check.NotNil)
-	c.Assert(data["config"], check.NotNil)
-	var found interface{}
-	switch config := data["config"].(type) {
-	case map[string]interface{}:
-		found = config["empty_list"]
-	case map[interface{}]interface{}:
-		found = config["empty_list"]
-	default:
-		c.FailNow()
 	}
-	c.Check(found, check.NotNil)
-	c.Check(found, check.HasLen, 0)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	data, err := sts.WorkSpec.Data()
+	if assert.NoError(t, err) && assert.NotNil(t, data) {
+		if assert.Contains(t, data, "config") {
+			var found interface{}
+			switch config := data["config"].(type) {
+			case map[string]interface{}:
+				found = config["empty_list"]
+			case map[interface{}]interface{}:
+				found = config["empty_list"]
+			default:
+				t.FailNow()
+			}
+			assert.NotNil(t, found)
+			assert.Len(t, found, 0)
+		}
+	}
 }
 
 // TestDefaultMeta tests that WorkSpec.Meta gets the correct defaults,
 // which in a couple of cases are not zero values.
-func (s *Suite) TestDefaultMeta(c *check.C) {
-	var (
-		err  error
-		spec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
-	)
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":   "spec",
-		"min_gb": 1,
-	})
-	c.Assert(err, check.IsNil)
+func TestDefaultMeta(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestDefaultMeta",
+		WorkSpecName:  "spec",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 0)
-	c.Check(meta.Weight, check.Equals, 20)
-	c.Check(meta.Paused, check.Equals, false)
-	c.Check(meta.Continuous, check.Equals, false)
-	c.Check(meta.CanBeContinuous, check.Equals, false)
-	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 0)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
-	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	c.Check(meta.Runtime, check.Equals, "")
+	meta, err := sts.WorkSpec.Meta(false)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 0, meta.Priority)
+		assert.Equal(t, 20, meta.Weight)
+		assert.False(t, meta.Paused)
+		assert.False(t, meta.Continuous)
+		assert.False(t, meta.CanBeContinuous)
+		assert.Zero(t, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 0, meta.MaxRunning)
+		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, "", meta.NextWorkSpecName)
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		assert.Equal(t, "", meta.Runtime)
+	}
 }
 
 // TestPrefilledMeta tests that WorkSpec.Meta() fills in correctly from
 // "magic" keys in a work spec.
-func (s *Suite) TestPrefilledMeta(c *check.C) {
-	var (
-		err  error
-		spec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
-	)
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":        "spec",
-		"min_gb":      1,
-		"priority":    10,
-		"weight":      100,
-		"disabled":    true,
-		"continuous":  true,
-		"interval":    60,
-		"max_running": 10,
-		"max_getwork": 1,
-		"then":        "spec2",
-		"runtime":     "go",
-	})
-	c.Assert(err, check.IsNil)
+func TestPrefilledMeta(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestPrefilledMeta",
+		WorkSpecData: map[string]interface{}{
+			"name":        "spec",
+			"min_gb":      1,
+			"priority":    10,
+			"weight":      100,
+			"disabled":    true,
+			"continuous":  true,
+			"interval":    60,
+			"max_running": 10,
+			"max_getwork": 1,
+			"then":        "spec2",
+			"runtime":     "go",
+		},
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 10)
-	c.Check(meta.Weight, check.Equals, 100)
-	c.Check(meta.Paused, check.Equals, true)
-	c.Check(meta.Continuous, check.Equals, true)
-	c.Check(meta.CanBeContinuous, check.Equals, true)
-	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 10)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
-	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	c.Check(meta.Runtime, check.Equals, "go")
+	meta, err := sts.WorkSpec.Meta(false)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 10, meta.Priority)
+		assert.Equal(t, 100, meta.Weight)
+		assert.True(t, meta.Paused)
+		assert.True(t, meta.Continuous)
+		assert.True(t, meta.CanBeContinuous)
+		assert.Equal(t, 60*time.Second, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 10, meta.MaxRunning)
+		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		assert.Equal(t, "spec2", meta.NextWorkSpecName)
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		assert.Equal(t, "go", meta.Runtime)
+	}
 }
 
 // TestSetDataSetsMeta tests that...yeah
-func (s *Suite) TestSetDataSetsMeta(c *check.C) {
-	var (
-		err  error
-		spec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
-	)
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":   "spec",
-		"min_gb": 1,
-	})
-	c.Assert(err, check.IsNil)
+func TestSetDataSetsMeta(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestSetDataSetsMeta",
+		WorkSpecName:  "spec",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 0)
-	c.Check(meta.Weight, check.Equals, 20)
-	c.Check(meta.Paused, check.Equals, false)
-	c.Check(meta.Continuous, check.Equals, false)
-	c.Check(meta.CanBeContinuous, check.Equals, false)
-	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 0)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
-	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	c.Check(meta.Runtime, check.Equals, "")
+	meta, err := sts.WorkSpec.Meta(false)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 0, meta.Priority)
+		assert.Equal(t, 20, meta.Weight)
+		assert.False(t, meta.Paused)
+		assert.False(t, meta.Continuous)
+		assert.False(t, meta.CanBeContinuous)
+		assert.Zero(t, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 0, meta.MaxRunning)
+		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, "", meta.NextWorkSpecName)
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		assert.Equal(t, "", meta.Runtime)
+	}
 
-	err = spec.SetData(map[string]interface{}{
+	err = sts.WorkSpec.SetData(map[string]interface{}{
 		"name":        "spec",
 		"min_gb":      1,
 		"priority":    10,
@@ -200,37 +199,47 @@ func (s *Suite) TestSetDataSetsMeta(c *check.C) {
 		"then":        "spec2",
 		"runtime":     "go",
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
-	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 10)
-	c.Check(meta.Weight, check.Equals, 100)
-	c.Check(meta.Paused, check.Equals, true)
-	c.Check(meta.Continuous, check.Equals, true)
-	c.Check(meta.CanBeContinuous, check.Equals, true)
-	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 10)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
-	c.Check(meta.NextWorkSpecName, check.Equals, "spec2")
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	c.Check(meta.Runtime, check.Equals, "go")
+	meta, err = sts.WorkSpec.Meta(false)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 10, meta.Priority)
+		assert.Equal(t, 100, meta.Weight)
+		assert.True(t, meta.Paused)
+		assert.True(t, meta.Continuous)
+		assert.True(t, meta.CanBeContinuous)
+		assert.Equal(t, 60*time.Second, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 10, meta.MaxRunning)
+		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		assert.Equal(t, "spec2", meta.NextWorkSpecName)
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		assert.Equal(t, "go", meta.Runtime)
+	}
 }
 
 // TestNiceWeight tests the "weight = 20-nice" rule.
-func (s *Suite) TestNiceWeight(c *check.C) {
-	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
+func TestNiceWeight(t *testing.T) {
+	namespace, err := Coordinate.Namespace("TestNiceWeight")
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer namespace.Destroy()
+
+	spec, err := namespace.SetWorkSpec(map[string]interface{}{
 		"name":   "spec",
 		"min_gb": 1,
 		"nice":   5,
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	meta, err := spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Weight, check.Equals, 15)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 15, meta.Weight)
+	}
 
 	// Lower bound on weight
 	err = spec.SetData(map[string]interface{}{
@@ -238,11 +247,12 @@ func (s *Suite) TestNiceWeight(c *check.C) {
 		"min_gb": 1,
 		"nice":   100,
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Weight, check.Equals, 1)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 1, meta.Weight)
+	}
 
 	// No lower bound on niceness
 	err = spec.SetData(map[string]interface{}{
@@ -250,11 +260,12 @@ func (s *Suite) TestNiceWeight(c *check.C) {
 		"min_gb": 1,
 		"nice":   -80,
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Weight, check.Equals, 100)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 100, meta.Weight)
+	}
 
 	// Weight trumps nice
 	err = spec.SetData(map[string]interface{}{
@@ -263,55 +274,67 @@ func (s *Suite) TestNiceWeight(c *check.C) {
 		"weight": 50,
 		"nice":   5,
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Weight, check.Equals, 50)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 50, meta.Weight)
+	}
 
 	// Removing either flag resets to default
-	// Weight trumps nice
 	err = spec.SetData(map[string]interface{}{
 		"name":   "spec",
 		"min_gb": 1,
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Weight, check.Equals, 20)
+	if assert.NoError(t, err) {
+		assert.Equal(t, 20, meta.Weight)
+	}
 }
 
 // TestSetMeta tests the basic SetMeta() call and a couple of its
 // documented oddities.
-func (s *Suite) TestSetMeta(c *check.C) {
+func TestSetMeta(t *testing.T) {
 	var (
-		err  error
-		spec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
+		err       error
+		namespace coordinate.Namespace
+		spec      coordinate.WorkSpec
+		meta      coordinate.WorkSpecMeta
 	)
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+
+	namespace, err = Coordinate.Namespace("TestSetMeta")
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer namespace.Destroy()
+
+	spec, err = namespace.SetWorkSpec(map[string]interface{}{
 		"name":       "spec",
 		"min_gb":     1,
 		"continuous": true,
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 0)
-	c.Check(meta.Weight, check.Equals, 20)
-	c.Check(meta.Paused, check.Equals, false)
-	c.Check(meta.Continuous, check.Equals, true)
-	c.Check(meta.CanBeContinuous, check.Equals, true)
-	c.Check(meta.Interval, check.Equals, time.Duration(0))
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 0)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 0)
-	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	c.Check(meta.Runtime, check.Equals, "")
+	if assert.NoError(t, err) {
+		assert.Equal(t, 0, meta.Priority)
+		assert.Equal(t, 20, meta.Weight)
+		assert.False(t, meta.Paused)
+		assert.True(t, meta.Continuous)
+		assert.True(t, meta.CanBeContinuous)
+		assert.Zero(t, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 0, meta.MaxRunning)
+		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, "", meta.NextWorkSpecName)
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		assert.Equal(t, "", meta.Runtime)
+	}
 
 	err = spec.SetMeta(coordinate.WorkSpecMeta{
 		Priority:            10,
@@ -327,171 +350,197 @@ func (s *Suite) TestSetMeta(c *check.C) {
 		PendingCount:        50,
 		Runtime:             "go",
 	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Priority, check.Equals, 10)
-	c.Check(meta.Weight, check.Equals, 100)
-	c.Check(meta.Paused, check.Equals, true)
-	c.Check(meta.Continuous, check.Equals, false)
-	// Cannot clear "can be continuous" flag
-	c.Check(meta.CanBeContinuous, check.Equals, true)
-	c.Check(meta.Interval, check.Equals, time.Duration(60)*time.Second)
-	c.Check(meta.NextContinuous, SameTime, time.Time{})
-	c.Check(meta.MaxRunning, check.Equals, 10)
-	c.Check(meta.MaxAttemptsReturned, check.Equals, 1)
-	// Cannot change following work spec
-	c.Check(meta.NextWorkSpecName, check.Equals, "")
-	// Cannot set the counts
-	c.Check(meta.AvailableCount, check.Equals, 0)
-	c.Check(meta.PendingCount, check.Equals, 0)
-	// Cannot change the language runtime
-	c.Check(meta.Runtime, check.Equals, "")
+	if assert.NoError(t, err) {
+		assert.Equal(t, 10, meta.Priority)
+		assert.Equal(t, 100, meta.Weight)
+		assert.True(t, meta.Paused)
+		assert.False(t, meta.Continuous)
+		// Cannot clear "can be continuous" flag
+		assert.True(t, meta.CanBeContinuous)
+		assert.Equal(t, 60*time.Second, meta.Interval)
+		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
+		assert.Equal(t, 10, meta.MaxRunning)
+		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		// Cannot change following work spec
+		assert.Equal(t, "", meta.NextWorkSpecName)
+		// Cannot set the counts
+		assert.Equal(t, 0, meta.AvailableCount)
+		assert.Equal(t, 0, meta.PendingCount)
+		// Cannot change the language runtime
+		assert.Equal(t, "", meta.Runtime)
+	}
 }
 
 // TestMetaContinuous specifically checks that you cannot enable the
 // "continuous" flag on non-continuous work specs.
-func (s *Suite) TestMetaContinuous(c *check.C) {
+func TestMetaContinuous(t *testing.T) {
 	var (
-		err  error
-		spec coordinate.WorkSpec
-		meta coordinate.WorkSpecMeta
+		err       error
+		namespace coordinate.Namespace
+		spec      coordinate.WorkSpec
+		meta      coordinate.WorkSpecMeta
 	)
 
-	// ...also...
-	spec, err = s.Namespace.SetWorkSpec(map[string]interface{}{
+	namespace, err = Coordinate.Namespace("TestMetaContinuous")
+	if !assert.NoError(t, err) {
+		return
+	}
+	defer namespace.Destroy()
+
+	spec, err = namespace.SetWorkSpec(map[string]interface{}{
 		"name":   "spec",
 		"min_gb": 1,
 	})
-	c.Assert(err, check.IsNil)
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	c.Check(meta.Continuous, check.Equals, false)
-	c.Check(meta.CanBeContinuous, check.Equals, false)
+	if assert.NoError(t, err) {
+		assert.False(t, meta.Continuous)
+		assert.False(t, meta.CanBeContinuous)
+	}
 
 	meta.Continuous = true
 	err = spec.SetMeta(meta)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	meta, err = spec.Meta(false)
-	c.Assert(err, check.IsNil)
-	// Cannot set the "continuous" flag
-	c.Check(meta.Continuous, check.Equals, false)
-	c.Check(meta.CanBeContinuous, check.Equals, false)
+	if assert.NoError(t, err) {
+		// Cannot set the "continuous" flag
+		assert.False(t, meta.Continuous)
+		assert.False(t, meta.CanBeContinuous)
+	}
 }
 
 // TestMetaCounts does basic tests on the "available" and "pending" counts.
-func (s *Suite) TestMetaCounts(c *check.C) {
+func TestMetaCounts(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkerName:   "worker",
-		WorkSpecName: "spec",
+		NamespaceName: "TestMetaCounts",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
 	checkCounts := func(available, pending int) {
 		meta, err := sts.WorkSpec.Meta(true)
-		c.Assert(err, check.IsNil)
-		c.Check(meta.AvailableCount, check.Equals, available)
-		c.Check(meta.PendingCount, check.Equals, pending)
+		if assert.NoError(t, err) {
+			assert.Equal(t, available, meta.AvailableCount)
+			assert.Equal(t, pending, meta.PendingCount)
+		}
 	}
 	checkCounts(0, 0)
 
 	// Adding a work unit adds to the available count
 	_, err := sts.AddWorkUnit("one")
-	c.Assert(err, check.IsNil)
-	checkCounts(1, 0)
+	if assert.NoError(t, err) {
+		checkCounts(1, 0)
+	}
 
 	// Starting an attempt makes it pending
-	s.Clock.Add(time.Duration(5) * time.Second)
-	attempt := sts.RequestOneAttempt(c)
+	Clock.Add(5 * time.Second)
+	attempt := sts.RequestOneAttempt(t)
 	checkCounts(0, 1)
 
 	// Expiring an attempt makes it available again
 	err = attempt.Expire(nil)
-	c.Assert(err, check.IsNil)
-	checkCounts(1, 0)
+	if assert.NoError(t, err) {
+		checkCounts(1, 0)
+	}
 
 	// Starting an attempt makes it pending
-	s.Clock.Add(time.Duration(5) * time.Second)
-	attempt = sts.RequestOneAttempt(c)
+	Clock.Add(5 * time.Second)
+	attempt = sts.RequestOneAttempt(t)
 	checkCounts(0, 1)
 
 	// Marking an attempt retryable makes it pending again
 	err = attempt.Retry(nil, time.Duration(0))
-	c.Assert(err, check.IsNil)
-	checkCounts(1, 0)
+	if assert.NoError(t, err) {
+		checkCounts(1, 0)
+	}
 
 	// Starting an attempt makes it pending
-	s.Clock.Add(time.Duration(5) * time.Second)
-	attempt = sts.RequestOneAttempt(c)
+	Clock.Add(5 * time.Second)
+	attempt = sts.RequestOneAttempt(t)
 	checkCounts(0, 1)
 
 	// Finishing an attempt takes it out of the list entirely
 	err = attempt.Finish(nil)
-	c.Assert(err, check.IsNil)
-	checkCounts(0, 0)
+	if assert.NoError(t, err) {
+		checkCounts(0, 0)
+	}
 }
 
 // TestSpecDeletedGone validates that, if you delete a work spec,
 // subsequent attempts to use it return ErrGone.
-func (s *Suite) TestSpecDeletedGone(c *check.C) {
+func TestSpecDeletedGone(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkSpecName: "spec",
+		NamespaceName: "TestSpecDeletedGone",
+		WorkSpecName:  "spec",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
-	err := s.Namespace.DestroyWorkSpec(sts.WorkSpecName)
-	c.Assert(err, check.IsNil)
+	err := sts.Namespace.DestroyWorkSpec(sts.WorkSpecName)
+	assert.NoError(t, err)
 
 	// Test a couple of basic things
 	_, err = sts.WorkSpec.Meta(false)
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+		assert.Equal(t, sts.WorkSpecName, nsws.Name)
 	} else {
-		c.Errorf("deleted work spec produced error %+v", err)
+		assert.Fail(t, "unexpected error reading deleted work spec meta",
+			"+v", err)
 	}
 
 	_, err = sts.WorkSpec.AddWorkUnit("foo", map[string]interface{}{}, coordinate.WorkUnitMeta{})
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+		assert.Equal(t, sts.WorkSpecName, nsws.Name)
 	} else {
-		c.Errorf("deleted work spec produced error %+v", err)
+		assert.Fail(t, "unexpected error adding work to deleted work spec",
+			"+v", err)
 	}
 }
 
 // TestSpecInNamespaceGone validates that, if you delete a work spec's
 // namespace, attempts to use the work spec return ErrGone.
-func (s *Suite) TestSpecInNamespaceGone(c *check.C) {
+func TestSpecInNamespaceGone(t *testing.T) {
 	sts := SimpleTestSetup{
-		WorkSpecName: "spec",
+		NamespaceName: "TestSpecInNamespaceGone",
+		WorkSpecName:  "spec",
 	}
-	sts.Do(s, c)
+	sts.SetUp(t)
+	// We are about to blow up the namespace now so there is no cleanup
 
-	err := s.Namespace.Destroy()
-	c.Assert(err, check.IsNil)
+	err := sts.Namespace.Destroy()
+	assert.NoError(t, err)
 
 	// Test a couple of basic things
 	_, err = sts.WorkSpec.Meta(false)
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+		assert.Equal(t, sts.WorkSpecName, nsws.Name)
 	} else {
-		c.Errorf("deleted work spec produced error %+v", err)
+		assert.Fail(t, "unexpected error reading deleted work spec meta",
+			"+v", err)
 	}
 
 	_, err = sts.WorkSpec.AddWorkUnit("foo", map[string]interface{}{}, coordinate.WorkUnitMeta{})
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		c.Check(nsws.Name, check.Equals, sts.WorkSpecName)
+		assert.Equal(t, sts.WorkSpecName, nsws.Name)
 	} else {
-		c.Errorf("deleted work spec produced error %+v", err)
+		assert.Fail(t, "unexpected error adding work to deleted work spec",
+			"+v", err)
 	}
 }

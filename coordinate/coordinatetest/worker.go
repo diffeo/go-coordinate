@@ -5,281 +5,316 @@ package coordinatetest
 
 import (
 	"github.com/diffeo/go-coordinate/coordinate"
-	"gopkg.in/check.v1"
+	"github.com/stretchr/testify/assert"
+	"testing"
 	"time"
 )
 
 // TestWorkerAncestry does basic tests on worker parents and children.
-func (s *Suite) TestWorkerAncestry(c *check.C) {
+func TestWorkerAncestry(t *testing.T) {
 	var (
 		err                   error
 		parent, child, worker coordinate.Worker
 		kids                  []coordinate.Worker
 	)
 
+	sts := SimpleTestSetup{NamespaceName: "TestWorkerAncestry"}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
 	// start in the middle
-	parent, err = s.Namespace.Worker("parent")
-	c.Assert(err, check.IsNil)
+	parent, err = sts.Namespace.Worker("parent")
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	worker, err = parent.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.IsNil)
+	if assert.NoError(t, err) {
+		assert.Nil(t, worker)
+	}
 	kids, err = parent.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, kids)
+	}
 
 	// Create a child
-	child, err = s.Namespace.Worker("child")
-	c.Assert(err, check.IsNil)
+	child, err = sts.Namespace.Worker("child")
+	if !assert.NoError(t, err) {
+		return
+	}
 	err = child.SetParent(parent)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// this should update the parent metadata
 	worker, err = parent.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.IsNil)
+	if assert.NoError(t, err) {
+		assert.Nil(t, worker)
+	}
 	kids, err = parent.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 1)
-	if len(kids) > 0 {
-		c.Check(kids[0].Name(), check.Equals, "child")
+	if assert.NoError(t, err) && assert.Len(t, kids, 1) {
+		assert.Equal(t, "child", kids[0].Name())
 	}
 
 	// and also the child metadata
 	worker, err = child.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.NotNil)
-	if worker != nil {
-		c.Check(worker.Name(), check.Equals, "parent")
+	if assert.NoError(t, err) && assert.NotNil(t, worker) {
+		assert.Equal(t, "parent", worker.Name())
 	}
 	kids, err = child.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, kids)
+	}
 }
 
 // TestWorkerAdoption hands a child worker to a new parent.
-func (s *Suite) TestWorkerAdoption(c *check.C) {
+func TestWorkerAdoption(t *testing.T) {
 	var (
 		err                                 error
 		child, oldParent, newParent, worker coordinate.Worker
 		kids                                []coordinate.Worker
 	)
 
+	sts := SimpleTestSetup{NamespaceName: "TestWorkerAdoption"}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
 	// Create the worker objects
-	child, err = s.Namespace.Worker("child")
-	c.Assert(err, check.IsNil)
-	oldParent, err = s.Namespace.Worker("old")
-	c.Assert(err, check.IsNil)
-	newParent, err = s.Namespace.Worker("new")
-	c.Assert(err, check.IsNil)
+	child, err = sts.Namespace.Worker("child")
+	if !assert.NoError(t, err) {
+		return
+	}
+	oldParent, err = sts.Namespace.Worker("old")
+	if !assert.NoError(t, err) {
+		return
+	}
+	newParent, err = sts.Namespace.Worker("new")
+	if !assert.NoError(t, err) {
+		return
+	}
 
 	// Set up the original ancestry
 	err = child.SetParent(oldParent)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// Move it to the new parent
 	err = child.SetParent(newParent)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// Checks
 	worker, err = child.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.NotNil)
-	if worker != nil {
-		c.Check(worker.Name(), check.Equals, "new")
+	if assert.NoError(t, err) && assert.NotNil(t, worker) {
+		assert.Equal(t, "new", worker.Name())
 	}
 	kids, err = child.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, kids)
+	}
 
 	worker, err = oldParent.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.IsNil)
+	if assert.NoError(t, err) {
+		assert.Nil(t, worker)
+	}
 	kids, err = oldParent.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, kids)
+	}
 
 	worker, err = newParent.Parent()
-	c.Assert(err, check.IsNil)
-	c.Check(worker, check.IsNil)
+	if assert.NoError(t, err) {
+		assert.Nil(t, worker)
+	}
 	kids, err = newParent.Children()
-	c.Assert(err, check.IsNil)
-	c.Check(kids, check.HasLen, 1)
-	if len(kids) > 0 {
-		c.Check(kids[0].Name(), check.Equals, "child")
+	if assert.NoError(t, err) && assert.Len(t, kids, 1) {
+		assert.Equal(t, "child", kids[0].Name())
 	}
 }
 
 // TestWorkerMetadata tests the various metadata fields.
-func (s *Suite) TestWorkerMetadata(c *check.C) {
-	worker, err := s.Namespace.Worker("worker")
-	c.Assert(err, check.IsNil)
+func TestWorkerMetadata(t *testing.T) {
+	now := Clock.Now()
+	sts := SimpleTestSetup{
+		NamespaceName: "TestWorkerMetadata",
+		WorkerName:    "worker",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
 
 	// With no explicit setup, we should get these defaults
-	active, err := worker.Active()
-	c.Assert(err, check.IsNil)
-	c.Check(active, check.Equals, true)
+	active, err := sts.Worker.Active()
+	if assert.NoError(t, err) {
+		assert.True(t, active)
+	}
 
-	mode, err := worker.Mode()
-	c.Assert(err, check.IsNil)
-	c.Check(mode, check.Equals, "")
+	mode, err := sts.Worker.Mode()
+	if assert.NoError(t, err) {
+		assert.Equal(t, "", mode)
+	}
 
-	data, err := worker.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.IsNil)
+	DataEmpty(t, sts.Worker)
 
-	lastUpdate, err := worker.LastUpdate()
-	c.Assert(err, check.IsNil)
-	// Should default to "now"
+	lastUpdate, err := sts.Worker.LastUpdate()
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, now, lastUpdate, 1*time.Millisecond)
+	}
 
-	expiration, err := worker.Expiration()
-	c.Assert(err, check.IsNil)
-	c.Check(expiration.Sub(lastUpdate), check.Equals, time.Duration(15)*time.Minute)
+	expiration, err := sts.Worker.Expiration()
+	if assert.NoError(t, err) {
+		assert.Equal(t, 15*time.Minute, expiration.Sub(lastUpdate))
+	}
 
 	// Run an update
-	whenIsNow := time.Now()
-	whenIsThen := whenIsNow.Add(time.Duration(15) * time.Minute)
-	// ("We passed 'then', sir."  "When?"  "Just now.")
+	Clock.Add(1 * time.Minute)
+	now = Clock.Now()
+	then := now.Add(15 * time.Minute)
 	theData := map[string]interface{}{"key": "value"}
 	theMode := "run"
 
-	err = worker.Update(theData, whenIsNow, whenIsThen, theMode)
-	c.Assert(err, check.IsNil)
+	err = sts.Worker.Update(theData, now, then, theMode)
+	assert.NoError(t, err)
 
-	active, err = worker.Active()
-	c.Assert(err, check.IsNil)
-	c.Check(active, check.Equals, true)
+	active, err = sts.Worker.Active()
+	if assert.NoError(t, err) {
+		assert.True(t, active)
+	}
 
-	mode, err = worker.Mode()
-	c.Assert(err, check.IsNil)
-	c.Check(mode, check.Equals, theMode)
+	mode, err = sts.Worker.Mode()
+	if assert.NoError(t, err) {
+		assert.Equal(t, theMode, mode)
+	}
 
-	data, err = worker.Data()
-	c.Assert(err, check.IsNil)
-	c.Check(data, check.DeepEquals, theData)
+	DataMatches(t, sts.Worker, theData)
 
-	expiration, err = worker.Expiration()
-	c.Assert(err, check.IsNil)
-	c.Check(expiration, SameTime, whenIsThen)
+	expiration, err = sts.Worker.Expiration()
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, then, expiration, 1*time.Millisecond)
+	}
 
-	lastUpdate, err = worker.LastUpdate()
-	c.Assert(err, check.IsNil)
-	c.Check(lastUpdate, SameTime, whenIsNow)
-	c.Check(expiration.Sub(lastUpdate), check.Equals, time.Duration(15)*time.Minute)
+	lastUpdate, err = sts.Worker.LastUpdate()
+	if assert.NoError(t, err) {
+		assert.WithinDuration(t, now, lastUpdate, 1*time.Millisecond)
+	}
 
 	// Deactivate ourselves
-	err = worker.Deactivate()
-	c.Assert(err, check.IsNil)
+	err = sts.Worker.Deactivate()
+	assert.NoError(t, err)
 
-	active, err = worker.Active()
-	c.Assert(err, check.IsNil)
-	c.Check(active, check.Equals, false)
+	active, err = sts.Worker.Active()
+	if assert.NoError(t, err) {
+		assert.False(t, active)
+	}
 
 	// Re-update, which should reactivate
-	err = worker.Update(theData, whenIsNow, whenIsThen, theMode)
-	c.Assert(err, check.IsNil)
+	err = sts.Worker.Update(theData, now, then, theMode)
+	assert.NoError(t, err)
 
-	active, err = worker.Active()
-	c.Assert(err, check.IsNil)
-	c.Check(active, check.Equals, true)
+	active, err = sts.Worker.Active()
+	if assert.NoError(t, err) {
+		assert.True(t, active)
+	}
 }
 
 // TestWorkerAttempts checks the association between attempts and workers.
-func (s *Suite) TestWorkerAttempts(c *check.C) {
-	// Manually set up two workers and a work spec
-	parent, err := s.Namespace.Worker("parent")
-	c.Assert(err, check.IsNil)
-	child, err := s.Namespace.Worker("child")
-	c.Assert(err, check.IsNil)
+func TestWorkerAttempts(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestWorkerAttempts",
+		WorkerName:    "child",
+		WorkSpecName:  "spec",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	// Manually set up a parent worker
+	parent, err := sts.Namespace.Worker("parent")
+	if !assert.NoError(t, err) {
+		return
+	}
+	child := sts.Worker
 	err = child.SetParent(parent)
-	c.Assert(err, check.IsNil)
-	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name": "spec",
-	})
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 
 	// Create and perform one work unit
-	_, err = spec.AddWorkUnit("one", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
-	attempts, err := child.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Check(attempts[0].Worker().Name(), check.Equals, "child")
-	c.Check(attempts[0].WorkUnit().Name(), check.Equals, "one")
-	c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
-	err = attempts[0].Finish(nil)
-	c.Assert(err, check.IsNil)
+	_, err = sts.AddWorkUnit("one")
+	assert.NoError(t, err)
+	attempt := sts.RequestOneAttempt(t)
+	assert.Equal(t, "child", attempt.Worker().Name())
+	assert.Equal(t, "spec", attempt.WorkUnit().WorkSpec().Name())
+	assert.Equal(t, "one", attempt.WorkUnit().Name())
+	err = attempt.Finish(nil)
+	assert.NoError(t, err)
 
 	// Create and start (but don't finish) a second one
-	_, err = spec.AddWorkUnit("two", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	c.Assert(err, check.IsNil)
-	attempts, err = child.RequestAttempts(coordinate.AttemptRequest{})
-	c.Assert(err, check.IsNil)
-	c.Assert(attempts, check.HasLen, 1)
-	c.Check(attempts[0].Worker().Name(), check.Equals, "child")
-	c.Check(attempts[0].WorkUnit().Name(), check.Equals, "two")
-	c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
+	_, err = sts.AddWorkUnit("two")
+	assert.NoError(t, err)
+	attempt = sts.RequestOneAttempt(t)
+	assert.Equal(t, "child", attempt.Worker().Name())
+	assert.Equal(t, "spec", attempt.WorkUnit().WorkSpec().Name())
+	assert.Equal(t, "two", attempt.WorkUnit().Name())
 
 	// Validate the child worker's attempts
-	attempts, err = child.ActiveAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0].Worker().Name(), check.Equals, "child")
-		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "two")
-		c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
+	attempts, err := child.ActiveAttempts()
+	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
+		assert.Equal(t, "child", attempts[0].Worker().Name())
+		assert.Equal(t, "spec", attempts[0].WorkUnit().WorkSpec().Name())
+		assert.Equal(t, "two", attempts[0].WorkUnit().Name())
 	}
 
 	attempts, err = child.AllAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 2)
-	if len(attempts) >= 2 {
-		c.Check(attempts[0].Worker().Name(), check.Equals, "child")
-		c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
-		c.Check(attempts[1].Worker().Name(), check.Equals, "child")
-		c.Check(attempts[1].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
+	if assert.NoError(t, err) && assert.Len(t, attempts, 2) {
+		assert.Equal(t, "child", attempts[0].Worker().Name())
+		assert.Equal(t, "child", attempts[1].Worker().Name())
+
+		assert.Equal(t, "spec", attempts[0].WorkUnit().WorkSpec().Name())
+		assert.Equal(t, "spec", attempts[1].WorkUnit().WorkSpec().Name())
 		if attempts[0].WorkUnit().Name() == "one" {
-			c.Check(attempts[0].WorkUnit().Name(), check.Equals, "one")
-			c.Check(attempts[1].WorkUnit().Name(), check.Equals, "two")
+			assert.Equal(t, "two", attempts[1].WorkUnit().Name())
 		} else {
-			c.Check(attempts[0].WorkUnit().Name(), check.Equals, "two")
-			c.Check(attempts[1].WorkUnit().Name(), check.Equals, "one")
+			assert.Equal(t, "two", attempts[0].WorkUnit().Name())
+			assert.Equal(t, "one", attempts[1].WorkUnit().Name())
 		}
 	}
 
 	attempts, err = child.ChildAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, attempts)
+	}
 
 	// Check the parent's attempt lists
 	attempts, err = parent.ActiveAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, attempts)
+	}
 
 	attempts, err = parent.AllAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 0)
+	if assert.NoError(t, err) {
+		assert.Empty(t, attempts)
+	}
 
 	attempts, err = parent.ChildAttempts()
-	c.Assert(err, check.IsNil)
-	c.Check(attempts, check.HasLen, 1)
-	if len(attempts) > 0 {
-		c.Check(attempts[0].Worker().Name(), check.Equals, "child")
-		c.Check(attempts[0].WorkUnit().Name(), check.Equals, "two")
-		c.Check(attempts[0].WorkUnit().WorkSpec().Name(), check.Equals, "spec")
+	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
+		assert.Equal(t, "child", attempts[0].Worker().Name())
+		assert.Equal(t, "spec", attempts[0].WorkUnit().WorkSpec().Name())
+		assert.Equal(t, "two", attempts[0].WorkUnit().Name())
 	}
 }
 
 // TestDeactivateChild tests that deactivating a worker with a parent
 // works successfully.  This is a regression test for a specific issue
 // in the REST API.
-func (s *Suite) TestDeactivateChild(c *check.C) {
-	parent, err := s.Namespace.Worker("parent")
-	c.Assert(err, check.IsNil)
-	child, err := s.Namespace.Worker("child")
-	c.Assert(err, check.IsNil)
+func TestDeactivateChild(t *testing.T) {
+	sts := SimpleTestSetup{NamespaceName: "TestDeactivateChild"}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	parent, err := sts.Namespace.Worker("parent")
+	if !assert.NoError(t, err) {
+		return
+	}
+	child, err := sts.Namespace.Worker("child")
+	if !assert.NoError(t, err) {
+		return
+	}
 	err = child.SetParent(parent)
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 	err = child.Deactivate()
-	c.Assert(err, check.IsNil)
+	assert.NoError(t, err)
 }
