@@ -97,6 +97,13 @@ func workSpecHasName(params *queryParams, name string) string {
 	return workSpecName + "=" + params.Param(name)
 }
 
+// workSpecNotTooSoon determines whether a work spec can run a new
+// continuous work unit, because its next-continuous time has arrived.
+func workSpecNotTooSoon(params *queryParams, now time.Time) string {
+	return "(" + workSpecNextContinuous + " IS NULL OR " +
+		workSpecNextContinuous + "<=" + params.Param(now) + ")"
+}
+
 func isWorkUnit(params *queryParams, id int) string {
 	return workUnitID + "=" + params.Param(id)
 }

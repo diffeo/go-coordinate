@@ -591,25 +591,36 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 // createContinuousUnit tries to create exactly one continuous work
 // unit, and returns it.
 func (w *worker) createContinuousUnit(tx *sql.Tx, spec *workSpec, meta *coordinate.WorkSpecMeta, now time.Time) (*workUnit, error) {
-	// We will want to ensure that only one worker is attempting
-	// to create this work unit, and we will ultimately want to
-	// update the next-continuous time
+	// Ideally only one worker is attempting to create this work
+	// unit.  Start by updating the next-continuous time; this
+	// creates a modification that will limit other transactions.
 	params := queryParams{}
-	row := tx.QueryRow(buildSelect([]string{workSpecNextContinuous},
-		[]string{workSpecTable},
-		[]string{isWorkSpec(&params, spec.id)})+" FOR UPDATE",
-		params...)
-	var aTime pq.NullTime
-	err := row.Scan(&aTime)
+	fields := fieldList{}
+	fields.Add(&params, "next_continuous", now.Add(meta.Interval))
+	query := buildUpdate(workSpecTable,
+		fields.UpdateChanges(),
+		[]string{
+			isWorkSpec(&params, spec.id),
+			workSpecNotTooSoon(&params, now),
+		})
+	res, err := tx.Exec(query, params...)
+	rows, err := res.RowsAffected()
 	if err != nil {
 		return nil, err
 	}
-
-	// If someone else is also doing this, and there's a non-zero
-	// interval, this might have gotten updated before us.
-	if aTime.Valid && now.Before(aTime.Time) {
+	if rows == 0 {
+		// This probably means somebody else advanced the
+		// next-continuous time into the future under us.  Not
+		// an error, just stop (and reloop in the caller).
 		return nil, nil
 	}
+
+	// We should consider repeating the query at this point to
+	// ensure there is no available or pending work unit for the
+	// work spec.  (Or roll it into the query side of the
+	// preceding UPDATE.)  Especially if meta.Interval is zero,
+	// this can protect against multiple continuous units being
+	// created on top of each other.
 
 	// Create the work unit
 	seconds := now.Unix()
@@ -626,25 +637,6 @@ func (w *worker) createContinuousUnit(tx *sql.Tx, spec *workSpec, meta *coordina
 	unit, err := spec.insertWorkUnit(tx, name, dataBytes, coordinate.WorkUnitMeta{})
 	if err != nil {
 		return nil, err
-	}
-
-	// Update the next-continuous time for the work spec.
-	params = queryParams{}
-	fields := fieldList{}
-	fields.Add(&params, "next_continuous", now.Add(meta.Interval))
-	res, err := tx.Exec(buildUpdate(workSpecTable,
-		fields.UpdateChanges(),
-		[]string{isWorkSpec(&params, spec.id)}),
-		params...)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if rows != 1 {
-		return nil, fmt.Errorf("update work spec next continuous changed %v rows (not 1)", rows)
 	}
 
 	// We have the single work unit we want to do.
