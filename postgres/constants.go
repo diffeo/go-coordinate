@@ -36,6 +36,7 @@ const (
 	attemptEndTime              = attemptTable + ".end_time"
 	attemptExpirationTime       = attemptTable + ".expiration_time"
 	attemptActive               = attemptTable + ".active"
+	attemptWorkSpecID           = attemptTable + ".work_spec_id"
 	namespaceName               = namespaceTable + ".name"
 	namespaceID                 = namespaceTable + ".id"
 	workerID                    = workerTable + ".id"
@@ -74,6 +75,7 @@ const (
 	attemptThisWorkUnit  = attemptWorkUnitID + "=" + workUnitID
 	attemptThisWorker    = attemptWorkerID + "=" + workerID
 	attemptIsTheActive   = attemptID + "=" + workUnitAttempt
+	attemptInThisSpec    = attemptWorkSpecID + "=" + workSpecID
 
 	// This join selects all work units and attempts, including
 	// work units with no active attempt

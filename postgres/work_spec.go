@@ -383,12 +383,10 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		// Pending:
 		params = queryParams{}
 		query = buildSelect([]string{workSpecName, "COUNT(*)"},
-			[]string{workSpecTable, workUnitTable, attemptTable},
+			[]string{workSpecTable, attemptTable},
 			[]string{
 				workSpecInNamespace(&params, ns.id),
-				workUnitInThisSpec,
-				attemptThisWorkUnit,
-				attemptIsTheActive,
+				attemptInThisSpec,
 				attemptIsPending,
 			})
 		query += " GROUP BY " + workSpecName

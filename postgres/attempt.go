@@ -549,6 +549,7 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 	expiration := now.Add(length)
 	whatToInsert := buildSelect([]string{
 		"id",
+		params.Param(spec.id),
 		params.Param(w.id),
 		params.Param(now),
 		params.Param(expiration),
@@ -556,7 +557,7 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 		"u",
 	}, []string{})
 	attempts := "INSERT INTO " + attemptTable +
-		"(work_unit_id, worker_id, start_time, expiration_time) " +
+		"(work_unit_id, work_spec_id, worker_id, start_time, expiration_time) " +
 		whatToInsert +
 		" RETURNING id, work_unit_id"
 
@@ -675,6 +676,7 @@ func makeAttempt(tx *sql.Tx, unit *workUnit, w *worker, length time.Duration) (*
 	params := queryParams{}
 	fields := fieldList{}
 	fields.Add(&params, "work_unit_id", unit.id)
+	fields.Add(&params, "work_spec_id", unit.spec.id)
 	fields.Add(&params, "worker_id", w.id)
 	fields.Add(&params, "start_time", now)
 	fields.Add(&params, "expiration_time", expiration)
