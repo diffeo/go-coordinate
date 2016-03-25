@@ -487,6 +487,19 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		var err error
 		now := w.Coordinate().clock.Now()
 
+		// Take an advisory lock for the work spec.  It doesn't
+		// make sense for multiple concurrent actors to progress
+		// beyond this point (they will hit the same work units
+		// in chooseAndMakeAttempts() and one will roll back) and
+		// this reduces the database load.  We are still protected
+		// by standard SQL transactionality.
+		params := queryParams{}
+		query := "SELECT pg_advisory_xact_lock(0, " + params.Param(spec.id) + ")"
+		_, err = tx.Exec(query, params...)
+		if err != nil {
+			return err
+		}
+
 		// Try to create attempts from pre-existing work units
 		// (assuming we expect there to be some)
 		if meta.AvailableCount > 0 {
