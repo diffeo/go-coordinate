@@ -408,21 +408,20 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		now := ns.Coordinate().clock.Now()
 		params = queryParams{}
 		query = buildSelect([]string{
-			"1",
+			workUnitSpec,
 		}, []string{
 			workUnitTable,
 		}, []string{
-			workUnitInThisSpec,
 			workUnitHasNoAttempt,
 			"NOT " + workUnitTooSoon(&params, now),
-		}) + " LIMIT 1"
+		})
 		query = buildSelect([]string{
 			workSpecName,
 		}, []string{
 			workSpecTable,
 		}, []string{
 			workSpecInNamespace(&params, ns.id),
-			"EXISTS (" + query + ")",
+			workSpecID + " IN (" + query + ")",
 		})
 		rows, err = tx.Query(query, params...)
 		err = scanRows(rows, func() error {
