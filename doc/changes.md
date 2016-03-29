@@ -15,6 +15,8 @@ Major Changes
   implementations written in Go.
 * Add a `coordbench` tool to measure the performance of the Coordinate
   system.
+* Several performance improvements for the PostgreSQL backend, aimed
+  at the "millions of work units" scale.
 * Switch tests from `gocheck` to `testify`.
 
 0.2.0 (4 Jan 2016)
