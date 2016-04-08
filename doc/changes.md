@@ -1,7 +1,7 @@
 Major Changes
 =============
 
-0.3.0 (unreleased)
+0.3.0 (8 Apr 2016)
 ------------------
 
 * Adds the ability for work units to declare an earliest time they can
