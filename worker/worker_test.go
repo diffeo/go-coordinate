@@ -106,7 +106,7 @@ func (s *Suite) GoDoWork(t *testing.T) {
 		err = worker.SetParent(s.Worker.parentWorker)
 		if assert.NoError(t, err) {
 			s.Worker.childWorkers[id] = worker
-			go s.Worker.doWork(id, context.Background(),
+			go s.Worker.doWork(id, worker, context.Background(),
 				s.GotWork, s.Finished)
 		}
 	}
