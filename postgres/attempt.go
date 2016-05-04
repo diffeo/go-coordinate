@@ -617,6 +617,9 @@ func (w *worker) createContinuousUnit(tx *sql.Tx, spec *workSpec, meta *coordina
 			workSpecNotTooSoon(&params, now),
 		})
 	res, err := tx.Exec(query, params...)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return nil, err
