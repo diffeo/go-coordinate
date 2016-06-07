@@ -232,7 +232,7 @@ func sqlToDuration(sql string) (time.Duration, error) {
 
 	// Duration's unit is nanoseconds; make sure everything has int64
 	// type
-	dHours := hours * 24 * days
+	dHours := hours + 24*days
 	dMinutes := minutes + 60*dHours
 	dSeconds := seconds + 60*float64(dMinutes)
 	d := time.Duration(int64(float64(dSeconds * float64(time.Second))))
