@@ -22,11 +22,11 @@ import (
 	"compress/gzip"
 	"fmt"
 	"io"
-	"strings"
-	"os"
-	"time"
 	"io/ioutil"
+	"os"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 func bindataRead(data []byte, name string) ([]byte, error) {
@@ -55,9 +55,9 @@ type asset struct {
 }
 
 type bindataFileInfo struct {
-	name string
-	size int64
-	mode os.FileMode
+	name    string
+	size    int64
+	mode    os.FileMode
 	modTime time.Time
 }
 
@@ -96,7 +96,7 @@ func migrations20150927CoreSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20150927-core.sql", size: 2751, mode: os.FileMode(420), modTime: time.Unix(1443447734, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -116,7 +116,7 @@ func migrations20151002MingbSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151002-mingb.sql", size: 210, mode: os.FileMode(420), modTime: time.Unix(1443812987, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -136,7 +136,7 @@ func migrations20151006WorkUnitTypeSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151006-work-unit-type.sql", size: 402, mode: os.FileMode(420), modTime: time.Unix(1444152140, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -156,7 +156,7 @@ func migrations20151013IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151013-index.sql", size: 179, mode: os.FileMode(420), modTime: time.Unix(1444782480, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -176,7 +176,7 @@ func migrations20151014IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151014-index.sql", size: 278, mode: os.FileMode(420), modTime: time.Unix(1444848828, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -196,7 +196,7 @@ func migrations20151019WorkerModeSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151019-worker-mode.sql", size: 313, mode: os.FileMode(420), modTime: time.Unix(1445281179, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -216,7 +216,7 @@ func migrations20151028IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151028-index.sql", size: 363, mode: os.FileMode(420), modTime: time.Unix(1446048051, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -236,7 +236,7 @@ func migrations20151216WorkSpecRuntimeSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20151216-work-spec-runtime.sql", size: 252, mode: os.FileMode(420), modTime: time.Unix(1450277267, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -256,7 +256,7 @@ func migrations20160104NotBeforeSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20160104-not-before.sql", size: 258, mode: os.FileMode(420), modTime: time.Unix(1451942334, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -276,7 +276,7 @@ func migrations20160125IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20160125-index.sql", size: 426, mode: os.FileMode(420), modTime: time.Unix(1458914727, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -296,7 +296,7 @@ func migrations20160217AttemptSpecSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20160217-attempt-spec.sql", size: 563, mode: os.FileMode(420), modTime: time.Unix(1458914727, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -316,7 +316,7 @@ func migrations20160328IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20160328-index.sql", size: 734, mode: os.FileMode(420), modTime: time.Unix(1459194313, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -336,7 +336,7 @@ func migrations20160329IndexSql() (*asset, error) {
 	}
 
 	info := bindataFileInfo{name: "migrations/20160329-index.sql", size: 371, mode: os.FileMode(420), modTime: time.Unix(1459216044, 0)}
-	a := &asset{bytes: bytes, info:  info}
+	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
 
@@ -359,7 +359,7 @@ func Asset(name string) ([]byte, error) {
 // It simplifies safe initialization of global variables.
 func MustAsset(name string) []byte {
 	a, err := Asset(name)
-	if (err != nil) {
+	if err != nil {
 		panic("asset: Asset(" + name + "): " + err.Error())
 	}
 
@@ -443,84 +443,71 @@ func AssetDir(name string) ([]string, error) {
 }
 
 type bintree struct {
-	Func func() (*asset, error)
+	Func     func() (*asset, error)
 	Children map[string]*bintree
 }
 var _bintree = &bintree{nil, map[string]*bintree{
 	"migrations": &bintree{nil, map[string]*bintree{
-		"20150927-core.sql": &bintree{migrations20150927CoreSql, map[string]*bintree{
-		}},
-		"20151002-mingb.sql": &bintree{migrations20151002MingbSql, map[string]*bintree{
-		}},
-		"20151006-work-unit-type.sql": &bintree{migrations20151006WorkUnitTypeSql, map[string]*bintree{
-		}},
-		"20151013-index.sql": &bintree{migrations20151013IndexSql, map[string]*bintree{
-		}},
-		"20151014-index.sql": &bintree{migrations20151014IndexSql, map[string]*bintree{
-		}},
-		"20151019-worker-mode.sql": &bintree{migrations20151019WorkerModeSql, map[string]*bintree{
-		}},
-		"20151028-index.sql": &bintree{migrations20151028IndexSql, map[string]*bintree{
-		}},
-		"20151216-work-spec-runtime.sql": &bintree{migrations20151216WorkSpecRuntimeSql, map[string]*bintree{
-		}},
-		"20160104-not-before.sql": &bintree{migrations20160104NotBeforeSql, map[string]*bintree{
-		}},
-		"20160125-index.sql": &bintree{migrations20160125IndexSql, map[string]*bintree{
-		}},
-		"20160217-attempt-spec.sql": &bintree{migrations20160217AttemptSpecSql, map[string]*bintree{
-		}},
-		"20160328-index.sql": &bintree{migrations20160328IndexSql, map[string]*bintree{
-		}},
-		"20160329-index.sql": &bintree{migrations20160329IndexSql, map[string]*bintree{
-		}},
+		"20150927-core.sql": &bintree{migrations20150927CoreSql, map[string]*bintree{}},
+		"20151002-mingb.sql": &bintree{migrations20151002MingbSql, map[string]*bintree{}},
+		"20151006-work-unit-type.sql": &bintree{migrations20151006WorkUnitTypeSql, map[string]*bintree{}},
+		"20151013-index.sql": &bintree{migrations20151013IndexSql, map[string]*bintree{}},
+		"20151014-index.sql": &bintree{migrations20151014IndexSql, map[string]*bintree{}},
+		"20151019-worker-mode.sql": &bintree{migrations20151019WorkerModeSql, map[string]*bintree{}},
+		"20151028-index.sql": &bintree{migrations20151028IndexSql, map[string]*bintree{}},
+		"20151216-work-spec-runtime.sql": &bintree{migrations20151216WorkSpecRuntimeSql, map[string]*bintree{}},
+		"20160104-not-before.sql": &bintree{migrations20160104NotBeforeSql, map[string]*bintree{}},
+		"20160125-index.sql": &bintree{migrations20160125IndexSql, map[string]*bintree{}},
+		"20160217-attempt-spec.sql": &bintree{migrations20160217AttemptSpecSql, map[string]*bintree{}},
+		"20160328-index.sql": &bintree{migrations20160328IndexSql, map[string]*bintree{}},
+		"20160329-index.sql": &bintree{migrations20160329IndexSql, map[string]*bintree{}},
 	}},
 }}
 
 // RestoreAsset restores an asset under the given directory
 func RestoreAsset(dir, name string) error {
-        data, err := Asset(name)
-        if err != nil {
-                return err
-        }
-        info, err := AssetInfo(name)
-        if err != nil {
-                return err
-        }
-        err = os.MkdirAll(_filePath(dir, filepath.Dir(name)), os.FileMode(0755))
-        if err != nil {
-                return err
-        }
-        err = ioutil.WriteFile(_filePath(dir, name), data, info.Mode())
-        if err != nil {
-                return err
-        }
-        err = os.Chtimes(_filePath(dir, name), info.ModTime(), info.ModTime())
-        if err != nil {
-                return err
-        }
-        return nil
+	data, err := Asset(name)
+	if err != nil {
+		return err
+	}
+	info, err := AssetInfo(name)
+	if err != nil {
+		return err
+	}
+	err = os.MkdirAll(_filePath(dir, filepath.Dir(name)), os.FileMode(0755))
+	if err != nil {
+		return err
+	}
+	err = ioutil.WriteFile(_filePath(dir, name), data, info.Mode())
+	if err != nil {
+		return err
+	}
+	err = os.Chtimes(_filePath(dir, name), info.ModTime(), info.ModTime())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // RestoreAssets restores an asset under the given directory recursively
 func RestoreAssets(dir, name string) error {
-        children, err := AssetDir(name)
-        // File
-        if err != nil {
-                return RestoreAsset(dir, name)
-        }
-        // Dir
-        for _, child := range children {
-                err = RestoreAssets(dir, filepath.Join(name, child))
-                if err != nil {
-                        return err
-                }
-        }
-        return nil
+	children, err := AssetDir(name)
+	// File
+	if err != nil {
+		return RestoreAsset(dir, name)
+	}
+	// Dir
+	for _, child := range children {
+		err = RestoreAssets(dir, filepath.Join(name, child))
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func _filePath(dir, name string) string {
-        cannonicalName := strings.Replace(name, "\\", "/", -1)
-        return filepath.Join(append([]string{dir}, strings.Split(cannonicalName, "/")...)...)
+	cannonicalName := strings.Replace(name, "\\", "/", -1)
+	return filepath.Join(append([]string{dir}, strings.Split(cannonicalName, "/")...)...)
 }
 

@@ -26,11 +26,15 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
-	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/lib/pq"
 	"math"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lib/pq"
+
+	"github.com/diffeo/go-coordinate/coordinate"
 )
 
 // withTx calls some function with a database/sql transaction object.
@@ -198,12 +202,34 @@ func sqlToDuration(sql string) (time.Duration, error) {
 		days, hours, minutes int64
 		seconds              float64
 		err                  error
+		re                   *regexp.Regexp
 	)
-	// Two shots
-	_, err = fmt.Sscanf(sql, "%d:%d:%f", &hours, &minutes, &seconds)
+	re, err = regexp.Compile(`^(?:(\d+) days? ?)?(?:(\d+):(\d+):(\d+(?:\.\d+)?))?$`)
 	if err != nil {
-		_, err = fmt.Sscanf(sql, "%d %d:%d:%f", &days, &hours, &minutes, &seconds)
+		err = fmt.Errorf("could not compile duration regexp")
 	}
+	if err == nil {
+		matches := re.FindStringSubmatch(sql)
+		if matches == nil {
+			err = fmt.Errorf("could not parse duration %q", sql)
+		}
+		if err == nil && len(matches[1]) > 0 {
+			days, err = strconv.ParseInt(matches[1], 10, 64)
+		}
+		if err == nil && len(matches[2]) > 0 {
+			hours, err = strconv.ParseInt(matches[2], 10, 64)
+		}
+		if err == nil && len(matches[3]) > 0 {
+			minutes, err = strconv.ParseInt(matches[3], 10, 64)
+		}
+		if err == nil && len(matches[4]) > 0 {
+			seconds, err = strconv.ParseFloat(matches[4], 64)
+		}
+		if err != nil {
+			err = fmt.Errorf("could not parse duration %q", sql)
+		}
+	}
+
 	// Duration's unit is nanoseconds; make sure everything has int64
 	// type
 	dHours := hours * 24 * days

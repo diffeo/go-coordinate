@@ -102,6 +102,9 @@ func TestSpecDeletedGone(t *testing.T) {
 func TestSpecInNamespaceGone(t *testing.T) {
 	coordinatetest.TestSpecInNamespaceGone(t)
 }
+func TestOneDayInterval(t *testing.T) {
+	coordinatetest.TestOneDayInterval(t)
+}
 func TestTrivialWorkUnitFlow(t *testing.T) {
 	coordinatetest.TestTrivialWorkUnitFlow(t)
 }

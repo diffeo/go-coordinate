@@ -544,3 +544,23 @@ func TestSpecInNamespaceGone(t *testing.T) {
 			"+v", err)
 	}
 }
+
+// TestOneDayInterval tests a continuous work spec with a 1-day
+// interval.  This is a regression test for a specific parsing issue
+// in the PostgreSQL backend.
+func TestOneDayInterval(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestOneDayInterval",
+		WorkerName:    "worker",
+		WorkSpecData: map[string]interface{}{
+			"name":       "spec",
+			"min_gb":     1,
+			"continuous": true,
+			"interval":   86400,
+		},
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	sts.RequestOneAttempt(t)
+}
