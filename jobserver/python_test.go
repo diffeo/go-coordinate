@@ -1286,7 +1286,7 @@ func TestWorkUnitValue(t *testing.T) {
 	j := setUpTest(t, "TestWorkUnitValue")
 	defer tearDownTest(t, j)
 
-	aUUID, err := uuid.FromString("01234567-89ab-cdef-0123-456789abcdef")
+	aUUID, err := uuid.FromString("01234567-89ab-4def-8123-456789abcdef")
 	if !assert.NoError(t, err) {
 		return
 	}
