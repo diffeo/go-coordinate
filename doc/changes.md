@@ -1,6 +1,22 @@
 Major Changes
 =============
 
+0.3.1 (TBD)
+-----------
+
+* Bug fix relating to multiple concurrent Go workers and concurrent
+  map access
+* Bug fixes for continuous work units on the PostgreSQL backend,
+  including fixes for intervals longer than 3600 seconds, intervals
+  longer than 86400 seconds, and concurrent attempts to execute
+  continuous work units
+* Don't ignore a requested work spec name from Python
+  `coordinate run_one --from-work-spec`
+
+The `github.com/satori/go.uuid` library made its UUID parsing stricter
+in this timeframe as well, so UUID values passed in work unit data or
+elsewhere may be rejected if key bits do not conform to RFC 4122.
+
 0.3.0 (8 Apr 2016)
 ------------------
 
