@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2016 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package restserver
@@ -20,6 +20,7 @@ package restserver
 // status codes.
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/diffeo/go-coordinate/restdata"
@@ -127,6 +128,44 @@ type resourceHandler struct {
 	Delete func(*context) (interface{}, error)
 }
 
+func toJSON(out interface{}) ([]byte, error) {
+	buf := &bytes.Buffer{}
+	json := &codec.JsonHandle{}
+	encoder := codec.NewEncoder(buf, json)
+	err := encoder.Encode(out)
+	return buf.Bytes(), err
+}
+
+// writeAResponse sends an HTTP response back.  It really ought not to
+// panic.
+func writeAResponse(resp http.ResponseWriter, status int, responseType string, out interface{}, converter func(interface{}) ([]byte, error)) {
+	var content []byte
+	var err error
+	if out != nil {
+		content, err = converter(out)
+	}
+	if err != nil {
+		status = http.StatusInternalServerError
+		out = restdata.ErrorResponse{Error: "error", Message: err.Error()}
+		content, err = converter(out)
+	}
+	if err != nil {
+		// joy
+		status = http.StatusInternalServerError
+		responseType = "text/plain"
+		content = []byte("multiple fault in response encoding: " + err.Error())
+	}
+
+	// It should not be possible to panic beyond this point.
+	resp.Header().Set("Content-Type", responseType)
+	resp.WriteHeader(status)
+	if content != nil {
+		// Any error at this point will be a network error and
+		// we can't usefully recover
+		_, _ = resp.Write(content)
+	}
+}
+
 func (h *resourceHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	var (
 		ctx          *context
@@ -141,11 +180,7 @@ func (h *resourceHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 		if recovered := recover(); recovered != nil {
 			response := restdata.ErrorResponse{}
 			response.FromPanic(recovered)
-			resp.Header().Set("Content-Type", restdata.V1JSONMediaType)
-			resp.WriteHeader(http.StatusInternalServerError)
-			json := &codec.JsonHandle{}
-			encoder := codec.NewEncoder(resp, json)
-			encoder.MustEncode(response)
+			writeAResponse(resp, http.StatusInternalServerError, restdata.V1JSONMediaType, response, toJSON)
 		}
 	}()
 
@@ -239,12 +274,8 @@ func (h *resourceHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 	// also possible for the actual writer to fail, but by the
 	// point this happens we've already written an HTTP status
 	// line, so we're not necessarily doing better than panicking.
-	responseWriters := map[string]func(){
-		restdata.V1JSONMediaType: func() {
-			json := &codec.JsonHandle{}
-			encoder := codec.NewEncoder(resp, json)
-			encoder.MustEncode(out)
-		},
+	responseWriters := map[string]func(interface{}) ([]byte, error){
+		restdata.V1JSONMediaType: toJSON,
 	}
 	responseWriter, understood := responseWriters[typeMap[responseType]]
 	if !understood {
@@ -255,14 +286,7 @@ func (h *resourceHandler) ServeHTTP(resp http.ResponseWriter, req *http.Request)
 		out = restdata.ErrorResponse{Error: "error", Message: "Invalid response type " + responseType}
 	}
 
-	// Actually send the response
-	if out != nil {
-		resp.Header().Set("Content-Type", responseType)
-	}
-	resp.WriteHeader(status)
-	if out != nil {
-		responseWriter()
-	}
+	writeAResponse(resp, status, responseType, out, responseWriter)
 }
 
 // negotiateResponse returns a supported MIME type for the response
