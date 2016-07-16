@@ -1,8 +1,8 @@
 Major Changes
 =============
 
-0.3.1 (TBD)
------------
+0.4.0 (29 Jun 2016)
+-------------------
 
 * Bug fix relating to multiple concurrent Go workers and concurrent
   map access
