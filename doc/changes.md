@@ -1,6 +1,11 @@
 Major Changes
 =============
 
+0.4.1 (TBD)
+-----------
+
+* Bug fix in Go decoding of CBOR-RPC responses.
+
 0.4.0 (29 Jun 2016)
 -------------------
 

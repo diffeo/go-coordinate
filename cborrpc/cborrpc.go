@@ -128,8 +128,10 @@ func (x respExt) UpdateExt(dest interface{}, v interface{}) {
 	response := dest.(*Response)
 	response.ID = uint(wire["id"].(uint64))
 	response.Result = wire["result"]
-	errorDict := wire["error"].(map[string]interface{})
-	response.Error = string(errorDict["message"].([]byte))
+	if wire["error"] != nil {
+		errorDict := wire["error"].(map[string]interface{})
+		response.Error = string(errorDict["message"].([]byte))
+	}
 }
 
 // PythonTuple is a simple Go wrapper representing a Python tuple.

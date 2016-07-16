@@ -377,6 +377,20 @@ func TestDecodeRegressions(t *testing.T) {
 			Params: tests["params"].Value.([]interface{}),
 		},
 	}
+	tests["responseMap"] = DeTest{
+		Data: bytes.Join([][]byte{
+			[]byte{0xA2},
+			DeTestByteString("id").Data,
+			[]byte{0x02},
+			DeTestByteString("result").Data,
+			[]byte{0x81},
+			DeTestByteString("x").Data,
+		}, []byte{}),
+		Value: map[interface{}]interface{}{
+			"id":     uint64(2),
+			"result": []interface{}{[]byte("x")},
+		},
+	}
 
 	for name, test := range tests {
 		decoder := codec.NewDecoderBytes(test.Data, cbor)
@@ -385,5 +399,31 @@ func TestDecodeRegressions(t *testing.T) {
 		if assert.NoError(t, err, "%v", name) {
 			assert.Equal(t, test.Value, actual, "%v", name)
 		}
+	}
+}
+
+func TestDecodeResponse(t *testing.T) {
+	inner := bytes.Join([][]byte{
+		[]byte{0xA2},
+		DeTestByteString("id").Data,
+		[]byte{0x02},
+		DeTestByteString("result").Data,
+		[]byte{0x81},
+		DeTestByteString("x").Data,
+	}, []byte{})
+	outer := bytes.Join([][]byte{
+		[]byte{0xD8, 0x18, 0x58, byte(len(inner))},
+		inner,
+	}, []byte{})
+	decoder := codec.NewDecoderBytes(outer, cbor)
+	var actual Response
+	expected := Response{
+		ID:     2,
+		Result: []interface{}{[]byte("x")},
+		Error:  "",
+	}
+	err := decoder.Decode(&actual)
+	if assert.NoError(t, err) {
+		assert.Equal(t, expected, actual)
 	}
 }
