@@ -107,7 +107,10 @@ func (spec *workSpec) addWorkUnit(name string, dataBytes []byte, meta coordinate
 		fields.Add(&params, "not_before", timeToNullTime(meta.NotBefore))
 		query := buildUpdate(workUnitTable,
 			fields.UpdateChanges(),
-			[]string{workUnitHasName(&params, name)}) +
+			[]string{
+				workUnitInSpec(&params, spec.id),
+				workUnitHasName(&params, name),
+			}) +
 			" RETURNING id"
 
 		// Let's also set up a second query.  If that UPDATE

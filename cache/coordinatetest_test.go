@@ -126,6 +126,9 @@ func TestWorkUnitPrioritySet(t *testing.T) {
 func TestWorkUnitData(t *testing.T) {
 	coordinatetest.TestWorkUnitData(t)
 }
+func TestAddWorkUnitBleedover(t *testing.T) {
+	coordinatetest.TestAddWorkUnitBleedover(t)
+}
 func TestRecreateWorkUnits(t *testing.T) {
 	coordinatetest.TestRecreateWorkUnits(t)
 }

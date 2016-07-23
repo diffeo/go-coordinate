@@ -5,6 +5,9 @@ Major Changes
 -----------
 
 * Bug fix in Go decoding of CBOR-RPC responses.
+* Bug fix adding work units in the PostgreSQL backend,
+  where adding a work unit that already existed would affect all work
+  specs with performance implications
 
 0.4.0 (29 Jun 2016)
 -------------------

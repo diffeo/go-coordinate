@@ -464,6 +464,59 @@ func TestWorkUnitData(t *testing.T) {
 	}
 }
 
+// TestAddWorkUnitBleedover validates a bug in the postgres backend
+// where adding a duplicate work unit in one work spec would modify
+// similarly-named work units' data in all work specs.
+func TestAddWorkUnitBleedover(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestAddWorkUnitBleedover",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	specA, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "a",
+	})
+	if !assert.NoError(t, err) {
+		return
+	}
+	specB, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
+		"name": "b",
+	})
+	if !assert.NoError(t, err) {
+		return
+	}
+	unitA, err := specA.AddWorkUnit("unit", map[string]interface{}{
+		"unit": "a",
+	}, coordinate.WorkUnitMeta{})
+	if !assert.NoError(t, err) {
+		return
+	}
+	unitB, err := specB.AddWorkUnit("unit", map[string]interface{}{
+		"unit": "b",
+	}, coordinate.WorkUnitMeta{})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	// Pre-check:
+	DataMatches(t, unitA, map[string]interface{}{"unit": "a"})
+	DataMatches(t, unitB, map[string]interface{}{"unit": "b"})
+
+	// Now re-add unit B
+	unitB2, err := specB.AddWorkUnit("unit", map[string]interface{}{
+		"unit": "c",
+	}, coordinate.WorkUnitMeta{})
+	if !assert.NoError(t, err) {
+		return
+	}
+
+	// The bug was that unitA's data would have changed
+	DataMatches(t, unitA, map[string]interface{}{"unit": "a"})
+	DataMatches(t, unitB, map[string]interface{}{"unit": "c"})
+	DataMatches(t, unitB2, map[string]interface{}{"unit": "c"})
+}
+
 // TestRecreateWorkUnits checks that creating work units that already
 // exist works successfully.
 func TestRecreateWorkUnits(t *testing.T) {
