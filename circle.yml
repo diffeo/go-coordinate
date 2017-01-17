@@ -1,0 +1,71 @@
+# Circle CI configuration
+
+general:
+  # Build within the GOPATH in order to use standard Go tooling.
+  # The location is relative to the default location.
+  build_dir: ../.go_workspace/src/$IMPORT_PATH
+
+machine:
+  environment:
+    DEPS: $HOME/deps
+    GOPATH: $HOME/.go_workspace
+    IMPORT_PATH: github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+
+    # dependency version definitions
+    GLIDEV: v0.12.2
+
+checkout:
+  post:
+    # Prepare the GOPATH and copy the current version of this repo into it
+    - |
+      set -euo pipefail
+
+      mkdir -p "$GOPATH/src/$(dirname $IMPORT_PATH)"
+      rm -rf $GOPATH/src/$IMPORT_PATH
+      cp -r $HOME/$CIRCLE_PROJECT_REPONAME $GOPATH/src/$IMPORT_PATH
+
+dependencies:
+  cache_directories:
+    # env variables aren't supported here
+    - ~/deps
+    - ~/.glide
+  pre:
+    - |
+      set -euo pipefail
+
+      mkdir -p $DEPS
+
+      # Glide dependency manager (wget is used to follow github redirects)
+      if [ ! -d "$DEPS/glide-$GLIDEV" ]; then
+        wget -O "$DEPS/glide-$GLIDEV-linux-amd64.zip" "https://github.com/Masterminds/glide/releases/download/$GLIDEV/glide-$GLIDEV-linux-amd64.zip"
+        unzip -o -d "$DEPS/glide-$GLIDEV" "$DEPS/glide-$GLIDEV-linux-amd64.zip"
+        cp "$DEPS/glide-$GLIDEV/linux-amd64/glide" $HOME/bin/glide;
+      else
+        cp "$DEPS/glide-$GLIDEV/linux-amd64/glide" $HOME/bin/glide;
+        echo "glide version $GLIDEV already installed"
+      fi
+
+      go get github.com/golang/lint/golint
+
+      ls -l $DEPS $HOME/bin
+
+      # print out versions
+      go version
+      glide --version
+
+  override:
+    # get dependencies
+    - glide install
+
+    # build the app, installing for faster subsequent test execution
+    - go install -v $(glide novendor)
+
+test:
+  pre:
+    # linting and vetting tools
+    - golint -min_confidence=0.8 $(glide novendor)
+    - go vet -x $(glide novendor)
+
+  override:
+    # run the tests with race detection
+    - go test -v -race $(glide novendor)
