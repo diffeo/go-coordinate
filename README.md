@@ -1,6 +1,9 @@
 Go Coordinate Daemon
 ====================
 
+[![CircleCI](https://circleci.com/gh/diffeo/go-coordinate.svg?style=svg)](https://circleci.com/gh/diffeo/go-coordinate)
+[![Docker Repository on Quay](https://quay.io/repository/diffeo/coordinated/status "Docker Repository on Quay")](https://quay.io/repository/diffeo/coordinated)
+
 This package provides a reimplementation of the Diffeo Coordinate
 (https://github.com/diffeo/coordinate) daemon.  It is fully compatible
 with existing Python Coordinate code, and provides a REST interface
