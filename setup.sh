@@ -21,7 +21,7 @@ GO_SUBMODULE="cmd/coordinated"
 set -e
 
 # Directory containing this script
-D=$(cd $(dirname "$0") && pwd -P)
+D=$(cd "$(dirname "$0")" && pwd -P)
 
 # Output directory
 O=$(pwd -P)

@@ -1,0 +1,99 @@
+# Circle CI configuration
+
+general:
+  # Build within the GOPATH in order to use standard Go tooling.
+  # The location is relative to the default location.
+  build_dir: ../.go_workspace/src/$IMPORT_PATH
+
+machine:
+  services:
+    - docker
+  environment:
+    DEPS: $HOME/deps
+    GOPATH: $HOME/.go_workspace
+    IMPORT_PATH: github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME
+
+    # dependency version definitions
+    GLIDEV: v0.12.2
+
+checkout:
+  post:
+    # Prepare the GOPATH and copy the current version of this repo into it
+    - |
+      set -euo pipefail
+
+      mkdir -p "$GOPATH/src/$(dirname $IMPORT_PATH)"
+      rm -rf $GOPATH/src/$IMPORT_PATH
+      cp -r $HOME/$CIRCLE_PROJECT_REPONAME $GOPATH/src/$IMPORT_PATH
+
+dependencies:
+  cache_directories:
+    # env variables aren't supported here
+    - ~/deps
+    - ~/.glide
+  pre:
+    - |
+      set -euo pipefail
+
+      mkdir -p $DEPS
+
+      # Glide dependency manager (wget is used to follow github redirects)
+      if [ ! -d "$DEPS/glide-$GLIDEV" ]; then
+        wget -O "$DEPS/glide-$GLIDEV-linux-amd64.zip" "https://github.com/Masterminds/glide/releases/download/$GLIDEV/glide-$GLIDEV-linux-amd64.zip"
+        unzip -o -d "$DEPS/glide-$GLIDEV" "$DEPS/glide-$GLIDEV-linux-amd64.zip"
+        cp "$DEPS/glide-$GLIDEV/linux-amd64/glide" $HOME/bin/glide;
+      else
+        cp "$DEPS/glide-$GLIDEV/linux-amd64/glide" $HOME/bin/glide;
+        echo "glide version $GLIDEV already installed"
+      fi
+
+      go get github.com/golang/lint/golint
+
+      ls -l $DEPS $HOME/bin
+
+      # print out versions
+      go version
+      glide --version
+
+  override:
+    # get dependencies
+    - glide install
+
+    # build the app, installing for faster subsequent test execution
+    - go install -v $(glide novendor)
+
+    # make `git describe HEAD` work as expected
+    - git fetch --unshallow
+
+    # create directory for the build to occur within
+    - mkdir -p build
+
+    # Run Docker setup script, preparing the build an image
+    - ../setup.sh:
+        pwd: build
+    # Build the docker image
+    - docker build -t quay.io/diffeo/coordinated:$(cat container-version) .:
+        pwd: build
+
+test:
+  pre:
+    # linting and vetting tools
+    - golint -min_confidence=0.8 $(glide novendor)
+    - go vet -x $(glide novendor)
+
+  override:
+    # run the tests
+    # TODO: add -race flag once race conditions have been eliminated.
+    - go test -v $(glide novendor)
+
+deployment:
+  dev:
+    branch: master
+    owner: diffeo
+    commands:
+      # Login to our quay.io repository
+      - docker login -u "$DOCKER_USER" -p "$DOCKER_PASS" -e bot@diffeo.com quay.io:
+          pwd: build
+      # push image to our repository
+      - docker push quay.io/diffeo/coordinated:$(cat container-version):
+          pwd: build
