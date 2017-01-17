@@ -6,6 +6,8 @@ general:
   build_dir: ../.go_workspace/src/$IMPORT_PATH
 
 machine:
+  services:
+    - docker
   environment:
     DEPS: $HOME/deps
     GOPATH: $HOME/.go_workspace
@@ -60,6 +62,19 @@ dependencies:
     # build the app, installing for faster subsequent test execution
     - go install -v $(glide novendor)
 
+    # make `git describe HEAD` work as expected
+    - git fetch --unshallow
+
+    # create directory for the build to occur within
+    - mkdir -p build
+
+    # Run Docker setup script, preparing the build an image
+    - ../setup.sh:
+        pwd: build
+    # Build the docker image
+    - docker build -t quay.io/diffeo/coordinated:$(cat container-version) .:
+        pwd: build
+
 test:
   pre:
     # linting and vetting tools
@@ -70,3 +85,15 @@ test:
     # run the tests
     # TODO: add -race flag once race conditions have been eliminated.
     - go test -v $(glide novendor)
+
+deployment:
+  dev:
+    branch: master
+    owner: diffeo
+    commands:
+      # Login to our quay.io repository
+      - docker login -u "$DOCKER_USER" -p "$DOCKER_PASS" -e bot@diffeo.com quay.io:
+          pwd: build
+      # push image to our repository
+      - docker push quay.io/diffeo/coordinated:$(cat container-version):
+          pwd: build
