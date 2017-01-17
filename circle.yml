@@ -72,8 +72,15 @@ dependencies:
     - ../setup.sh:
         pwd: build
     # Build the docker image
-    - docker build -t quay.io/diffeo/coordinated:$(cat container-version) .:
-        pwd: build
+    - docker build -t quay.io/diffeo/coordinated:$(cat build/container-version) build/
+
+    # Login to our quay.io repository
+    - docker login -u "$DOCKER_USER" -p "$DOCKER_PASS" -e bot@diffeo.com quay.io
+    # push image to our repository
+    - docker push quay.io/diffeo/coordinated:$(cat build/container-version)
+    # push a "latest" tag to our repository
+    - docker tag quay.io/diffeo/coordinated:$(cat build/container-version) quay.io/diffeo/coordinated:latest
+    - docker push quay.io/diffeo/coordinated:latest
 
 test:
   pre:
