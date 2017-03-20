@@ -4,7 +4,7 @@
 --
 -- +migrate Up
 
-CREATE INDEX CONCURRENTLY worker_parent_idx on worker(parent);
+CREATE INDEX worker_parent_idx on worker(parent);
 
 -- +migrate Down
 DROP INDEX worker_parent_idx;
