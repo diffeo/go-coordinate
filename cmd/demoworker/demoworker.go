@@ -8,14 +8,15 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"strings"
+
 	"github.com/diffeo/go-coordinate/backend"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/worker"
 	"github.com/mitchellh/mapstructure"
-	"golang.org/x/net/context"
-	"strings"
 )
 
 func main() {

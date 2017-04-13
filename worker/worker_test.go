@@ -4,13 +4,14 @@
 package worker
 
 import (
+	"context"
+	"testing"
+	"time"
+
 	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/memory"
 	"github.com/stretchr/testify/assert"
-	"golang.org/x/net/context"
-	"testing"
-	"time"
 )
 
 type Suite struct {
