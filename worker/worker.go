@@ -6,15 +6,16 @@
 package worker
 
 import (
+	"context"
 	"fmt"
-	"github.com/benbjohnson/clock"
-	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/satori/go.uuid"
-	"golang.org/x/net/context"
 	"net"
 	"os"
 	"runtime"
 	"time"
+
+	"github.com/benbjohnson/clock"
+	"github.com/diffeo/go-coordinate/coordinate"
+	"github.com/satori/go.uuid"
 )
 
 // Worker is foo.
