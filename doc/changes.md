@@ -1,6 +1,14 @@
 Major Changes
 =============
 
+0.4.2 (TBD)
+-----------
+
+* Requires Go 1.7 or later, and its standard `context` package
+* Add CircleCI integration, Quay reference Docker image
+* PostgreSQL backend performance improvement for long-running systems
+  with many old workers
+
 0.4.1 (15 Aug 2016)
 -----------
 
