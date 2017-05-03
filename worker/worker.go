@@ -317,13 +317,13 @@ func (w *Worker) maybeDoWork(ctx context.Context, gotWork chan<- bool, finished 
 	if child == "" {
 		return
 	}
-	go w.doWork(child, w.childWorkers[child], ctx, gotWork, finished)
+	go w.doWork(ctx, child, w.childWorkers[child], gotWork, finished)
 }
 
 // doWork gets attempts and runs them.  It assumes it is running in its
 // own goroutine.  It signals gotWork when the call to RequestAttempts
 // returns, and signals finished immediately before returning.
-func (w *Worker) doWork(id string, worker coordinate.Worker, ctx context.Context, gotWork chan<- bool, finished chan<- string) {
+func (w *Worker) doWork(ctx context.Context, id string, worker coordinate.Worker, gotWork chan<- bool, finished chan<- string) {
 	// When we finish, signal the finished channel with our own ID
 	defer func() {
 		finished <- id
