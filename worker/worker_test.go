@@ -50,7 +50,15 @@ func (s *Suite) SetUpTest(t *testing.T) {
 				assert.NoError(t, err, "finishing attempt in sanity")
 			}
 		},
-
+		"sanity2": func(ctx context.Context, attempts []coordinate.Attempt) {
+			if assert.Len(t, attempts, 1) {
+				assert.Equal(t, "unit", attempts[0].WorkUnit().Name())
+				assert.Equal(t, "spec2", attempts[0].WorkUnit().WorkSpec().Name())
+				s.Bit = true
+				err := attempts[0].Finish(nil)
+				assert.NoError(t, err, "finishing attempt in sanity")
+			}
+		},
 		"timeout": func(ctx context.Context, attempts []coordinate.Attempt) {
 			if !assert.Len(t, attempts, 1) {
 				return
@@ -84,10 +92,10 @@ func (s *Suite) BootstrapWorker(t *testing.T) {
 	}
 }
 
-func (s *Suite) CreateSpecAndUnit(t *testing.T, task string) {
+func (s *Suite) CreateSpecAndUnit(t *testing.T, task string, specName string, runtime string) {
 	spec, err := s.Namespace.SetWorkSpec(map[string]interface{}{
-		"name":    "spec",
-		"runtime": "go",
+		"name":    specName,
+		"runtime": runtime,
 		"task":    task,
 	})
 	if !assert.NoError(t, err) {
@@ -196,11 +204,35 @@ func TestDoNoWork(t *testing.T) {
 func TestDoOneWork(t *testing.T) {
 	var s Suite
 	s.SetUpTest(t)
-	s.CreateSpecAndUnit(t, "sanity")
+	s.CreateSpecAndUnit(t, "sanity", "spec", "go")
 	s.BootstrapWorker(t)
 
 	assert.False(t, s.Bit)
 
+	s.GoDoWork(t)
+	s.GetWork(t, true)
+	s.Finish(t)
+
+	assert.True(t, s.Bit)
+
+	s.GoDoWork(t)
+	s.GetWork(t, false)
+	s.Finish(t)
+}
+
+func TestDoOneWorkDiffRuntimes(t *testing.T) {
+	var s Suite
+	s.SetUpTest(t)
+	s.CreateSpecAndUnit(t, "sanity2", "spec2", "go-priority")
+	s.BootstrapWorker(t)
+
+	assert.False(t, s.Bit)
+
+	s.GoDoWork(t)
+	s.GetWork(t, false)
+	s.Finish(t)
+
+	s.Worker.Runtimes = []string{"go-priority"}
 	s.GoDoWork(t)
 	s.GetWork(t, true)
 	s.Finish(t)
@@ -235,7 +267,7 @@ func TestHeartbeat(t *testing.T) {
 func TestNonExpiration(t *testing.T) {
 	var s Suite
 	s.SetUpTest(t)
-	s.CreateSpecAndUnit(t, "timeout")
+	s.CreateSpecAndUnit(t, "timeout", "spec", "go")
 	s.BootstrapWorker(t)
 
 	s.GoDoWork(t)
@@ -264,7 +296,7 @@ func TestNonExpiration(t *testing.T) {
 func TestExpirationCooperating(t *testing.T) {
 	var s Suite
 	s.SetUpTest(t)
-	s.CreateSpecAndUnit(t, "timeout")
+	s.CreateSpecAndUnit(t, "timeout", "spec", "go")
 	s.BootstrapWorker(t)
 
 	s.GoDoWork(t)
@@ -298,7 +330,7 @@ func TestExpirationCooperating(t *testing.T) {
 func TestExpirationIgnoring(t *testing.T) {
 	var s Suite
 	s.SetUpTest(t)
-	s.CreateSpecAndUnit(t, "timeout")
+	s.CreateSpecAndUnit(t, "timeout", "spec", "go")
 	s.BootstrapWorker(t)
 
 	s.GoDoWork(t)
