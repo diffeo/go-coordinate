@@ -1,56 +1,52 @@
-hash: 620d232aa42d50399a155bab76d14a0d2c11422b5a6c34c3eadac582867906ff
-updated: 2017-01-17T13:33:12.633153811-05:00
+hash: 9bf66dbc8240f696b14f23a4496e4def68d580d0b5304e024aac60bc84d00ff1
+updated: 2017-05-04T09:32:35.077646325-04:00
 imports:
 - name: github.com/benbjohnson/clock
   version: 7dc76406b6d3c05b5f71a86293cbcf3c4ea03b19
-- name: github.com/codegangsta/cli
-  version: f1be59ff3d239f0942b201619030d302bce912cc
 - name: github.com/davecgh/go-spew
-  version: 04cdfd42973bb9c8589fd6a731800cf222fde1a9
+  version: 6d212800a42e8ab5c146b8ace3490ee17e5225f9
   subpackages:
   - spew
 - name: github.com/gorilla/context
-  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
+  version: 1ea25387ff6f684839d82767c1733ff4d4d15d0a
 - name: github.com/gorilla/mux
-  version: 757bef944d0f21880861c2dd9c871ca543023cba
+  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/jtacoma/uritemplates
   version: 307ae868f90f4ee1b73ebe4596e0394237dacce8
 - name: github.com/lib/pq
-  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
+  version: 472a0745531a17dbac346e828b4c60e73ddff30c
   subpackages:
   - oid
 - name: github.com/mitchellh/mapstructure
-  version: bfdb1a85537d60bc7e954e600c250219ea497417
+  version: 53818660ed4955e899c0bcafa97299a388bd7c8e
 - name: github.com/pmezard/go-difflib
   version: d8ed2627bdf02c080bf22230dbb337003b7aba2d
   subpackages:
   - difflib
 - name: github.com/rubenv/sql-migrate
-  version: 1ed79968dfca5de79adb13c84523caaa4fc865a9
+  version: a3e2963537993d229b6e257d10bd8bc640b06ce3
   subpackages:
   - sqlparse
 - name: github.com/satori/go.uuid
-  version: b061729afc07e77a8aa4fad0a2fd840958f1942a
-- name: github.com/Sirupsen/logrus
-  version: d26492970760ca5d33129d2d799e34be5c4782eb
+  version: f9ab0dce87d815821e221626b772e3475a0d2749
+- name: github.com/sirupsen/logrus
+  version: ba1b36c82c5e05c4f912a88eab0dcd91a171688f
 - name: github.com/stretchr/testify
-  version: 2402e8e7a02fc811447d11f881aa9746cdc57983
+  version: 69483b4bd14f5845b5a1e55bca19e954e827f1d0
   subpackages:
   - assert
 - name: github.com/ugorji/go
-  version: ded73eae5db7e7a0ef6f55aace87a2873c5d2b74
+  version: 708a42d246822952f38190a8d8c4e6b16a0e600c
   subpackages:
   - codec
-- name: golang.org/x/net
-  version: f2499483f923065a842d38eb4c7f1927e6fc6e6d
-  subpackages:
-  - context
+- name: github.com/urfave/cli
+  version: ab403a54a148f2d857920810291539e1f817ee7b
 - name: golang.org/x/sys
-  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
+  version: 8fd966b47dbdd4faa03de0d06e3d733baeb9a1a9
   subpackages:
   - unix
 - name: gopkg.in/gorp.v1
   version: c87af80f3cc5036b55b83d77171e156791085e2e
 - name: gopkg.in/yaml.v2
-  version: a5b47d31c556af34a302ce5d659e6fea44d90de0
+  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 testImports: []

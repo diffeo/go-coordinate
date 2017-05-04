@@ -1,21 +1,18 @@
 package: github.com/diffeo/go-coordinate
 import:
-- package: github.com/Sirupsen/logrus
 - package: github.com/benbjohnson/clock
-- package: github.com/codegangsta/cli
 - package: github.com/gorilla/mux
 - package: github.com/jtacoma/uritemplates
 - package: github.com/lib/pq
 - package: github.com/mitchellh/mapstructure
 - package: github.com/rubenv/sql-migrate
 - package: github.com/satori/go.uuid
+- package: github.com/sirupsen/logrus
 - package: github.com/stretchr/testify
   subpackages:
   - assert
 - package: github.com/ugorji/go
   subpackages:
   - codec
-- package: golang.org/x/net
-  subpackages:
-  - context
+- package: github.com/urfave/cli
 - package: gopkg.in/yaml.v2

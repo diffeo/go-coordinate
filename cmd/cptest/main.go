@@ -1,4 +1,4 @@
-// Copyright 2016 Diffeo, Inc.
+// Copyright 2016-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Cptest copies test functions from a package into a new file.  The
@@ -31,7 +31,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/codegangsta/cli"
+	"github.com/urfave/cli"
 	"go/ast"
 	"go/build"
 	"go/format"

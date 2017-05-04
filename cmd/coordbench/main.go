@@ -1,14 +1,14 @@
-// Copyright 2016 Diffeo, Inc.
+// Copyright 2016-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package coordbench provides a load-generation tool for Coordinate.
 package main
 
 import (
-	"github.com/codegangsta/cli"
 	"github.com/diffeo/go-coordinate/backend"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/satori/go.uuid"
+	"github.com/urfave/cli"
 	"runtime"
 	"sync"
 	"time"

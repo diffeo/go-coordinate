@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Diffeo, Inc.
+// Copyright 2015-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package main
@@ -13,11 +13,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/benbjohnson/clock"
 	"github.com/diffeo/go-coordinate/cborrpc"
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/jobserver"
+	"github.com/sirupsen/logrus"
 	"github.com/ugorji/go/codec"
 )
 

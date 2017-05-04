@@ -1,4 +1,4 @@
-// Copyright 2015 Diffeo, Inc.
+// Copyright 2015-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 // Package coordinated provides a wire-compatible reimplementation of
@@ -13,9 +13,9 @@ import (
 	"flag"
 	"io/ioutil"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/diffeo/go-coordinate/backend"
 	"github.com/diffeo/go-coordinate/cache"
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 )
 
