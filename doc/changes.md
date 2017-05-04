@@ -5,9 +5,16 @@ Major Changes
 -----------
 
 * Requires Go 1.7 or later, and its standard `context` package
+  ([#4](https://github.com/diffeo/go-coordinate/pulls/4))
 * Add CircleCI integration, Quay reference Docker image
+  ([#1](https://github.com/diffeo/go-coordinate/pulls/1),
+  [#2](https://github.com/diffeo/pulls/2))
 * PostgreSQL backend performance improvement for long-running systems
   with many old workers
+  ([#3](https://github.com/diffeo/go-coordinate/pulls/3))
+* The Go worker framework can take a list of runtime strings as
+  parameters, it is not limited to `"go"`
+  ([#5](https://github.com/diffeo/go-coordinate/pulls/5))
 
 0.4.1 (15 Aug 2016)
 -----------
