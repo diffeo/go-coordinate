@@ -26,10 +26,11 @@ type Worker struct {
 	Namespace coordinate.Namespace
 
 	// Tasks defines the tasks this Worker is capable of running.
-	// Work specs must declare "runtime: go", and also have a
-	// "task:" field that names one of the tasks in this map.  If
-	// a work spec has no "task:", the work spec name is looked up
-	// here instead.
+	// Work specs must declare a runtime consistent with this
+	// worker's runtime settings (by default, that's "runtime: go"),
+	// and also have a "task:" field that names one of the tasks in
+	// this map. If a work spec has no "task:", the work spec name
+	// is looked up here instead.
 	//
 	// The task function is called with a context and a slice of
 	// at least one attempt.  The context will be canceled when
@@ -79,6 +80,11 @@ type Worker struct {
 	// should need to set this.  If unset, uses a time source
 	// backed by real wall-clock time.
 	Clock clock.Clock
+
+	// Runtimes sets the language runtimes that should be used
+	// with this worker. When nil, a default value of ["go"] is
+	// used.
+	Runtimes []string
 
 	// parentWorker is a saved Coordinate worker object with ID
 	// WorkerID.
@@ -317,20 +323,20 @@ func (w *Worker) maybeDoWork(ctx context.Context, gotWork chan<- bool, finished 
 	if child == "" {
 		return
 	}
-	go w.doWork(child, w.childWorkers[child], ctx, gotWork, finished)
+	go w.doWork(ctx, child, w.childWorkers[child], gotWork, finished)
 }
 
 // doWork gets attempts and runs them.  It assumes it is running in its
 // own goroutine.  It signals gotWork when the call to RequestAttempts
 // returns, and signals finished immediately before returning.
-func (w *Worker) doWork(id string, worker coordinate.Worker, ctx context.Context, gotWork chan<- bool, finished chan<- string) {
+func (w *Worker) doWork(ctx context.Context, id string, worker coordinate.Worker, gotWork chan<- bool, finished chan<- string) {
 	// When we finish, signal the finished channel with our own ID
 	defer func() {
 		finished <- id
 	}()
 
 	attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{
-		Runtimes:          []string{"go"},
+		Runtimes:          w.runtimes(),
 		NumberOfWorkUnits: w.MaxAttempts,
 	})
 	if err != nil {
@@ -389,6 +395,15 @@ func (w *Worker) doWork(id string, worker coordinate.Worker, ctx context.Context
 			_ = attempt.Fail(failure)
 		}
 	}
+}
+
+// runtimes returns the configured runtimes for this worker. If no
+// runtimes are configured, then a default value, ["go"], is returned.
+func (w *Worker) runtimes() []string {
+	if w.Runtimes == nil {
+		return []string{"go"}
+	}
+	return w.Runtimes
 }
 
 // heartbeat reports the current status of the parent worker.
