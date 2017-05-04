@@ -41,6 +41,8 @@ more workers talking to one server.
 Installation
 ------------
 
+From source:
+
     go get github.com/diffeo/go-coordinate/cmd/coordinated
 
 Usage
@@ -71,6 +73,31 @@ coordinate:
 EOF
 coordinate -c config.yaml summary
 ```
+
+Docker
+------
+
+A [Coordinate daemon server image](https://quay.io/diffeo/coordinated)
+is on quay.io:
+
+```sh
+docker run -p 5932:5932 -p 5980:5980 quay.io/diffeo/coordinated
+```
+
+This is a single-binary image that only runs the daemon.  If you need
+any additional command-line options, such as a persistent backend,
+specify them directly after the image name.
+
+```sh
+docker run -d -p 5432:5432 postgres:9.5
+docker run -d -p 5932:5932 -p 5980:5980 quay.io/diffeo/coordinated \
+    -backend postgres://172.17.0.1 -log-requests
+```
+
+The current CI setup has the Docker `latest` tag pointing at a
+`master` commit from this repository.  You may want to specify a
+specific version tag.  The earliest version tag in quay.io is
+`quay.io/diffeo/coordinated:0.4.2`.
 
 Packages
 --------
