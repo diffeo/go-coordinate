@@ -1,7 +1,7 @@
 Major Changes
 =============
 
-0.4.2 (TBD)
+0.4.2 (4 May 2017)
 -----------
 
 * Requires Go 1.7 or later, and its standard `context` package
