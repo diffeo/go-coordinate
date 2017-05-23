@@ -399,6 +399,21 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	return result, nil
 }
 
+// countAttempts is a simpler purely-internal function (it is not part
+// of the standard Coordinate API) that just finds how many attempts
+// there are for a work unit.
+func (unit *workUnit) countAttempts(tx *sql.Tx) (int, error) {
+	params := queryParams{}
+	query := buildSelect(
+		[]string{"COUNT(*)"},
+		[]string{attemptTable},
+		[]string{attemptForUnit(&params, unit.id)},
+	)
+	var count int
+	err := tx.QueryRow(query, params...).Scan(&count)
+	return count, err
+}
+
 // Worker attempt functions
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
@@ -503,7 +518,14 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		// Try to create attempts from pre-existing work units
 		// (assuming we expect there to be some)
 		if meta.AvailableCount > 0 {
-			attempts, err = w.chooseAndMakeAttempts(tx, spec, count, now, length)
+			if meta.MaxRetries > 0 {
+				attempts, err = w.chooseMakeFailAttempts(
+					tx, spec, count, meta.MaxRetries,
+					now, length)
+			} else {
+				attempts, err = w.chooseAndMakeAttempts(
+					tx, spec, count, now, length)
+			}
 		}
 		if err != nil || len(attempts) > 0 {
 			return err
@@ -538,6 +560,59 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		err = nil
 	}
 	return attempts, err
+}
+
+// chooseMakeFailAttempts finds work units to do for a specific work
+// spec, honoring the work spec's MaxRetries field.  It doesn't make
+// sense to call this with maxRetries as zero; call
+// chooseAndMakeAttempts instead.
+func (w *worker) chooseMakeFailAttempts(
+	tx *sql.Tx,
+	spec *workSpec,
+	numUnits int,
+	maxRetries int,
+	now time.Time,
+	length time.Duration,
+) ([]coordinate.Attempt, error) {
+	var attempts []coordinate.Attempt
+	for len(attempts) < numUnits {
+		moreAttempts, err := w.chooseAndMakeAttempts(
+			tx, spec, numUnits-len(attempts), now, length)
+		if err != nil {
+			return nil, err
+		}
+		if len(moreAttempts) == 0 {
+			return attempts, nil
+		}
+
+		// For each of the (new) attempts, count the number of
+		// existing attempts for the work unit and maybe fail it.
+		// (It might be nice to do this in a batch, maybe moving
+		// this logic inside chooseAndMakeAttempts?)
+		for _, a := range moreAttempts {
+			// This should always be true but don't push it
+			if aa, ok := a.(*attempt); ok {
+				count, err := aa.unit.countAttempts(tx)
+				if err != nil {
+					return nil, err
+				}
+				if count > maxRetries {
+					err = aa.complete(tx,
+						map[string]interface{}{
+							"traceback": "too many retries",
+						},
+						"failed")
+					if err != nil {
+						return nil, err
+					}
+					continue
+					// and drop this attempt
+				}
+			}
+			attempts = append(attempts, a)
+		}
+	}
+	return attempts, nil
 }
 
 // chooseAndMakeAttempts, in one SQL query, finds work units to do for

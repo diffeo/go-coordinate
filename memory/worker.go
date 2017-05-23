@@ -170,6 +170,12 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		if attempt == nil {
 			break
 		}
+		if meta.MaxRetries > 0 && len(attempt.workUnit.attempts) > meta.MaxRetries {
+			attempt.finish(coordinate.Failed, map[string]interface{}{
+				"traceback": "too many retries",
+			})
+			continue
+		}
 		attempts = append(attempts, attempt)
 		meta.PendingCount++
 	}

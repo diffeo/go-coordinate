@@ -716,3 +716,88 @@ func TestAttemptGone(t *testing.T) {
 			"%+v", err)
 	}
 }
+
+// TestMaxRetries is a simple test for the max_retries work spec
+// option.
+func TestMaxRetries(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestMaxRetries",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkSpecData: map[string]interface{}{
+			"max_retries": 2,
+		},
+		WorkUnitName: "unit",
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	sts.RequestOneAttempt(t)
+
+	// Force the clock far enough ahead that the attempt has expired.
+	// We should get an attempt for the same work unit again.
+	Clock.Add(1 * time.Hour)
+	sts.RequestOneAttempt(t)
+
+	// Force the clock ahead again, and get an attempt.  Since
+	// we exceed max_retries we should not get an attempt.
+	Clock.Add(1 * time.Hour)
+	sts.RequestNoAttempts(t)
+	sts.CheckUnitStatus(t, coordinate.FailedUnit)
+	data, err := sts.WorkUnit.Data()
+	if assert.NoError(t, err) {
+		assert.Equal(t, "too many retries", data["traceback"])
+	}
+}
+
+// TestMaxRetriesMulti tests both setting max_retries and max_getwork.
+func TestMaxRetriesMulti(t *testing.T) {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestMaxRetries",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkSpecData: map[string]interface{}{
+			"max_getwork": 2,
+			"max_retries": 1,
+		},
+	}
+	sts.SetUp(t)
+	defer sts.TearDown(t)
+
+	for _, name := range []string{"a", "b", "c", "d"} {
+		_, err := sts.AddWorkUnit(name)
+		if !assert.NoError(t, err) {
+			return
+		}
+	}
+
+	// Now we should be able to request work and get both a and b
+	req := coordinate.AttemptRequest{
+		NumberOfWorkUnits: 10,
+	}
+	attempts, err := sts.Worker.RequestAttempts(req)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 2) {
+			assert.Equal(t, "a", attempts[0].WorkUnit().Name())
+			assert.Equal(t, "b", attempts[1].WorkUnit().Name())
+		}
+	}
+
+	// Let the first work unit finish and the second time out
+	Clock.Add(1 * time.Minute)
+	err = attempts[0].Finish(nil)
+	assert.NoError(t, err)
+
+	Clock.Add(1 * time.Hour)
+
+	// Now get two more work units.  We expect the system to find
+	// b and c, notice that b is expired, and keep looking to return
+	// c and d.
+	attempts, err = sts.Worker.RequestAttempts(req)
+	if assert.NoError(t, err) {
+		if assert.Len(t, attempts, 2) {
+			assert.Equal(t, "c", attempts[0].WorkUnit().Name())
+			assert.Equal(t, "d", attempts[1].WorkUnit().Name())
+		}
+	}
+}
