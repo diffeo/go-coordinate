@@ -74,6 +74,14 @@ will return at most the lower of this number and the number of
 attempts requested.  This matches a corresponding "max attempts
 returned" field in the work spec metadata.
 
+`max_retries`: Limits the number of attempts that are allowed for a
+single work unit.  Its value is a number, and it defaults to 0
+(unlimited).  If non-zero, calls to `Worker.RequestAttempts()` will
+check the number of attempts that already exist for each work unit,
+and will immediately fail work units that exceed this limit instead of
+returning them to the worker.  This matches a corresponding "max
+retries" field in the work spec metadata.
+
 `then`: Gives the name of another work spec to run after this one.
 Its value is a string.  If this names another valid work spec and work
 units complete with an `output` key in their work unit data, more work
@@ -148,6 +156,8 @@ interval hasn't passed yet.
 
 `MaxAttemptsReturned`: matches the `max_getwork` data field.
 
+`MaxRetries`: matches the `max_retries` data field.
+
 `NextWorkSpecName`: matches the `then` data field.  Ignored if it does
 not match the name of another work spec or if the completed work unit
 data does not have an `output` key.  Cannot be set without reloading
@@ -207,6 +217,12 @@ number requested in the attempt request and not more than the
 max-attempts-returned value in the work spec metadata.  "Best" means
 those with the highest priority values, and of those with equal
 priority values, those with alphabetically earlier work unit names.
+
+**Excessive retries:** If the max-retries value is greater than zero,
+for each work unit, find the number of attempts that exist.  If any
+have more than the maximum, create a new attempt, mark it as "failed",
+and remove it from further consideration.  If this process removes all
+selected work units then return to "picking work units".
 
 **Continuous work units:** If the work unit selection chose a work
 spec with no available work units but with the "continuous" flag set

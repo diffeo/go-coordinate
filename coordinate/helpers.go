@@ -61,6 +61,13 @@ type WorkSpecData struct {
 	// If zero, there is no limit.
 	MaxGetwork int `mapstructure:"max_getwork"`
 
+	// MaxRetries specifies the maximum number of attempts that
+	// should exist for a single work unit.  If this number is
+	// exceeded, Worker.RequestAttempts() will fail work units
+	// rather than return those attempts.  If zero, there is no
+	// limit.
+	MaxRetries int `mapstructure:"max_retries"`
+
 	// Then specifies the name of another work spec that runs
 	// after this one.  On successful completion, if Then is a
 	// non-empty string and the updated work unit data contains
@@ -118,6 +125,7 @@ func ExtractWorkSpecMeta(workSpecDict map[string]interface{}) (name string, meta
 		meta.Interval = time.Duration(data.Interval) * time.Second
 		meta.MaxRunning = data.MaxRunning
 		meta.MaxAttemptsReturned = data.MaxGetwork
+		meta.MaxRetries = data.MaxRetries
 		meta.NextWorkSpecName = data.Then
 		meta.Runtime = data.Runtime
 	}

@@ -1,6 +1,12 @@
 Major Changes
 =============
 
+0.4.3 (TBD)
+-----------
+
+* Add a `max_retries` work spec parameter to limit work unit retries
+  ([#6](https://github.com/diffeo/go-coordinate/issues/6))
+
 0.4.2 (4 May 2017)
 -----------
 

@@ -57,6 +57,7 @@ const (
 	workSpecNextContinuous      = workSpecTable + ".next_continuous"
 	workSpecMaxRunning          = workSpecTable + ".max_running"
 	workSpecMaxAttemptsReturned = workSpecTable + ".max_attempts_returned"
+	workSpecMaxRetries          = workSpecTable + ".max_retries"
 	workSpecNextWorkSpec        = workSpecTable + ".next_work_spec_name"
 	workSpecRuntime             = workSpecTable + ".runtime"
 	workUnitID                  = workUnitTable + ".id"

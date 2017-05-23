@@ -173,6 +173,15 @@ type WorkSpecMeta struct {
 	// value is interpreted as "unlimited".
 	MaxAttemptsReturned int `json:"max_attempts_returned"`
 
+	// MaxRetries specifies the maximum number of attempts that
+	// can exist for a work unit.  If non-zero, then when
+	// Worker.RequestAttempts() produces attempts, it will
+	// immediately fail any that have more than this many attempts
+	// already.  Defaults to the value of the "max_retries" field
+	// in the work spec data, or 0.  A zero value is interpreted
+	// as "unlimited".
+	MaxRetries int `json:"max_retries"`
+
 	// NextWorkSpecName gives the name of a work spec that runs
 	// after this one.  If this is a non-empty string, then when
 	// an attempt completes successfully, if the updated work unit

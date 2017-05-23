@@ -62,6 +62,7 @@ func (ns *namespace) SetWorkSpec(data map[string]interface{}) (coordinate.WorkSp
 			fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
 			fields.Add(&params, "max_running", meta.MaxRunning)
 			fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+			fields.Add(&params, "max_retries", meta.MaxRetries)
 			fields.Add(&params, "next_work_spec_name", meta.NextWorkSpecName)
 			fields.AddDirect("next_work_spec_preempts", "FALSE")
 			fields.Add(&params, "runtime", meta.Runtime)
@@ -199,6 +200,7 @@ func (spec *workSpec) setData(tx *sql.Tx, data map[string]interface{}, meta coor
 	fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
 	fields.Add(&params, "max_running", meta.MaxRunning)
 	fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+	fields.Add(&params, "max_retries", meta.MaxRetries)
 	fields.Add(&params, "next_work_spec_name", meta.NextWorkSpecName)
 	fields.AddDirect("next_work_spec_preempts", "FALSE")
 	fields.Add(&params, "runtime", meta.Runtime)
@@ -233,6 +235,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 			workSpecNextContinuous,
 			workSpecMaxRunning,
 			workSpecMaxAttemptsReturned,
+			workSpecMaxRetries,
 			workSpecNextWorkSpec,
 			workSpecRuntime,
 		}, []string{
@@ -252,6 +255,7 @@ func (spec *workSpec) Meta(withCounts bool) (coordinate.WorkSpecMeta, error) {
 			&nextContinuous,
 			&meta.MaxRunning,
 			&meta.MaxAttemptsReturned,
+			&meta.MaxRetries,
 			&meta.NextWorkSpecName,
 			&meta.Runtime,
 		)
@@ -329,6 +333,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 		workSpecNextContinuous,
 		workSpecMaxRunning,
 		workSpecMaxAttemptsReturned,
+		workSpecMaxRetries,
 		workSpecNextWorkSpec,
 		workSpecRuntime,
 	}, []string{
@@ -354,7 +359,7 @@ func (ns *namespace) allMetas(tx *sql.Tx, withCounts bool) (map[string]*workSpec
 			&meta.Weight, &meta.Paused, &meta.Continuous,
 			&meta.CanBeContinuous, &meta.MinMemoryGb,
 			&interval, &nextContinuous, &meta.MaxRunning,
-			&meta.MaxAttemptsReturned,
+			&meta.MaxAttemptsReturned, &meta.MaxRetries,
 			&meta.NextWorkSpecName, &meta.Runtime)
 		if err != nil {
 			return err
@@ -453,6 +458,7 @@ func (spec *workSpec) SetMeta(meta coordinate.WorkSpecMeta) error {
 	fields.Add(&params, "next_continuous", timeToNullTime(meta.NextContinuous))
 	fields.Add(&params, "max_running", meta.MaxRunning)
 	fields.Add(&params, "max_attempts_returned", meta.MaxAttemptsReturned)
+	fields.Add(&params, "max_retries", meta.MaxRetries)
 	query := buildUpdate(workSpecTable, fields.UpdateChanges(), []string{
 		isWorkSpec(&params, spec.id),
 	})
