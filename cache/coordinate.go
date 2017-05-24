@@ -97,3 +97,7 @@ func (cache *cache) invalidate(name string) {
 func (cache *cache) Namespaces() (map[string]coordinate.Namespace, error) {
 	return cache.backend.Namespaces()
 }
+
+func (cache *cache) Summarize() (coordinate.Summary, error) {
+	return cache.backend.Summarize()
+}

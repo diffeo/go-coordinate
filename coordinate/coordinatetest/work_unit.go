@@ -1099,3 +1099,106 @@ func (s *Suite) TestUnitSpecDeletedGone() {
 			"%+v", err)
 	}
 }
+
+// TestSummarize does a basic (single-work-spec) test of the various
+// Summarize methods.
+func (s *Suite) TestSummarize() {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestUnitSpecDeletedGone",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+	}
+	sts.SetUp(s)
+	defer sts.TearDown(s)
+
+	toCheck := []struct {
+		string
+		coordinate.Summarizable
+	}{
+		{"coordinate", s.Coordinate},
+		{"namespace", sts.Namespace},
+		{"work spec", sts.WorkSpec},
+	}
+
+	for _, check := range toCheck {
+		summary, err := check.Summarizable.Summarize()
+		if s.NoError(err,
+			"failed to get summary for %s (none)",
+			check.string,
+		) {
+			s.Empty(summary, "unexpected content for %s (none)",
+				check.string)
+		}
+	}
+
+	_, err := sts.AddWorkUnit("unit")
+	if !s.NoError(err, "adding single work unit") {
+		return
+	}
+	expected := coordinate.Summary{
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.AvailableUnit,
+			Count:     1,
+		},
+	}
+	for _, check := range toCheck {
+		summary, err := check.Summarizable.Summarize()
+		if s.NoError(err,
+			"failed to get summary for %s (one)", check.string,
+		) {
+			s.Equal(expected, summary,
+				"incorrect summary for %s (one)",
+				check.string)
+		}
+	}
+
+	_, err = sts.MakeWorkUnits()
+	if !s.NoError(err, "adding many work units") {
+		return
+	}
+	expected = coordinate.Summary{
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.AvailableUnit,
+			Count:     4,
+		},
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.PendingUnit,
+			Count:     1,
+		},
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.FinishedUnit,
+			Count:     1,
+		},
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.FailedUnit,
+			Count:     1,
+		},
+		coordinate.SummaryRecord{
+			Namespace: sts.NamespaceName,
+			WorkSpec:  sts.WorkSpecName,
+			Status:    coordinate.DelayedUnit,
+			Count:     1,
+		},
+	}
+	for _, check := range toCheck {
+		summary, err := check.Summarizable.Summarize()
+		if s.NoError(err,
+			"failed to get summary for %s (many)", check.string,
+		) {
+			summary.Sort()
+			s.Equal(expected, summary,
+				"incorrect summary for %s (many)",
+				check.string)
+		}
+	}
+}

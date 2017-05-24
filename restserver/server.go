@@ -49,13 +49,23 @@ func (api *restAPI) PopulateRouter(r *mux.Router) {
 		Context:        api.Context,
 		Get:            api.RootDocument,
 	})
+	r.Path("/summary").Name("rootSummary").Handler(&resourceHandler{
+		Representation: coordinate.Summary{},
+		Context:        api.Context,
+		Get:            api.RootSummary,
+	})
 }
 
 func (api *restAPI) RootDocument(ctx *context) (interface{}, error) {
 	resp := restdata.RootData{}
 	err := buildURLs(api.Router).
+		URL(&resp.SummaryURL, "rootSummary").
 		URL(&resp.NamespacesURL, "namespaces").
 		Template(&resp.NamespaceURL, "namespace", "namespace").
 		Error
 	return resp, err
+}
+
+func (api *restAPI) RootSummary(ctx *context) (interface{}, error) {
+	return api.Coordinate.Summarize()
 }

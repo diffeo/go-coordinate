@@ -167,3 +167,12 @@ func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (count int, er
 	})
 	return
 }
+
+func (spec *workSpec) Summarize() (summary coordinate.Summary, err error) {
+	err = spec.withWorkSpec(func(workSpec coordinate.WorkSpec) error {
+		var err error
+		summary, err = workSpec.Summarize()
+		return err
+	})
+	return
+}

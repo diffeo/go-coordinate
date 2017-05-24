@@ -186,3 +186,12 @@ func (ns *namespace) Workers() (workers map[string]coordinate.Worker, err error)
 	}
 	return
 }
+
+func (ns *namespace) Summarize() (summary coordinate.Summary, err error) {
+	err = ns.withNamespace(func(namespace coordinate.Namespace) error {
+		var err error
+		summary, err = namespace.Summarize()
+		return err
+	})
+	return
+}

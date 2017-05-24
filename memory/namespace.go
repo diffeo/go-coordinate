@@ -143,6 +143,24 @@ func (ns *namespace) Workers() (workers map[string]coordinate.Worker, err error)
 	return
 }
 
+// coordinate.Summarizable interface:
+
+func (ns *namespace) Summarize() (result coordinate.Summary, err error) {
+	err = ns.do(func() error {
+		result = ns.summarize()
+		return nil
+	})
+	return
+}
+
+func (ns *namespace) summarize() coordinate.Summary {
+	var result coordinate.Summary
+	for _, spec := range ns.workSpecs {
+		result = append(result, spec.summarize()...)
+	}
+	return result
+}
+
 // memory.coordinable interface:
 
 func (ns *namespace) Coordinate() *memCoordinate {

@@ -20,6 +20,7 @@ func (api *restAPI) fillNamespace(namespace coordinate.Namespace, result *restda
 	err := api.fillNamespaceShort(namespace, &result.NamespaceShort)
 	if err == nil {
 		err = buildURLs(api.Router, "namespace", result.Name).
+			URL(&result.SummaryURL, "namespaceSummary").
 			URL(&result.WorkSpecsURL, "workSpecs").
 			Template(&result.WorkSpecURL, "workSpec", "spec").
 			URL(&result.WorkersURL, "workers").
@@ -88,6 +89,11 @@ func (api *restAPI) NamespaceDelete(ctx *context) (interface{}, error) {
 	return nil, err
 }
 
+// NamespaceSummaryGet produces a summary for a namespace.
+func (api *restAPI) NamespaceSummaryGet(ctx *context) (interface{}, error) {
+	return ctx.Namespace.Summarize()
+}
+
 // PopulateNamespace adds namespace-specific routes to a router.
 // r should be rooted at the root of the Coordinate URL tree, e.g. "/".
 func (api *restAPI) PopulateNamespace(r *mux.Router) {
@@ -102,6 +108,11 @@ func (api *restAPI) PopulateNamespace(r *mux.Router) {
 		Context:        api.Context,
 		Get:            api.NamespaceGet,
 		Delete:         api.NamespaceDelete,
+	})
+	r.Path("/namespace/{namespace}/summary").Name("namespaceSummary").Handler(&resourceHandler{
+		Representation: coordinate.Summary{},
+		Context:        api.Context,
+		Get:            api.NamespaceSummaryGet,
 	})
 	sr := r.PathPrefix("/namespace/{namespace}").Subrouter()
 	api.PopulateWorkSpec(sr)
