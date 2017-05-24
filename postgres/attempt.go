@@ -418,13 +418,12 @@ func (unit *workUnit) countAttempts(tx *sql.Tx) (int, error) {
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
 	var (
-		attempts []coordinate.Attempt
-		specs    map[string]*workSpec
-		metas    map[string]*coordinate.WorkSpecMeta
-		name     string
-		err      error
-		spec     *workSpec
-		meta     *coordinate.WorkSpecMeta
+		specs map[string]*workSpec
+		metas map[string]*coordinate.WorkSpecMeta
+		name  string
+		err   error
+		spec  *workSpec
+		meta  *coordinate.WorkSpecMeta
 	)
 
 	// Run system-global expiry.
@@ -456,7 +455,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		now := w.Coordinate().clock.Now()
 		name, err = coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 		if err == coordinate.ErrNoWork {
-			return attempts, nil
+			return nil, nil
 		} else if err != nil {
 			return nil, err
 		}
@@ -464,22 +463,30 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		meta = metas[name]
 
 		// Then get some attempts
-		attempts, err = w.requestAttemptsForSpec(req, spec, meta)
+		attempts, err := w.requestAttemptsForSpec(req, spec, meta)
 		if err != nil {
 			return nil, err
 		}
 
 		// If that returned non-zero attempts, we're done
 		if len(attempts) > 0 {
-			return attempts, nil
+			result := make([]coordinate.Attempt, len(attempts))
+			for i, a := range attempts {
+				result[i] = a
+			}
+			return result, nil
 		}
 		// Otherwise reloop
 	}
 }
 
-func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *workSpec, meta *coordinate.WorkSpecMeta) ([]coordinate.Attempt, error) {
+func (w *worker) requestAttemptsForSpec(
+	req coordinate.AttemptRequest,
+	spec *workSpec,
+	meta *coordinate.WorkSpecMeta,
+) ([]*attempt, error) {
 	var (
-		attempts []coordinate.Attempt
+		attempts []*attempt
 		count    int
 		err      error
 	)
@@ -536,14 +543,14 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		// attempt
 		if meta.CanStartContinuous(now) {
 			var unit *workUnit
-			var attempt *attempt
+			var a *attempt
 			continuous = true
 			unit, err = w.createContinuousUnit(tx, spec, meta, now)
 			if err == nil && unit != nil {
-				attempt, err = makeAttempt(tx, unit, w, length)
+				a, err = makeAttempt(tx, unit, w, length)
 			}
-			if err == nil && attempt != nil {
-				attempts = []coordinate.Attempt{attempt}
+			if err == nil && a != nil {
+				attempts = []*attempt{a}
 			}
 		}
 
@@ -573,8 +580,8 @@ func (w *worker) chooseMakeFailAttempts(
 	maxRetries int,
 	now time.Time,
 	length time.Duration,
-) ([]coordinate.Attempt, error) {
-	var attempts []coordinate.Attempt
+) ([]*attempt, error) {
+	var attempts []*attempt
 	for len(attempts) < numUnits {
 		moreAttempts, err := w.chooseAndMakeAttempts(
 			tx, spec, numUnits-len(attempts), now, length)
@@ -590,24 +597,21 @@ func (w *worker) chooseMakeFailAttempts(
 		// (It might be nice to do this in a batch, maybe moving
 		// this logic inside chooseAndMakeAttempts?)
 		for _, a := range moreAttempts {
-			// This should always be true but don't push it
-			if aa, ok := a.(*attempt); ok {
-				count, err := aa.unit.countAttempts(tx)
+			count, err := a.unit.countAttempts(tx)
+			if err != nil {
+				return nil, err
+			}
+			if count > maxRetries {
+				err = a.complete(tx,
+					map[string]interface{}{
+						"traceback": "too many retries",
+					},
+					"failed")
 				if err != nil {
 					return nil, err
 				}
-				if count > maxRetries {
-					err = aa.complete(tx,
-						map[string]interface{}{
-							"traceback": "too many retries",
-						},
-						"failed")
-					if err != nil {
-						return nil, err
-					}
-					continue
-					// and drop this attempt
-				}
+				continue
+				// and drop this attempt
 			}
 			attempts = append(attempts, a)
 		}
@@ -618,7 +622,13 @@ func (w *worker) chooseMakeFailAttempts(
 // chooseAndMakeAttempts, in one SQL query, finds work units to do for
 // a specific work spec, creates attempts for them, and returns the
 // corresponding attempt objects.
-func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int, now time.Time, length time.Duration) ([]coordinate.Attempt, error) {
+func (w *worker) chooseAndMakeAttempts(
+	tx *sql.Tx,
+	spec *workSpec,
+	numUnits int,
+	now time.Time,
+	length time.Duration,
+) ([]*attempt, error) {
 	params := queryParams{}
 
 	choose := buildSelect([]string{
@@ -661,7 +671,7 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 	if err != nil {
 		return nil, err
 	}
-	var result []coordinate.Attempt
+	var result []*attempt
 	err = scanRows(rows, func() error {
 		unit := workUnit{spec: spec}
 		attempt := attempt{unit: &unit, worker: w}
