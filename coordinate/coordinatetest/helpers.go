@@ -1,12 +1,10 @@
-// Copyright 2015-2016 Diffeo, Inc.
+// Copyright 2015-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinatetest
 
 import (
 	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/stretchr/testify/assert"
-	"testing"
 	"time"
 )
 
@@ -14,18 +12,19 @@ import (
 // Support functions for common tests
 
 // AttemptMatches checks that two attempts are attempting the same thing.
-func AttemptMatches(t *testing.T, expected, actual coordinate.Attempt) bool {
-	return (assert.Equal(t, expected.Worker().Name(), actual.Worker().Name()) &&
-		assert.Equal(t, expected.WorkUnit().Name(), actual.WorkUnit().Name()) &&
-		assert.Equal(t, expected.WorkUnit().WorkSpec().Name(), actual.WorkUnit().WorkSpec().Name()))
+func (s *Suite) AttemptMatches(expected, actual coordinate.Attempt) bool {
+	return (s.Equal(expected.Worker().Name(), actual.Worker().Name()) &&
+		s.Equal(expected.WorkUnit().Name(), actual.WorkUnit().Name()) &&
+		s.Equal(expected.WorkUnit().WorkSpec().Name(), actual.WorkUnit().WorkSpec().Name()))
 }
 
 // AttemptStatus checks that an attempt has an expected status.
-func AttemptStatus(t *testing.T, expected coordinate.AttemptStatus, attempt coordinate.Attempt) {
+func (s *Suite) AttemptStatus(
+	expected coordinate.AttemptStatus,
+	attempt coordinate.Attempt,
+) bool {
 	actual, err := attempt.Status()
-	if assert.NoError(t, err) {
-		assert.Equal(t, expected, actual)
-	}
+	return s.NoError(err) && s.Equal(expected, actual)
 }
 
 // HasData describes attempts, workers, and work units that can return
@@ -35,41 +34,43 @@ type HasData interface {
 }
 
 // DataEmpty checks that an object's data is empty.
-func DataEmpty(t *testing.T, obj HasData) {
+func (s *Suite) DataEmpty(obj HasData) bool {
 	data, err := obj.Data()
-	if assert.NoError(t, err) {
-		assert.Empty(t, data)
-	}
+	return s.NoError(err) && s.Empty(data)
 }
 
 // DataMatches checks that an object's data matches an expected value.
-func DataMatches(t *testing.T, obj HasData, expected map[string]interface{}) {
+func (s *Suite) DataMatches(obj HasData, expected map[string]interface{}) bool {
 	data, err := obj.Data()
-	if assert.NoError(t, err) {
-		// assert.Equal is reflect.DeepEqual.
-		// assert.EqualValues does a type conversion first if needed.
-		// What we actually need is a recursive match, which
-		// doesn't exist; but actually we just need this shallower
-		for key, value := range expected {
-			if assert.Contains(t, data, key,
-				"missing data[%q]", key) {
-				assert.EqualValues(t, value, data[key],
-					"data[%q]", key)
+	if !s.NoError(err) {
+		return false
+	}
+	ok := true
+	// assert.Equal is reflect.DeepEqual.
+	// assert.EqualValues does a type conversion first if needed.
+	// What we actually need is a recursive match, which
+	// doesn't exist; but actually we just need this shallower
+	for key, value := range expected {
+		if s.Contains(data, key, "missing data[%q]", key) {
+			if !s.EqualValues(value, data[key], "data[%q]", key) {
+				ok = false
 			}
+		} else {
+			ok = false
 		}
 		for key := range data {
-			assert.Contains(t, expected, key,
-				"extra data[%q]", key)
+			if !s.Contains(expected, key, "extra data[%q]", key) {
+				ok = false
+			}
 		}
 	}
+	return ok
 }
 
 // UnitHasPriority validates the priority of a work unit.
-func UnitHasPriority(t *testing.T, unit coordinate.WorkUnit, priority float64) {
+func (s *Suite) UnitHasPriority(unit coordinate.WorkUnit, priority float64) bool {
 	actual, err := unit.Priority()
-	if assert.NoError(t, err) {
-		assert.Equal(t, priority, actual)
-	}
+	return s.NoError(err) && s.Equal(priority, actual)
 }
 
 // ---------------------------------------------------------------------------
@@ -122,14 +123,14 @@ type SimpleTestSetup struct {
 
 // SetUp populates the output fields of the test setup, or fails using
 // t.FailNow().
-func (sts *SimpleTestSetup) SetUp(t *testing.T) {
+func (sts *SimpleTestSetup) SetUp(s *Suite) {
 	var err error
 
 	// Create the namespace
 	if sts.Namespace == nil {
-		sts.Namespace, err = Coordinate.Namespace(sts.NamespaceName)
-		if !assert.NoError(t, err) {
-			t.FailNow()
+		sts.Namespace, err = s.Coordinate.Namespace(sts.NamespaceName)
+		if !s.NoError(err) {
+			s.FailNow("could not create namespace")
 		}
 	}
 
@@ -145,9 +146,9 @@ func (sts *SimpleTestSetup) SetUp(t *testing.T) {
 			sts.WorkSpecData["name"] = sts.WorkSpecName
 		}
 		sts.WorkSpec, err = sts.Namespace.SetWorkSpec(sts.WorkSpecData)
-		if !(assert.NoError(t, err) &&
-			assert.Equal(t, sts.WorkSpecData["name"], sts.WorkSpec.Name())) {
-			t.FailNow()
+		if !(s.NoError(err) &&
+			s.Equal(sts.WorkSpecData["name"], sts.WorkSpec.Name())) {
+			s.FailNow("could not create work spec")
 		}
 	}
 
@@ -157,29 +158,29 @@ func (sts *SimpleTestSetup) SetUp(t *testing.T) {
 			sts.WorkUnitData = map[string]interface{}{}
 		}
 		sts.WorkUnit, err = sts.WorkSpec.AddWorkUnit(sts.WorkUnitName, sts.WorkUnitData, sts.WorkUnitMeta)
-		if !(assert.NoError(t, err) &&
-			assert.Equal(t, sts.WorkUnitName, sts.WorkUnit.Name()) &&
-			assert.Equal(t, sts.WorkSpec.Name(), sts.WorkUnit.WorkSpec().Name())) {
-			t.FailNow()
+		if !(s.NoError(err) &&
+			s.Equal(sts.WorkUnitName, sts.WorkUnit.Name()) &&
+			s.Equal(sts.WorkSpec.Name(), sts.WorkUnit.WorkSpec().Name())) {
+			s.FailNow("could not create work unit")
 		}
 	}
 
 	// Create the worker
 	if sts.WorkerName != "" {
 		sts.Worker, err = sts.Namespace.Worker(sts.WorkerName)
-		if !(assert.NoError(t, err) &&
-			assert.Equal(t, sts.WorkerName, sts.Worker.Name())) {
-			t.FailNow()
+		if !(s.NoError(err) &&
+			s.Equal(sts.WorkerName, sts.Worker.Name())) {
+			s.FailNow("could not create worker")
 		}
 	}
 }
 
 // TearDown destroys the namespace and all other resources created in
 // SetUp.
-func (sts *SimpleTestSetup) TearDown(t *testing.T) {
+func (sts *SimpleTestSetup) TearDown(s *Suite) {
 	if sts.Namespace != nil {
 		err := sts.Namespace.Destroy()
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 }
 
@@ -242,57 +243,57 @@ func (sts *SimpleTestSetup) MakeWorkUnits() (map[string]coordinate.WorkUnit, err
 
 // CheckUnitStatus checks that the test's work unit's status matches
 // an expected value.
-func (sts *SimpleTestSetup) CheckUnitStatus(t *testing.T, status coordinate.WorkUnitStatus) {
+func (sts *SimpleTestSetup) CheckUnitStatus(s *Suite, status coordinate.WorkUnitStatus) {
 	actual, err := sts.WorkUnit.Status()
-	if assert.NoError(t, err) {
-		assert.Equal(t, status, actual)
+	if s.NoError(err) {
+		s.Equal(status, actual)
 	}
 }
 
 // RequestOneAttempt gets a single attempt from the test's worker, or
 // fails the test immediately if not exactly one attempt was returned.
-func (sts *SimpleTestSetup) RequestOneAttempt(t *testing.T) coordinate.Attempt {
+func (sts *SimpleTestSetup) RequestOneAttempt(s *Suite) coordinate.Attempt {
 	attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	if !(assert.NoError(t, err) && assert.Len(t, attempts, 1)) {
-		t.FailNow()
+	if !(s.NoError(err) && s.Len(attempts, 1)) {
+		s.FailNow("did not get an attempt")
 	}
 	return attempts[0]
 }
 
 // RequestNoAttempts requests attempts and asserts that nothing was
 // returned.  It does not fail the test if something does come back.
-func (sts *SimpleTestSetup) RequestNoAttempts(t *testing.T) {
+func (sts *SimpleTestSetup) RequestNoAttempts(s *Suite) {
 	attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	if assert.NoError(t, err) {
-		assert.Empty(t, attempts)
+	if s.NoError(err) {
+		s.Empty(attempts)
 	}
 }
 
 // CheckWorkUnitOrder requests every possible attempt, one at a time,
 // virtually pausing 5 seconds between each.  It checks that the
 // resulting ordering matches the provided order of work unit names.
-func (sts *SimpleTestSetup) CheckWorkUnitOrder(t *testing.T, unitNames ...string) {
+func (sts *SimpleTestSetup) CheckWorkUnitOrder(s *Suite, unitNames ...string) {
 	var processedUnits []string
 	for {
-		Clock.Add(time.Duration(5) * time.Second)
+		s.Clock.Add(time.Duration(5) * time.Second)
 		attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-		if !assert.NoError(t, err) {
-			t.FailNow()
+		if !s.NoError(err) {
+			s.FailNow("could not request attempt")
 		}
 		if len(attempts) == 0 {
 			break
 		}
-		if !assert.Len(t, attempts, 1) {
-			t.FailNow()
+		if !s.Len(attempts, 1) {
+			s.FailNow("got too many attempts")
 		}
 		attempt := attempts[0]
-		assert.Equal(t, sts.WorkSpec.Name(), attempt.WorkUnit().WorkSpec().Name())
+		s.Equal(sts.WorkSpec.Name(), attempt.WorkUnit().WorkSpec().Name())
 		processedUnits = append(processedUnits, attempt.WorkUnit().Name())
 		err = attempt.Finish(nil)
-		if !assert.NoError(t, err) {
-			t.FailNow()
+		if !s.NoError(err) {
+			s.FailNow("could not finish attempt")
 		}
 	}
 
-	assert.Equal(t, unitNames, processedUnits)
+	s.Equal(unitNames, processedUnits)
 }
