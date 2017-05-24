@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Diffeo, Inc.
+// Copyright 2015-2017 Diffeo, Inc.
 // This software is released under an MIT/X11 open source license.
 
 package coordinatetest
@@ -6,13 +6,11 @@ package coordinatetest
 import (
 	"fmt"
 	"github.com/diffeo/go-coordinate/coordinate"
-	"github.com/stretchr/testify/assert"
-	"testing"
 	"time"
 )
 
 // TestTrivialWorkUnitFlow tests work unit creation, deletion, and existence.
-func TestTrivialWorkUnitFlow(t *testing.T) {
+func (s *Suite) TestTrivialWorkUnitFlow() {
 	var (
 		count int
 		err   error
@@ -24,122 +22,122 @@ func TestTrivialWorkUnitFlow(t *testing.T) {
 		WorkSpecName:  "spec",
 		WorkUnitName:  "unit",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 1)
-		if assert.Contains(t, units, "unit") {
-			assert.Equal(t, "unit", units["unit"].Name())
-			assert.Equal(t, "spec", units["unit"].WorkSpec().Name())
+	if s.NoError(err) {
+		s.Len(units, 1)
+		if s.Contains(units, "unit") {
+			s.Equal("unit", units["unit"].Name())
+			s.Equal("spec", units["unit"].WorkSpec().Name())
 		}
 	}
 
 	count, err = sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Equal(t, 1, count)
+	if s.NoError(err) {
+		s.Equal(1, count)
 	}
 
 	_, err = sts.WorkSpec.WorkUnit("unit")
-	assert.Equal(t, coordinate.ErrNoSuchWorkUnit{Name: "unit"}, err)
+	s.Equal(coordinate.ErrNoSuchWorkUnit{Name: "unit"}, err)
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Empty(t, units)
+	if s.NoError(err) {
+		s.Empty(units)
 	}
 }
 
 // TestWorkUnitQueries calls WorkSpec.WorkUnits() with various queries.
-func TestWorkUnitQueries(t *testing.T) {
+func (s *Suite) TestWorkUnitQueries() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestWorkUnitQueries",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	_, err := sts.MakeWorkUnits()
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// Get everything
 	units, err := sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 7)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "failed")
-		assert.Contains(t, units, "finished")
-		assert.Contains(t, units, "pending")
-		assert.Contains(t, units, "retryable")
+	if s.NoError(err) {
+		s.Len(units, 7)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "failed")
+		s.Contains(units, "finished")
+		s.Contains(units, "pending")
+		s.Contains(units, "retryable")
 	}
 
 	// Get everything, in two batches, sorted
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Limit: 4,
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 4)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "failed")
+	if s.NoError(err) {
+		s.Len(units, 4)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "failed")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		PreviousName: "failed",
 		Limit:        4,
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 3)
-		assert.Contains(t, units, "finished")
-		assert.Contains(t, units, "pending")
-		assert.Contains(t, units, "retryable")
+	if s.NoError(err) {
+		s.Len(units, 3)
+		s.Contains(units, "finished")
+		s.Contains(units, "pending")
+		s.Contains(units, "retryable")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		PreviousName: "retryable",
 		Limit:        4,
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 0)
+	if s.NoError(err) {
+		s.Len(units, 0)
 	}
 
 	// Get work units by status
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Statuses: []coordinate.WorkUnitStatus{coordinate.AvailableUnit},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 3)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "retryable")
+	if s.NoError(err) {
+		s.Len(units, 3)
+		s.Contains(units, "available")
+		s.Contains(units, "expired")
+		s.Contains(units, "retryable")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Statuses: []coordinate.WorkUnitStatus{coordinate.PendingUnit},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 1)
-		assert.Contains(t, units, "pending")
+	if s.NoError(err) {
+		s.Len(units, 1)
+		s.Contains(units, "pending")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Statuses: []coordinate.WorkUnitStatus{coordinate.FinishedUnit},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 1)
-		assert.Contains(t, units, "finished")
+	if s.NoError(err) {
+		s.Len(units, 1)
+		s.Contains(units, "finished")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Statuses: []coordinate.WorkUnitStatus{coordinate.FailedUnit},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 1)
-		assert.Contains(t, units, "failed")
+	if s.NoError(err) {
+		s.Len(units, 1)
+		s.Contains(units, "failed")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
@@ -147,9 +145,9 @@ func TestWorkUnitQueries(t *testing.T) {
 			coordinate.DelayedUnit,
 		},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 1)
-		assert.Contains(t, units, "delayed")
+	if s.NoError(err) {
+		s.Len(units, 1)
+		s.Contains(units, "delayed")
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
@@ -158,20 +156,20 @@ func TestWorkUnitQueries(t *testing.T) {
 			coordinate.FinishedUnit,
 		},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 2)
-		assert.Contains(t, units, "failed")
-		assert.Contains(t, units, "finished")
+	if s.NoError(err) {
+		s.Len(units, 2)
+		s.Contains(units, "failed")
+		s.Contains(units, "finished")
 	}
 
 	// Get work units by name
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{
 		Names: []string{"available", "failed", "missing"},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 2)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "failed")
+	if s.NoError(err) {
+		s.Len(units, 2)
+		s.Contains(units, "available")
+		s.Contains(units, "failed")
 	}
 
 	// Get work units by name and status
@@ -179,10 +177,10 @@ func TestWorkUnitQueries(t *testing.T) {
 		Names:    []string{"available", "retryable", "finished"},
 		Statuses: []coordinate.WorkUnitStatus{coordinate.AvailableUnit},
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 2)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "retryable")
+	if s.NoError(err) {
+		s.Len(units, 2)
+		s.Contains(units, "available")
+		s.Contains(units, "retryable")
 	}
 }
 
@@ -190,67 +188,67 @@ func TestWorkUnitQueries(t *testing.T) {
 // WorkSpec.DeleteWorkUnits(), on the assumption that a fair amount of
 // code will typically be shared with GetWorkUnits() and because it is
 // intrinsically a mutating operation.
-func TestDeleteWorkUnits(t *testing.T) {
+func (s *Suite) TestDeleteWorkUnits() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestDeleteWorkUnits",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	_, err := sts.MakeWorkUnits()
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// Get everything
 	units, err := sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 7)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "failed")
-		assert.Contains(t, units, "finished")
-		assert.Contains(t, units, "pending")
-		assert.Contains(t, units, "retryable")
+	if s.NoError(err) {
+		s.Len(units, 7)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "failed")
+		s.Contains(units, "finished")
+		s.Contains(units, "pending")
+		s.Contains(units, "retryable")
 	}
 
 	// Delete by name
 	count, err := sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{
 		Names: []string{"retryable"},
 	})
-	if assert.NoError(t, err) {
-		assert.Equal(t, 1, count)
+	if s.NoError(err) {
+		s.Equal(1, count)
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 6)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "failed")
-		assert.Contains(t, units, "finished")
-		assert.Contains(t, units, "pending")
+	if s.NoError(err) {
+		s.Len(units, 6)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "failed")
+		s.Contains(units, "finished")
+		s.Contains(units, "pending")
 	}
 
 	// Delete the same thing again; missing name should be a no-op
 	count, err = sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{
 		Names: []string{"retryable"},
 	})
-	if assert.NoError(t, err) {
-		assert.Equal(t, 0, count)
+	if s.NoError(err) {
+		s.Equal(0, count)
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 6)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "failed")
-		assert.Contains(t, units, "finished")
-		assert.Contains(t, units, "pending")
+	if s.NoError(err) {
+		s.Len(units, 6)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "failed")
+		s.Contains(units, "finished")
+		s.Contains(units, "pending")
 	}
 
 	// Delete by status
@@ -260,48 +258,48 @@ func TestDeleteWorkUnits(t *testing.T) {
 			coordinate.FinishedUnit,
 		},
 	})
-	if assert.NoError(t, err) {
-		assert.Equal(t, 2, count)
+	if s.NoError(err) {
+		s.Equal(2, count)
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 4)
-		assert.Contains(t, units, "available")
-		assert.Contains(t, units, "delayed")
-		assert.Contains(t, units, "expired")
-		assert.Contains(t, units, "pending")
+	if s.NoError(err) {
+		s.Len(units, 4)
+		s.Contains(units, "available")
+		s.Contains(units, "delayed")
+		s.Contains(units, "expired")
+		s.Contains(units, "pending")
 	}
 
 	// Delete everything
 	count, err = sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Equal(t, 4, count)
+	if s.NoError(err) {
+		s.Equal(4, count)
 	}
 
 	units, err = sts.WorkSpec.WorkUnits(coordinate.WorkUnitQuery{})
-	if assert.NoError(t, err) {
-		assert.Len(t, units, 0)
+	if s.NoError(err) {
+		s.Len(units, 0)
 	}
 }
 
 // TestCountWorkUnitStatus does simple validation on the
 // CountWorkUnitStatus call.
-func TestCountWorkUnitStatus(t *testing.T) {
+func (s *Suite) TestCountWorkUnitStatus() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestCountWorkUnitStatus",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	_, err := sts.MakeWorkUnits()
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	counts, err := sts.WorkSpec.CountWorkUnitStatus()
-	if assert.NoError(t, err) {
-		assert.Equal(t, map[coordinate.WorkUnitStatus]int{
+	if s.NoError(err) {
+		s.Equal(map[coordinate.WorkUnitStatus]int{
 			coordinate.AvailableUnit: 3,
 			coordinate.PendingUnit:   1,
 			coordinate.FinishedUnit:  1,
@@ -313,33 +311,33 @@ func TestCountWorkUnitStatus(t *testing.T) {
 
 // TestWorkUnitOrder is a very basic test that work units get returned
 // in alphabetic order absent any other constraints.
-func TestWorkUnitOrder(t *testing.T) {
+func (s *Suite) TestWorkUnitOrder() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestWorkUnitOrder",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	for _, name := range []string{"c", "b", "a"} {
 		_, err := sts.AddWorkUnit(name)
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
-	sts.CheckWorkUnitOrder(t, "a", "b", "c")
+	sts.CheckWorkUnitOrder(s, "a", "b", "c")
 }
 
 // TestWorkUnitPriorityCtor tests that priorities passed in the work unit
 // constructor are honored.
-func TestWorkUnitPriorityCtor(t *testing.T) {
+func (s *Suite) TestWorkUnitPriorityCtor() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestWorkUnitPriorityCtor",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	var units = []struct {
 		string
@@ -352,17 +350,17 @@ func TestWorkUnitPriorityCtor(t *testing.T) {
 
 	for _, unit := range units {
 		workUnit, err := sts.WorkSpec.AddWorkUnit(unit.string, map[string]interface{}{}, coordinate.WorkUnitMeta{Priority: unit.float64})
-		if assert.NoError(t, err) {
-			UnitHasPriority(t, workUnit, unit.float64)
+		if s.NoError(err) {
+			s.UnitHasPriority(workUnit, unit.float64)
 		}
 	}
 
-	sts.CheckWorkUnitOrder(t, "b", "a", "c")
+	sts.CheckWorkUnitOrder(s, "b", "a", "c")
 }
 
 // TestWorkUnitPrioritySet tests two different ways of setting work unit
 // priority.
-func TestWorkUnitPrioritySet(t *testing.T) {
+func (s *Suite) TestWorkUnitPrioritySet() {
 	var (
 		err  error
 		unit coordinate.WorkUnit
@@ -372,57 +370,57 @@ func TestWorkUnitPrioritySet(t *testing.T) {
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	unit, err = sts.WorkSpec.AddWorkUnit("a", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	if assert.NoError(t, err) {
-		UnitHasPriority(t, unit, 0.0)
+	if s.NoError(err) {
+		s.UnitHasPriority(unit, 0.0)
 	}
 
 	unit, err = sts.WorkSpec.AddWorkUnit("b", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	if assert.NoError(t, err) {
+	if s.NoError(err) {
 		err = unit.SetPriority(10.0)
-		if assert.NoError(t, err) {
-			UnitHasPriority(t, unit, 10.0)
+		if s.NoError(err) {
+			s.UnitHasPriority(unit, 10.0)
 		}
 	}
 
 	unit, err = sts.WorkSpec.AddWorkUnit("c", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 	err = sts.WorkSpec.SetWorkUnitPriorities(coordinate.WorkUnitQuery{
 		Names: []string{"c"},
 	}, 20.0)
-	if assert.NoError(t, err) {
-		UnitHasPriority(t, unit, 20.0)
+	if s.NoError(err) {
+		s.UnitHasPriority(unit, 20.0)
 	}
 
 	unit, err = sts.WorkSpec.AddWorkUnit("d", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 	err = sts.WorkSpec.AdjustWorkUnitPriorities(coordinate.WorkUnitQuery{
 		Names: []string{"d"},
 	}, 20.0)
-	if assert.NoError(t, err) {
-		UnitHasPriority(t, unit, 20.0)
+	if s.NoError(err) {
+		s.UnitHasPriority(unit, 20.0)
 	}
 	err = sts.WorkSpec.AdjustWorkUnitPriorities(coordinate.WorkUnitQuery{
 		Names: []string{"d"},
 	}, 10.0)
-	if assert.NoError(t, err) {
-		UnitHasPriority(t, unit, 30.0)
+	if s.NoError(err) {
+		s.UnitHasPriority(unit, 30.0)
 	}
 
 	unit, err = sts.WorkSpec.WorkUnit("b")
-	if assert.NoError(t, err) {
-		UnitHasPriority(t, unit, 10.0)
+	if s.NoError(err) {
+		s.UnitHasPriority(unit, 10.0)
 	}
 
-	sts.CheckWorkUnitOrder(t, "d", "c", "b", "a")
+	sts.CheckWorkUnitOrder(s, "d", "c", "b", "a")
 }
 
 // TestWorkUnitData validates that the system can store and update
 // data.
-func TestWorkUnitData(t *testing.T) {
+func (s *Suite) TestWorkUnitData() {
 	var (
 		unit coordinate.WorkUnit
 		err  error
@@ -432,32 +430,32 @@ func TestWorkUnitData(t *testing.T) {
 		NamespaceName: "TestWorkUnitData",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	_, err = sts.WorkSpec.AddWorkUnit("a", map[string]interface{}{
 		"name":  "a",
 		"value": 1,
 	}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	_, err = sts.WorkSpec.AddWorkUnit("b", map[string]interface{}{
 		"name":  "b",
 		"value": 2,
 	}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	unit, err = sts.WorkSpec.WorkUnit("a")
-	if assert.NoError(t, err) {
-		DataMatches(t, unit, map[string]interface{}{
+	if s.NoError(err) {
+		s.DataMatches(unit, map[string]interface{}{
 			"name":  "a",
 			"value": 1,
 		})
 	}
 
 	unit, err = sts.WorkSpec.WorkUnit("b")
-	if assert.NoError(t, err) {
-		DataMatches(t, unit, map[string]interface{}{
+	if s.NoError(err) {
+		s.DataMatches(unit, map[string]interface{}{
 			"name":  "b",
 			"value": 2,
 		})
@@ -467,93 +465,93 @@ func TestWorkUnitData(t *testing.T) {
 // TestAddWorkUnitBleedover validates a bug in the postgres backend
 // where adding a duplicate work unit in one work spec would modify
 // similarly-named work units' data in all work specs.
-func TestAddWorkUnitBleedover(t *testing.T) {
+func (s *Suite) TestAddWorkUnitBleedover() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestAddWorkUnitBleedover",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	specA, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "a",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	specB, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "b",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	unitA, err := specA.AddWorkUnit("unit", map[string]interface{}{
 		"unit": "a",
 	}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	unitB, err := specB.AddWorkUnit("unit", map[string]interface{}{
 		"unit": "b",
 	}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	// Pre-check:
-	DataMatches(t, unitA, map[string]interface{}{"unit": "a"})
-	DataMatches(t, unitB, map[string]interface{}{"unit": "b"})
+	s.DataMatches(unitA, map[string]interface{}{"unit": "a"})
+	s.DataMatches(unitB, map[string]interface{}{"unit": "b"})
 
 	// Now re-add unit B
 	unitB2, err := specB.AddWorkUnit("unit", map[string]interface{}{
 		"unit": "c",
 	}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	// The bug was that unitA's data would have changed
-	DataMatches(t, unitA, map[string]interface{}{"unit": "a"})
-	DataMatches(t, unitB, map[string]interface{}{"unit": "c"})
-	DataMatches(t, unitB2, map[string]interface{}{"unit": "c"})
+	s.DataMatches(unitA, map[string]interface{}{"unit": "a"})
+	s.DataMatches(unitB, map[string]interface{}{"unit": "c"})
+	s.DataMatches(unitB2, map[string]interface{}{"unit": "c"})
 }
 
 // TestRecreateWorkUnits checks that creating work units that already
 // exist works successfully.
-func TestRecreateWorkUnits(t *testing.T) {
+func (s *Suite) TestRecreateWorkUnits() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestRecreateWorkUnits",
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	units, err := sts.MakeWorkUnits()
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	for name := range units {
 		unit, err := sts.AddWorkUnit(name)
-		if !assert.NoError(t, err, "name = %v", name) {
+		if !s.NoError(err, "name = %v", name) {
 			continue
 		}
 		// Unless the unit was previously pending, it should be
 		// available now
 		status, err := unit.Status()
-		if assert.NoError(t, err, "name = %v", name) {
+		if s.NoError(err, "name = %v", name) {
 			expected := coordinate.AvailableUnit
 			if name == "pending" {
 				expected = coordinate.PendingUnit
 			}
-			assert.Equal(t, expected, status, "name = %v", name)
+			s.Equal(expected, status, "name = %v", name)
 		}
 	}
 }
 
 // TestContinuous creates a continuous work spec but no work units for it.
 // Requesting attempts should create a new work unit for it.
-func TestContinuous(t *testing.T) {
+func (s *Suite) TestContinuous() {
 	sts := SimpleTestSetup{
 		WorkerName: "worker",
 		WorkSpecData: map[string]interface{}{
@@ -561,17 +559,17 @@ func TestContinuous(t *testing.T) {
 			"continuous": true,
 		},
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	makeAttempt := func(expected int) {
-		Clock.Add(5 * time.Second)
+		s.Clock.Add(5 * time.Second)
 		attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-		if assert.NoError(t, err) {
-			assert.Len(t, attempts, expected)
+		if s.NoError(err) {
+			s.Len(attempts, expected)
 			for _, attempt := range attempts {
 				err = attempt.Finish(nil)
-				assert.NoError(t, err)
+				s.NoError(err)
 			}
 		}
 	}
@@ -583,16 +581,16 @@ func TestContinuous(t *testing.T) {
 	// If we use SetMeta to turn continuous mode off and on, it
 	// should affect whether work units come back
 	meta, err := sts.WorkSpec.Meta(false)
-	if assert.NoError(t, err) {
+	if s.NoError(err) {
 		meta.Continuous = false
 		err = sts.WorkSpec.SetMeta(meta)
-		if assert.NoError(t, err) {
+		if s.NoError(err) {
 			makeAttempt(0)
 		}
 
 		meta.Continuous = true
 		err = sts.WorkSpec.SetMeta(meta)
-		if assert.NoError(t, err) {
+		if s.NoError(err) {
 			makeAttempt(1)
 		}
 	}
@@ -600,7 +598,7 @@ func TestContinuous(t *testing.T) {
 
 // TestContinuousInterval verifies the operation of a continuous work spec
 // that has a minimum respawn frequency.
-func TestContinuousInterval(t *testing.T) {
+func (s *Suite) TestContinuousInterval() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestContinuousInterval",
 		WorkerName:    "worker",
@@ -610,21 +608,21 @@ func TestContinuousInterval(t *testing.T) {
 			"interval":   60,
 		},
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	makeAttempt := func(expected int) {
 		attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-		if assert.NoError(t, err) {
-			assert.Len(t, attempts, expected)
+		if s.NoError(err) {
+			s.Len(attempts, expected)
 			for _, attempt := range attempts {
 				err = attempt.Finish(nil)
-				assert.NoError(t, err)
+				s.NoError(err)
 			}
 		}
 	}
 
-	start := Clock.Now()
+	start := s.Clock.Now()
 
 	// While we haven't added any work units yet, since the work
 	// spec is continuous, we should have something
@@ -633,29 +631,29 @@ func TestContinuousInterval(t *testing.T) {
 	// The next-attempt time should be the start time plus the
 	// interval
 	meta, err := sts.WorkSpec.Meta(false)
-	if assert.NoError(t, err) {
-		assert.Equal(t, 1*time.Minute, meta.Interval)
+	if s.NoError(err) {
+		s.Equal(1*time.Minute, meta.Interval)
 		nextTime := start.Add(1 * time.Minute)
-		assert.WithinDuration(t, nextTime, meta.NextContinuous, 1*time.Millisecond)
+		s.WithinDuration(nextTime, meta.NextContinuous, 1*time.Millisecond)
 	}
 
 	// If we only wait 30 seconds we shouldn't get a job
-	Clock.Add(30 * time.Second)
+	s.Clock.Add(30 * time.Second)
 	makeAttempt(0)
 
 	// If we wait 30 more we should
-	Clock.Add(30 * time.Second)
+	s.Clock.Add(30 * time.Second)
 	makeAttempt(1)
 
 	// If we wait 120 more we should only get one
-	Clock.Add(120 * time.Second)
+	s.Clock.Add(120 * time.Second)
 	makeAttempt(1)
 	makeAttempt(0)
 }
 
 // TestMaxRunning tests that setting the max_running limit on a work spec
 // does result in work coming back.
-func TestMaxRunning(t *testing.T) {
+func (s *Suite) TestMaxRunning() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestMaxRunning",
 		WorkerName:    "worker",
@@ -664,133 +662,133 @@ func TestMaxRunning(t *testing.T) {
 			"max_running": 1,
 		},
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	for i := 0; i < 10; i++ {
 		_, err := sts.AddWorkUnit(fmt.Sprintf("u%v", i))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// First call, nothing is pending, so we should get one back
-	Clock.Add(time.Duration(5) * time.Second)
-	attempt := sts.RequestOneAttempt(t)
+	s.Clock.Add(time.Duration(5) * time.Second)
+	attempt := sts.RequestOneAttempt(s)
 
 	// While that is still running, do another request; since we
 	// have hit max_running we should get nothing back
-	Clock.Add(time.Duration(5) * time.Second)
-	sts.RequestNoAttempts(t)
+	s.Clock.Add(time.Duration(5) * time.Second)
+	sts.RequestNoAttempts(s)
 
 	// Finish the first batch of attempts
 	err := attempt.Finish(nil)
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// Now nothing is pending and we can ask for more; even if we
 	// ask for 20 we only get one
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		NumberOfWorkUnits: 20,
 	})
-	if assert.NoError(t, err) {
-		assert.Len(t, attempts, 1)
+	if s.NoError(err) {
+		s.Len(attempts, 1)
 	}
 }
 
 // TestRequestSpecificSpec verifies that requesting work units for a
 // specific work spec gets the right thing back.
-func TestRequestSpecificSpec(t *testing.T) {
+func (s *Suite) TestRequestSpecificSpec() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestRequestSpecificSpec",
 		WorkerName:    "worker",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	one, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "one",
 		"priority": 20,
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	_, err = one.AddWorkUnit("u1", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	two, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "two",
 		"priority": 10,
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	_, err = two.AddWorkUnit("u2", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	three, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name":     "three",
 		"priority": 0,
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	_, err = three.AddWorkUnit("u3", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// Plain RequestAttempts should return "one" with the highest
 	// priority
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err := sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "u1", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("u1", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(nil, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// If I request only "three" I should get only "three"
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"three"},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "u3", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("u3", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(nil, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// Both "two" and "three" should give "two" with higher priority
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"three", "two"},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "u2", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("u2", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(nil, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// "four" should just return nothing
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{"four"},
 	})
-	assert.NoError(t, err)
-	assert.Empty(t, attempts)
+	s.NoError(err)
+	s.Empty(attempts)
 
 	// Empty list should query everything and get "one"
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		WorkSpecs: []string{},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "u1", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("u1", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(nil, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 }
 
 // TestByRuntime creates two work specs with different runtimes, and
 // validates that requests that want a specific runtime get it.
-func TestByRuntime(t *testing.T) {
+func (s *Suite) TestByRuntime() {
 	// The specific thing we'll simulate here is one Python
 	// worker, using the jobserver interface, with an empty
 	// runtime string, plus one Go worker, using the native API,
@@ -806,17 +804,17 @@ func TestByRuntime(t *testing.T) {
 		NamespaceName: "TestByRuntime",
 		WorkerName:    "worker",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	pSpec, err = sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "p",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	pUnit, err = pSpec.AddWorkUnit("p", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
@@ -824,88 +822,88 @@ func TestByRuntime(t *testing.T) {
 		"name":    "g",
 		"runtime": "go",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 	gUnit, err = gSpec.AddWorkUnit("g", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	// If we use default settings for RequestAttempts, we should
 	// get back both work units
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
+	if s.NoError(err) && s.Len(attempts, 1) {
 		err = attempts[0].Finish(map[string]interface{}{})
-		assert.NoError(t, err)
+		s.NoError(err)
 
 		wasP := attempts[0].WorkUnit().Name() == "p"
 
 		// Get more attempts
-		Clock.Add(time.Duration(5) * time.Second)
+		s.Clock.Add(time.Duration(5) * time.Second)
 		attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{})
-		if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
+		if s.NoError(err) && s.Len(attempts, 1) {
 			err = attempts[0].Finish(map[string]interface{}{})
-			assert.NoError(t, err)
+			s.NoError(err)
 
 			// Should have gotten the other work spec
 			if wasP {
-				assert.Equal(t, "g", attempts[0].WorkUnit().Name())
+				s.Equal("g", attempts[0].WorkUnit().Name())
 			} else {
-				assert.Equal(t, "p", attempts[0].WorkUnit().Name())
+				s.Equal("p", attempts[0].WorkUnit().Name())
 			}
 		}
 
 		// Now there shouldn't be anything more
-		Clock.Add(5 * time.Second)
-		sts.RequestNoAttempts(t)
+		s.Clock.Add(5 * time.Second)
+		sts.RequestNoAttempts(s)
 	}
 
 	// Reset the world
 	err = pUnit.ClearActiveAttempt()
-	assert.NoError(t, err)
+	s.NoError(err)
 	err = gUnit.ClearActiveAttempt()
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// What we expect to get from jobserver
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		Runtimes: []string{""},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "p", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("p", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(map[string]interface{}{}, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// A more sophisticated Python check
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		Runtimes: []string{"python", "python_2", "python_2.7", ""},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "p", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("p", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(map[string]interface{}{}, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 
 	// What we expect to get from Go land
-	Clock.Add(5 * time.Second)
+	s.Clock.Add(5 * time.Second)
 	attempts, err = sts.Worker.RequestAttempts(coordinate.AttemptRequest{
 		Runtimes: []string{"go"},
 	})
-	if assert.NoError(t, err) && assert.Len(t, attempts, 1) {
-		assert.Equal(t, "g", attempts[0].WorkUnit().Name())
+	if s.NoError(err) && s.Len(attempts, 1) {
+		s.Equal("g", attempts[0].WorkUnit().Name())
 		err = attempts[0].Retry(map[string]interface{}{}, time.Duration(0))
-		assert.NoError(t, err)
+		s.NoError(err)
 	}
 }
 
 // TestNotBeforeDelayedStatus verifies that, if a work unit is created
 // with a "not before" time, its status is returned as DelayedUnit.
-func TestNotBeforeDelayedStatus(t *testing.T) {
-	now := Clock.Now()
+func (s *Suite) TestNotBeforeDelayedStatus() {
+	now := s.Clock.Now()
 	then := now.Add(time.Duration(5) * time.Second)
 	sts := SimpleTestSetup{
 		NamespaceName: "TestNotBeforeDelayedStatus",
@@ -915,21 +913,21 @@ func TestNotBeforeDelayedStatus(t *testing.T) {
 			NotBefore: then,
 		},
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
-	sts.CheckUnitStatus(t, coordinate.DelayedUnit)
+	sts.CheckUnitStatus(s, coordinate.DelayedUnit)
 
 	// If we advance the clock by 10 seconds, the unit should become
 	// available
-	Clock.Add(10 * time.Second)
-	sts.CheckUnitStatus(t, coordinate.AvailableUnit)
+	s.Clock.Add(10 * time.Second)
+	sts.CheckUnitStatus(s, coordinate.AvailableUnit)
 }
 
 // TestNotBeforeAttempt verifies that, if a work unit is created with
 // a "not before" time, it is not returned as an attempt.
-func TestNotBeforeAttempt(t *testing.T) {
-	now := Clock.Now()
+func (s *Suite) TestNotBeforeAttempt() {
+	now := s.Clock.Now()
 	then := now.Add(time.Duration(60) * time.Second)
 	sts := SimpleTestSetup{
 		NamespaceName: "TestNotBeforeAttempt",
@@ -940,23 +938,23 @@ func TestNotBeforeAttempt(t *testing.T) {
 			NotBefore: then,
 		},
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	// We expect no attempts now, because the "not before" time
 	// hasn't arrived yet
-	sts.CheckWorkUnitOrder(t)
+	sts.CheckWorkUnitOrder(s)
 
 	// If we advance the clock so enough time has passed, we
 	// should now see the attempt
-	Clock.Add(120 * time.Second)
-	sts.CheckWorkUnitOrder(t, "unit")
+	s.Clock.Add(120 * time.Second)
+	sts.CheckWorkUnitOrder(s, "unit")
 }
 
 // TestNotBeforePriority tests the intersection of NotBefore and Priority:
 // the lower-priority unit that can execute now should.
-func TestNotBeforePriority(t *testing.T) {
-	now := Clock.Now()
+func (s *Suite) TestNotBeforePriority() {
+	now := s.Clock.Now()
 	then := now.Add(60 * time.Second)
 
 	sts := SimpleTestSetup{
@@ -964,60 +962,60 @@ func TestNotBeforePriority(t *testing.T) {
 		WorkerName:    "worker",
 		WorkSpecName:  "spec",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	// "first" has default priority and can execute now
 	_, err := sts.WorkSpec.AddWorkUnit("first", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// "second" has higher priority, but can't execute yet
 	_, err = sts.WorkSpec.AddWorkUnit("second", map[string]interface{}{}, coordinate.WorkUnitMeta{
 		Priority:  10.0,
 		NotBefore: then,
 	})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// If we do work units now, we should get only "first"
-	sts.CheckWorkUnitOrder(t, "first")
+	sts.CheckWorkUnitOrder(s, "first")
 
 	// Now advance the clock by a minute; we should get "second"
-	Clock.Add(60 * time.Second)
-	sts.CheckWorkUnitOrder(t, "second")
+	s.Clock.Add(60 * time.Second)
+	sts.CheckWorkUnitOrder(s, "second")
 }
 
 // TestDelayedOutput tests that the output of chained work specs can be
 // delayed.
-func TestDelayedOutput(t *testing.T) {
+func (s *Suite) TestDelayedOutput() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestDelayedOutput",
 		WorkerName:    "worker",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	one, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "one",
 		"then": "two",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	two, err := sts.Namespace.SetWorkSpec(map[string]interface{}{
 		"name": "two",
 	})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
 	_, err = one.AddWorkUnit("unit", map[string]interface{}{}, coordinate.WorkUnitMeta{})
-	if !assert.NoError(t, err) {
+	if !s.NoError(err) {
 		return
 	}
 
-	attempt := sts.RequestOneAttempt(t)
-	assert.Equal(t, "one", attempt.WorkUnit().WorkSpec().Name())
+	attempt := sts.RequestOneAttempt(s)
+	s.Equal("one", attempt.WorkUnit().WorkSpec().Name())
 
 	err = attempt.Finish(map[string]interface{}{
 		"output": []interface{}{
@@ -1028,32 +1026,32 @@ func TestDelayedOutput(t *testing.T) {
 			},
 		},
 	})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	// If we get more attempts right now, we should get nothing
-	Clock.Add(time.Duration(5) * time.Second)
-	sts.RequestNoAttempts(t)
+	s.Clock.Add(time.Duration(5) * time.Second)
+	sts.RequestNoAttempts(s)
 
 	// If we advance far enough, we should get back the unit for "two"
-	Clock.Add(time.Duration(120) * time.Second)
+	s.Clock.Add(time.Duration(120) * time.Second)
 	sts.WorkSpec = two
-	sts.CheckWorkUnitOrder(t, "u2")
+	sts.CheckWorkUnitOrder(s, "u2")
 }
 
 // TestUnitDeletedGone validates that deleting a work unit causes
 // operations on it to return ErrGone.
-func TestUnitDeletedGone(t *testing.T) {
+func (s *Suite) TestUnitDeletedGone() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestUnitDeletedGone",
 		WorkSpecName:  "spec",
 		WorkUnitName:  "unit",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	// Delete all the work units
 	_, err := sts.WorkSpec.DeleteWorkUnits(coordinate.WorkUnitQuery{})
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	_, err = sts.WorkUnit.Status()
 	// If the backend does name-based lookup (restclient) we will get
@@ -1062,29 +1060,29 @@ func TestUnitDeletedGone(t *testing.T) {
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
-		assert.Equal(t, sts.WorkUnitName, nswu.Name)
+		s.Equal(sts.WorkUnitName, nswu.Name)
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		assert.Equal(t, sts.WorkSpecName, nsws.Name)
+		s.Equal(sts.WorkSpecName, nsws.Name)
 	} else {
-		assert.Fail(t, "deleted work spec produced unexpected error",
+		s.Fail("deleted work spec produced unexpected error",
 			"%+v", err)
 	}
 }
 
 // TestUnitSpecDeletedGone validates that deleting a work unit's work
 // spec causes operations on the unit to return ErrGone.
-func TestUnitSpecDeletedGone(t *testing.T) {
+func (s *Suite) TestUnitSpecDeletedGone() {
 	sts := SimpleTestSetup{
 		NamespaceName: "TestUnitSpecDeletedGone",
 		WorkSpecName:  "spec",
 		WorkUnitName:  "unit",
 	}
-	sts.SetUp(t)
-	defer sts.TearDown(t)
+	sts.SetUp(s)
+	defer sts.TearDown(s)
 
 	// Delete the work spec
 	err := sts.Namespace.DestroyWorkSpec(sts.WorkSpecName)
-	assert.NoError(t, err)
+	s.NoError(err)
 
 	_, err = sts.WorkUnit.Status()
 	// If the backend does name-based lookup (restclient) we will get
@@ -1093,11 +1091,11 @@ func TestUnitSpecDeletedGone(t *testing.T) {
 	if err == coordinate.ErrGone {
 		// okay
 	} else if nswu, ok := err.(coordinate.ErrNoSuchWorkUnit); ok {
-		assert.Equal(t, sts.WorkUnitName, nswu.Name)
+		s.Equal(sts.WorkUnitName, nswu.Name)
 	} else if nsws, ok := err.(coordinate.ErrNoSuchWorkSpec); ok {
-		assert.Equal(t, sts.WorkSpecName, nsws.Name)
+		s.Equal(sts.WorkSpecName, nsws.Name)
 	} else {
-		assert.Fail(t, "deleted work spec produced unexpected error",
+		s.Fail("deleted work spec produced unexpected error",
 			"%+v", err)
 	}
 }

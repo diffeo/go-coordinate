@@ -1,0 +1,170 @@
+// -*- go -*-
+
+// Single-backend performance benchmarks.
+//
+// These used to be in performance.go; they do not fit in the Suite
+// setup (Suite _only_ seems to support tests), and in any case running
+// benchmarks via the dedicated coordbench tool is probably better.
+//
+// These tests were extracted from performance.go.  This code
+// currently does not compile.
+//
+// Copyright 2015-2017 Diffeo, Inc.
+// This software is released under an MIT/X11 open source license.
+
+package coordinatetest
+
+import (
+	"testing"
+)
+
+// BenchmarkWorkUnitCreation times simply creating a significant
+// number of work units in a single work spec.
+func BenchmarkWorkUnitCreation(b *testing.B) {
+	namespace, err := Coordinate.Namespace("BenchmarkWorkUnitCreation")
+	if err != nil {
+		b.Fatalf("error creating namespace: %+v", err)
+	}
+	defer namespace.Destroy()
+
+	spec, err := namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+	})
+	if err != nil {
+		b.Fatalf("error creating work spec: %+v", err)
+	}
+
+	counter := make(chan int)
+	stopCounter := make(chan struct{})
+	go count(counter, stopCounter)
+
+	b.RunParallel(func(pb *testing.PB) {
+		for pb.Next() {
+			i := <-counter
+			spec.AddWorkUnit(fmt.Sprintf("u%v", i), map[string]interface{}{}, coordinate.WorkUnitMeta{})
+		}
+	})
+	close(stopCounter)
+}
+
+// BenchmarkWorkUnitExecution benchmarks retrieving and completing work
+// units.
+func BenchmarkWorkUnitExecution(b *testing.B) {
+	namespace, err := Coordinate.Namespace("BenchmarkWorkUnitExecution")
+	if err != nil {
+		b.Fatalf("error creating namespace: %+v", err)
+	}
+	defer namespace.Destroy()
+
+	// Create the work spec
+	spec, err := namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+	})
+	if err != nil {
+		b.Fatalf("error creating work spec: %+v", err)
+	}
+	createWorkUnits(spec, b.N, b)
+
+	// Do some work
+	b.RunParallel(func(pb *testing.PB) {
+		worker := createWorker(namespace)
+		for pb.Next() {
+			attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+			if err != nil {
+				panic(err)
+			}
+			for _, attempt := range attempts {
+				err = attempt.Finish(nil)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	})
+}
+
+// BenchmarkMultiAttempts times executing work with multiple attempts
+// coming back from one attempt.
+func BenchmarkMultiAttempts(b *testing.B) {
+	namespace, err := Coordinate.Namespace("BenchmarkMultiAttempts")
+	if err != nil {
+		b.Fatalf("error creating namespace: %+v", err)
+	}
+	defer namespace.Destroy()
+
+	// Create the work spec
+	spec, err := namespace.SetWorkSpec(map[string]interface{}{
+		"name": "spec",
+	})
+	if err != nil {
+		b.Fatalf("error creating work spec: %+v", err)
+	}
+	createWorkUnits(spec, b.N, b)
+
+	b.RunParallel(func(pb *testing.PB) {
+		worker := createWorker(namespace)
+		for pb.Next() {
+			attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{
+				NumberOfWorkUnits: 20,
+			})
+			if err != nil {
+				panic(err)
+			}
+			// We are required to drain pb.Next() so keep
+			// going even if we run out of work...just finish
+			// whatever attempts we are given
+			for _, attempt := range attempts {
+				err = attempt.Finish(nil)
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	})
+}
+
+// BenchmarkUnitOutput times work unit execution, where a first work spec
+// creates work units in a second.
+func BenchmarkUnitOutput(b *testing.B) {
+	namespace, err := Coordinate.Namespace("BenchmarkUnitOutput")
+	if err != nil {
+		b.Fatalf("error creating namespace: %+v", err)
+	}
+	defer namespace.Destroy()
+
+	// Create the work specs
+	one, err := namespace.SetWorkSpec(map[string]interface{}{
+		"name": "one",
+		"then": "two",
+	})
+	if err != nil {
+		b.Fatalf("error creating work spec: %+v", err)
+	}
+	_, err = namespace.SetWorkSpec(map[string]interface{}{
+		"name": "two",
+	})
+	if err != nil {
+		b.Fatalf("error creating work spec: %+v", err)
+	}
+
+	createWorkUnits(one, b.N, b)
+
+	b.RunParallel(func(pb *testing.PB) {
+		worker := createWorker(namespace)
+		for pb.Next() {
+			attempts, err := worker.RequestAttempts(coordinate.AttemptRequest{})
+			if err != nil {
+				panic(err)
+			}
+			for _, attempt := range attempts {
+				unit := attempt.WorkUnit()
+				err = attempt.Finish(map[string]interface{}{
+					"output": []string{unit.Name()},
+				})
+				if err != nil {
+					panic(err)
+				}
+			}
+		}
+	})
+}

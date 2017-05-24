@@ -11,6 +11,7 @@ import:
 - package: github.com/stretchr/testify
   subpackages:
   - assert
+  - suite
 - package: github.com/ugorji/go
   subpackages:
   - codec
