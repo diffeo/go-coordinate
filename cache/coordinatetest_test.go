@@ -36,6 +36,12 @@ func TestAttemptFractionalStart(t *testing.T) {
 func TestAttemptGone(t *testing.T) {
 	coordinatetest.TestAttemptGone(t)
 }
+func TestMaxRetries(t *testing.T) {
+	coordinatetest.TestMaxRetries(t)
+}
+func TestMaxRetriesMulti(t *testing.T) {
+	coordinatetest.TestMaxRetriesMulti(t)
+}
 func TestNamespaceTrivial(t *testing.T) {
 	coordinatetest.TestNamespaceTrivial(t)
 }

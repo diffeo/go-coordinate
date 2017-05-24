@@ -399,17 +399,31 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	return result, nil
 }
 
+// countAttempts is a simpler purely-internal function (it is not part
+// of the standard Coordinate API) that just finds how many attempts
+// there are for a work unit.
+func (unit *workUnit) countAttempts(tx *sql.Tx) (int, error) {
+	params := queryParams{}
+	query := buildSelect(
+		[]string{"COUNT(*)"},
+		[]string{attemptTable},
+		[]string{attemptForUnit(&params, unit.id)},
+	)
+	var count int
+	err := tx.QueryRow(query, params...).Scan(&count)
+	return count, err
+}
+
 // Worker attempt functions
 
 func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.Attempt, error) {
 	var (
-		attempts []coordinate.Attempt
-		specs    map[string]*workSpec
-		metas    map[string]*coordinate.WorkSpecMeta
-		name     string
-		err      error
-		spec     *workSpec
-		meta     *coordinate.WorkSpecMeta
+		specs map[string]*workSpec
+		metas map[string]*coordinate.WorkSpecMeta
+		name  string
+		err   error
+		spec  *workSpec
+		meta  *coordinate.WorkSpecMeta
 	)
 
 	// Run system-global expiry.
@@ -441,7 +455,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		now := w.Coordinate().clock.Now()
 		name, err = coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 		if err == coordinate.ErrNoWork {
-			return attempts, nil
+			return nil, nil
 		} else if err != nil {
 			return nil, err
 		}
@@ -449,22 +463,30 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 		meta = metas[name]
 
 		// Then get some attempts
-		attempts, err = w.requestAttemptsForSpec(req, spec, meta)
+		attempts, err := w.requestAttemptsForSpec(req, spec, meta)
 		if err != nil {
 			return nil, err
 		}
 
 		// If that returned non-zero attempts, we're done
 		if len(attempts) > 0 {
-			return attempts, nil
+			result := make([]coordinate.Attempt, len(attempts))
+			for i, a := range attempts {
+				result[i] = a
+			}
+			return result, nil
 		}
 		// Otherwise reloop
 	}
 }
 
-func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *workSpec, meta *coordinate.WorkSpecMeta) ([]coordinate.Attempt, error) {
+func (w *worker) requestAttemptsForSpec(
+	req coordinate.AttemptRequest,
+	spec *workSpec,
+	meta *coordinate.WorkSpecMeta,
+) ([]*attempt, error) {
 	var (
-		attempts []coordinate.Attempt
+		attempts []*attempt
 		count    int
 		err      error
 	)
@@ -503,7 +525,14 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		// Try to create attempts from pre-existing work units
 		// (assuming we expect there to be some)
 		if meta.AvailableCount > 0 {
-			attempts, err = w.chooseAndMakeAttempts(tx, spec, count, now, length)
+			if meta.MaxRetries > 0 {
+				attempts, err = w.chooseMakeFailAttempts(
+					tx, spec, count, meta.MaxRetries,
+					now, length)
+			} else {
+				attempts, err = w.chooseAndMakeAttempts(
+					tx, spec, count, now, length)
+			}
 		}
 		if err != nil || len(attempts) > 0 {
 			return err
@@ -514,14 +543,14 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 		// attempt
 		if meta.CanStartContinuous(now) {
 			var unit *workUnit
-			var attempt *attempt
+			var a *attempt
 			continuous = true
 			unit, err = w.createContinuousUnit(tx, spec, meta, now)
 			if err == nil && unit != nil {
-				attempt, err = makeAttempt(tx, unit, w, length)
+				a, err = makeAttempt(tx, unit, w, length)
 			}
-			if err == nil && attempt != nil {
-				attempts = []coordinate.Attempt{attempt}
+			if err == nil && a != nil {
+				attempts = []*attempt{a}
 			}
 		}
 
@@ -540,10 +569,66 @@ func (w *worker) requestAttemptsForSpec(req coordinate.AttemptRequest, spec *wor
 	return attempts, err
 }
 
+// chooseMakeFailAttempts finds work units to do for a specific work
+// spec, honoring the work spec's MaxRetries field.  It doesn't make
+// sense to call this with maxRetries as zero; call
+// chooseAndMakeAttempts instead.
+func (w *worker) chooseMakeFailAttempts(
+	tx *sql.Tx,
+	spec *workSpec,
+	numUnits int,
+	maxRetries int,
+	now time.Time,
+	length time.Duration,
+) ([]*attempt, error) {
+	var attempts []*attempt
+	for len(attempts) < numUnits {
+		moreAttempts, err := w.chooseAndMakeAttempts(
+			tx, spec, numUnits-len(attempts), now, length)
+		if err != nil {
+			return nil, err
+		}
+		if len(moreAttempts) == 0 {
+			return attempts, nil
+		}
+
+		// For each of the (new) attempts, count the number of
+		// existing attempts for the work unit and maybe fail it.
+		// (It might be nice to do this in a batch, maybe moving
+		// this logic inside chooseAndMakeAttempts?)
+		for _, a := range moreAttempts {
+			count, err := a.unit.countAttempts(tx)
+			if err != nil {
+				return nil, err
+			}
+			if count > maxRetries {
+				err = a.complete(tx,
+					map[string]interface{}{
+						"traceback": "too many retries",
+					},
+					"failed")
+				if err != nil {
+					return nil, err
+				}
+				continue
+				// and drop this attempt
+			}
+			attempts = append(attempts, a)
+		}
+	}
+	return attempts, nil
+}
+
 // chooseAndMakeAttempts, in one SQL query, finds work units to do for
 // a specific work spec, creates attempts for them, and returns the
 // corresponding attempt objects.
-func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int, now time.Time, length time.Duration) ([]coordinate.Attempt, error) {
+func (w *worker) chooseAndMakeAttempts(
+	tx *sql.Tx,
+	spec *workSpec,
+	numUnits int,
+	now time.Time,
+	length time.Duration,
+) ([]*attempt, error) {
 	params := queryParams{}
 
 	choose := buildSelect([]string{
@@ -586,7 +671,7 @@ func (w *worker) chooseAndMakeAttempts(tx *sql.Tx, spec *workSpec, numUnits int,
 	if err != nil {
 		return nil, err
 	}
-	var result []coordinate.Attempt
+	var result []*attempt
 	err = scanRows(rows, func() error {
 		unit := workUnit{spec: spec}
 		attempt := attempt{unit: &unit, worker: w}

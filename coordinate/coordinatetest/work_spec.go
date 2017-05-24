@@ -113,6 +113,7 @@ func TestDefaultMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 0, meta.MaxRunning)
 		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, 0, meta.MaxRetries)
 		assert.Equal(t, "", meta.NextWorkSpecName)
 		assert.Equal(t, 0, meta.AvailableCount)
 		assert.Equal(t, 0, meta.PendingCount)
@@ -135,6 +136,7 @@ func TestPrefilledMeta(t *testing.T) {
 			"interval":    60,
 			"max_running": 10,
 			"max_getwork": 1,
+			"max_retries": 20,
 			"then":        "spec2",
 			"runtime":     "go",
 		},
@@ -153,6 +155,7 @@ func TestPrefilledMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 10, meta.MaxRunning)
 		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		assert.Equal(t, 20, meta.MaxRetries)
 		assert.Equal(t, "spec2", meta.NextWorkSpecName)
 		assert.Equal(t, 0, meta.AvailableCount)
 		assert.Equal(t, 0, meta.PendingCount)
@@ -180,6 +183,7 @@ func TestSetDataSetsMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 0, meta.MaxRunning)
 		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, 0, meta.MaxRetries)
 		assert.Equal(t, "", meta.NextWorkSpecName)
 		assert.Equal(t, 0, meta.AvailableCount)
 		assert.Equal(t, 0, meta.PendingCount)
@@ -196,6 +200,7 @@ func TestSetDataSetsMeta(t *testing.T) {
 		"interval":    60,
 		"max_running": 10,
 		"max_getwork": 1,
+		"max_retries": 20,
 		"then":        "spec2",
 		"runtime":     "go",
 	})
@@ -212,6 +217,7 @@ func TestSetDataSetsMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 10, meta.MaxRunning)
 		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		assert.Equal(t, 20, meta.MaxRetries)
 		assert.Equal(t, "spec2", meta.NextWorkSpecName)
 		assert.Equal(t, 0, meta.AvailableCount)
 		assert.Equal(t, 0, meta.PendingCount)
@@ -330,6 +336,7 @@ func TestSetMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 0, meta.MaxRunning)
 		assert.Equal(t, 0, meta.MaxAttemptsReturned)
+		assert.Equal(t, 0, meta.MaxRetries)
 		assert.Equal(t, "", meta.NextWorkSpecName)
 		assert.Equal(t, 0, meta.AvailableCount)
 		assert.Equal(t, 0, meta.PendingCount)
@@ -345,6 +352,7 @@ func TestSetMeta(t *testing.T) {
 		Interval:            time.Duration(60) * time.Second,
 		MaxRunning:          10,
 		MaxAttemptsReturned: 1,
+		MaxRetries:          20,
 		NextWorkSpecName:    "then",
 		AvailableCount:      100,
 		PendingCount:        50,
@@ -364,6 +372,7 @@ func TestSetMeta(t *testing.T) {
 		assert.WithinDuration(t, time.Time{}, meta.NextContinuous, 1*time.Microsecond)
 		assert.Equal(t, 10, meta.MaxRunning)
 		assert.Equal(t, 1, meta.MaxAttemptsReturned)
+		assert.Equal(t, 20, meta.MaxRetries)
 		// Cannot change following work spec
 		assert.Equal(t, "", meta.NextWorkSpecName)
 		// Cannot set the counts
