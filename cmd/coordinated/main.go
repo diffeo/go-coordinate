@@ -10,8 +10,10 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"io/ioutil"
+	"time"
 
 	"github.com/diffeo/go-coordinate/backend"
 	"github.com/diffeo/go-coordinate/cache"
@@ -30,6 +32,8 @@ func main() {
 	flag.Var(&backend, "backend", "impl[:address] of the storage backend")
 	config := flag.String("config", "", "global configuration YAML file")
 	logRequests := flag.Bool("log-requests", false, "log all requests")
+	logMetrics := flag.Bool("log-metrics", false, "log metrics")
+	metricPeriod := flag.String("metric-period", "2m", "time period between each metric update")
 	flag.Parse()
 
 	var gConfig map[string]interface{}
@@ -63,13 +67,28 @@ func main() {
 		}
 	}
 
+	var metricsLogger *logrus.Logger
+	if *logMetrics {
+		stdlog := logrus.StandardLogger()
+		metricsLogger = &logrus.Logger{
+			Out:       stdlog.Out,
+			Formatter: stdlog.Formatter,
+			Hooks:     stdlog.Hooks,
+			Level:     logrus.DebugLevel,
+		}
+	}
+	period, err := time.ParseDuration(*metricPeriod)
+	if err != nil {
+		return
+	}
+
 	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind, reqLogger)
 	http := HTTP{
 		coord: coordinate,
 		laddr: *httpBind,
 	}
 	go http.Serve()
-	go observe(coordinate)
+	go Observe(context.Background(), coordinate, period, metricsLogger)
 
 	select {}
 }
