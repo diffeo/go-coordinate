@@ -64,7 +64,13 @@ func main() {
 	}
 
 	go ServeCBORRPC(coordinate, gConfig, "tcp", *cborRPCBind, reqLogger)
-	go ServeHTTP(coordinate, *httpBind)
+	http := HTTP{
+		coord: coordinate,
+		laddr: *httpBind,
+	}
+	go http.Serve()
+	go observe(coordinate)
+
 	select {}
 }
 

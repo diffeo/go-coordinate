@@ -4,23 +4,27 @@
 package main
 
 import (
+	"net/http"
+
 	"github.com/diffeo/go-coordinate/coordinate"
 	"github.com/diffeo/go-coordinate/restserver"
-	"net/http"
+	"github.com/gorilla/mux"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// ServeHTTP runs an HTTP server on the specified local address.  This
-// serves connections forever, and probably wants to be run in a
-// goroutine.  Panics on any error in the initial setup or in
-// accepting connections.
-func ServeHTTP(
-	coord coordinate.Coordinate,
-	laddr string,
-) {
-	handler := restserver.NewRouter(coord)
-	server := &http.Server{
-		Addr:    laddr,
-		Handler: handler,
-	}
-	server.ListenAndServe()
+// HTTP serves HTTP coordinated connections.
+type HTTP struct {
+	coord coordinate.Coordinate
+	laddr string
+}
+
+// Serve runs an HTTP server on the specified local address. This serves
+// connections forever, and probably wants to be run in a goroutine. Panics on
+// any error in the initial setup or in accepting connections.
+func (h *HTTP) Serve() {
+	r := mux.NewRouter()
+	r.PathPrefix("/").Subrouter()
+	restserver.PopulateRouter(r, h.coord)
+	r.Handle("/metrics", promhttp.Handler())
+	http.ListenAndServe(h.laddr, r)
 }
