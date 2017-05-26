@@ -19,6 +19,8 @@ import "time"
 // Implementations of this interface provide a specific database backend,
 // RPC system, or other way to interact with Coordinate.
 type Coordinate interface {
+	Summarizable
+
 	// Namespace retrieves a Namespace object for some name.  If
 	// no namespace already exists with that name, creates one.
 	// Coordinate implementations such as the Python one that do
@@ -34,6 +36,8 @@ type Coordinate interface {
 // namespace is tied to a single Coordinate backend.  Most
 // applications will only need to interact with a single namespace.
 type Namespace interface {
+	Summarizable
+
 	// Name returns the name of this namespace.  This may be an
 	// empty string.
 	Name() string
@@ -287,6 +291,8 @@ type WorkUnitQuery struct {
 // (string) and meanings.  A work spec also has any number of WorkUnit
 // associated with it.
 type WorkSpec interface {
+	Summarizable
+
 	// Name returns the name of this work spec.
 	Name() string
 

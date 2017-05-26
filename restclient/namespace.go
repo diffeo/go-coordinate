@@ -107,3 +107,9 @@ func (ns *namespace) Worker(name string) (coordinate.Worker, error) {
 func (ns *namespace) Workers() (map[string]coordinate.Worker, error) {
 	return nil, errors.New("not implemented")
 }
+
+func (ns *namespace) Summarize() (coordinate.Summary, error) {
+	var summary coordinate.Summary
+	err := ns.GetFrom(ns.Representation.SummaryURL, nil, &summary)
+	return summary, err
+}

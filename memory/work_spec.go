@@ -267,14 +267,19 @@ func (spec *workSpec) WorkUnits(query coordinate.WorkUnitQuery) (result map[stri
 
 func (spec *workSpec) CountWorkUnitStatus() (result map[coordinate.WorkUnitStatus]int, err error) {
 	err = spec.do(func() error {
-		spec.expireUnits()
-		result = make(map[coordinate.WorkUnitStatus]int)
-		for _, unit := range spec.workUnits {
-			result[unit.status()]++
-		}
+		result = spec.countWorkUnitStatus()
 		return nil
 	})
 	return
+}
+
+func (spec *workSpec) countWorkUnitStatus() map[coordinate.WorkUnitStatus]int {
+	spec.expireUnits()
+	result := make(map[coordinate.WorkUnitStatus]int)
+	for _, unit := range spec.workUnits {
+		result[unit.status()]++
+	}
+	return result
 }
 
 func (spec *workSpec) SetWorkUnitPriorities(query coordinate.WorkUnitQuery, priority float64) error {
@@ -347,6 +352,28 @@ func (spec *workSpec) expireUnits() {
 			}
 		}
 	}
+}
+
+func (spec *workSpec) Summarize() (result coordinate.Summary, err error) {
+	err = spec.do(func() error {
+		result = spec.summarize()
+		return nil
+	})
+	return
+}
+
+func (spec *workSpec) summarize() coordinate.Summary {
+	var result coordinate.Summary
+	counts := spec.countWorkUnitStatus()
+	for status, count := range counts {
+		result = append(result, coordinate.SummaryRecord{
+			Namespace: spec.namespace.name,
+			WorkSpec:  spec.name,
+			Status:    status,
+			Count:     count,
+		})
+	}
+	return result
 }
 
 func (spec *workSpec) Coordinate() *memCoordinate {

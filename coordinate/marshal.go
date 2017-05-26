@@ -48,6 +48,15 @@ func (status *WorkUnitStatus) UnmarshalJSON(json []byte) error {
 	return nil
 }
 
+// MarshalText returns a string representing a work unit status.
+func (status WorkUnitStatus) MarshalText() (string, error) {
+	b, err := status.MarshalJSON()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 // MarshalJSON represents an attempt status as a JSON string.
 func (status AttemptStatus) MarshalJSON() ([]byte, error) {
 	switch status {

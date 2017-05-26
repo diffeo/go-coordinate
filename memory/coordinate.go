@@ -92,6 +92,17 @@ func (c *memCoordinate) Namespaces() (map[string]coordinate.Namespace, error) {
 	return result, nil
 }
 
+func (c *memCoordinate) Summarize() (coordinate.Summary, error) {
+	globalLock(c)
+	defer globalUnlock(c)
+
+	var result coordinate.Summary
+	for _, ns := range c.namespaces {
+		result = append(result, ns.summarize()...)
+	}
+	return result, nil
+}
+
 func (c *memCoordinate) Coordinate() *memCoordinate {
 	return c
 }

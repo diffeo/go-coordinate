@@ -69,14 +69,15 @@ const (
 	workUnitNotBefore           = workUnitTable + ".not_before"
 
 	// WHERE clause fragments:
-	workUnitHasNoAttempt = workUnitAttempt + " IS NULL"
-	workUnitInThisSpec   = workUnitSpec + "=" + workSpecID
-	attemptIsActive      = attemptActive + "=TRUE"
-	attemptIsPending     = attemptStatus + "='pending'"
-	attemptThisWorkUnit  = attemptWorkUnitID + "=" + workUnitID
-	attemptThisWorker    = attemptWorkerID + "=" + workerID
-	attemptIsTheActive   = attemptID + "=" + workUnitAttempt
-	attemptInThisSpec    = attemptWorkSpecID + "=" + workSpecID
+	workSpecInThisNamespace = workSpecNamespace + "=" + namespaceID
+	workUnitHasNoAttempt    = workUnitAttempt + " IS NULL"
+	workUnitInThisSpec      = workUnitSpec + "=" + workSpecID
+	attemptIsActive         = attemptActive + "=TRUE"
+	attemptIsPending        = attemptStatus + "='pending'"
+	attemptThisWorkUnit     = attemptWorkUnitID + "=" + workUnitID
+	attemptThisWorker       = attemptWorkerID + "=" + workerID
+	attemptIsTheActive      = attemptID + "=" + workUnitAttempt
+	attemptInThisSpec       = attemptWorkSpecID + "=" + workSpecID
 
 	// This join selects all work units and attempts, including
 	// work units with no active attempt
@@ -85,6 +86,10 @@ const (
 )
 
 // More WHERE clause fragments, that depend on query params:
+
+func isNamespace(params *queryParams, id int) string {
+	return namespaceID + "=" + params.Param(id)
+}
 
 func isWorkSpec(params *queryParams, id int) string {
 	return workSpecID + "=" + params.Param(id)

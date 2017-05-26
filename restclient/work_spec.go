@@ -169,3 +169,9 @@ func (spec *workSpec) DeleteWorkUnits(q coordinate.WorkUnitQuery) (int, error) {
 	}
 	return 0, err
 }
+
+func (spec *workSpec) Summarize() (coordinate.Summary, error) {
+	var summary coordinate.Summary
+	err := spec.GetFrom(spec.Representation.SummaryURL, nil, &summary)
+	return summary, err
+}

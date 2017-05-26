@@ -149,6 +149,11 @@ type NamedResource struct {
 type RootData struct {
 	Resource
 
+	// SummaryURL points at a summary of the statuses of all of
+	// the work units in all namespaces.  This endpoint supports
+	// HTTP GET, returning a coordinate.Summary.
+	SummaryURL string `json:"summary_url"`
+
 	// NamespacesURL points at the namespace list.  This endpoint
 	// supports HTTP GET to return a NamespaceList.  This endpoint
 	// also supports HTTP POST to submit a new Namespace,
@@ -180,6 +185,11 @@ type NamespaceList struct {
 // Namespace provides pointers to associated data about a namespace.
 type Namespace struct {
 	NamespaceShort
+
+	// SummaryURL points at a summary of the statuses of all
+	// of the work units in this namespace.  This endpoint supports
+	// HTTP GET, returning a coordinate.Summary.
+	SummaryURL string `json:"summary_url"`
 
 	// WorkSpecsURL points at the list of work specs in this
 	// namespace.  This endpoint supports HTTP GET, returning a
@@ -237,6 +247,11 @@ type WorkSpec struct {
 	// be either an object or a string; if a string, it is a
 	// base64-encoded CBOR encoding of a map.
 	Data DataDict `json:"data"`
+
+	// SummaryURL points at a summary of the statuses of all
+	// of the work units in this work spec.  This endpoint supports
+	// HTTP GET, returning a coordinate.Summary.
+	SummaryURL string `json:"summary_url"`
 
 	// WorkUnitsURL points at the list of work units in this work
 	// spec.  This endpoint supports HTTP GET, returning a

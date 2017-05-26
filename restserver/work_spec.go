@@ -24,6 +24,7 @@ func (api *restAPI) fillWorkSpec(namespace coordinate.Namespace, name string, re
 		err = buildURLs(api.Router,
 			"namespace", namespace.Name(),
 			"spec", name).
+			URL(&repr.SummaryURL, "workUnitSummary").
 			URL(&repr.WorkUnitsURL, "workUnits").
 			Template(&repr.WorkUnitURL, "workUnit", "unit").
 			URL(&repr.MetaURL, "workSpecMeta").
@@ -180,6 +181,11 @@ func (api *restAPI) WorkSpecAdjust(ctx *context, in interface{}) (interface{}, e
 	return nil, err
 }
 
+// WorkSpecSummary produces a summary of the current work spec.
+func (api *restAPI) WorkSpecSummary(ctx *context) (interface{}, error) {
+	return ctx.WorkSpec.Summarize()
+}
+
 // PopulateWorkSpec adds routes to a namespace router to manipulate
 // work specs.  r should generally be rooted in a subpath like
 // /namespace/{}.
@@ -217,6 +223,11 @@ func (api *restAPI) PopulateWorkSpec(r *mux.Router) {
 		Representation: restdata.WorkUnit{},
 		Context:        api.Context,
 		Post:           api.WorkSpecAdjust,
+	})
+	r.Path("/work_spec/{spec}/summary").Name("workUnitSummary").Handler(&resourceHandler{
+		Representation: coordinate.Summary{},
+		Context:        api.Context,
+		Get:            api.WorkSpecSummary,
 	})
 	sr := r.PathPrefix("/work_spec/{spec}").Subrouter()
 	api.PopulateWorkUnit(sr)

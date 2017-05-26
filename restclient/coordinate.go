@@ -83,3 +83,9 @@ func (c *restCoordinate) Namespaces() (map[string]coordinate.Namespace, error) {
 	}
 	return result, nil
 }
+
+func (c *restCoordinate) Summarize() (coordinate.Summary, error) {
+	var summary coordinate.Summary
+	err := c.GetFrom(c.Representation.SummaryURL, nil, &summary)
+	return summary, err
+}
