@@ -1,14 +1,18 @@
 Major Changes
 =============
 
-0.4.3 (TBD)
+0.4.3 (30 May 2017)
 -----------
 
 * Add a `max_retries` work spec parameter to limit work unit retries
-  ([#6](https://github.com/diffeo/go-coordinate/issues/6))
+  ([#8](https://github.com/diffeo/go-coordinate/pulls/8))
 * Port the generic test suite to use
   `github.com/stretchr/testify/suite`, rather than the home-grown
   `cptest` program in this package.
+  ([#9](https://github.com/diffeo/go-coordinate/pulls/9))
+* Publish `coordinate summary` style metrics
+  to [Promotheus](https://prometheus.io/).
+  ([#10](https://github.com/diffeo/go-coordinate/pulls/10))
 
 0.4.2 (4 May 2017)
 -----------
