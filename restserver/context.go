@@ -136,9 +136,7 @@ func (ctx *context) WorkUnitQuery() (q coordinate.WorkUnitQuery, err error) {
 	if len(ctx.QueryParams["status"]) > 0 {
 		q.Statuses = make([]coordinate.WorkUnitStatus, len(ctx.QueryParams["status"]))
 		for i, status := range ctx.QueryParams["status"] {
-			// this is a little hokey but it should work
-			s := "\"" + status + "\""
-			err = q.Statuses[i].UnmarshalJSON([]byte(s))
+			err = q.Statuses[i].UnmarshalText([]byte(status))
 			if err != nil {
 				return
 			}

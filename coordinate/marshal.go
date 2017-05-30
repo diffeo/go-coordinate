@@ -7,89 +7,80 @@ import (
 	"fmt"
 )
 
-// MarshalJSON represents a work unit status as a JSON string.
-func (status WorkUnitStatus) MarshalJSON() ([]byte, error) {
+// MarshalText returns a string representing a work unit status.
+func (status WorkUnitStatus) MarshalText() ([]byte, error) {
 	switch status {
 	case AnyStatus:
-		return []byte("\"any\""), nil
+		return []byte("any"), nil
 	case AvailableUnit:
-		return []byte("\"available\""), nil
+		return []byte("available"), nil
 	case PendingUnit:
-		return []byte("\"pending\""), nil
+		return []byte("pending"), nil
 	case FinishedUnit:
-		return []byte("\"finished\""), nil
+		return []byte("finished"), nil
 	case FailedUnit:
-		return []byte("\"failed\""), nil
+		return []byte("failed"), nil
 	case DelayedUnit:
-		return []byte("\"delayed\""), nil
+		return []byte("delayed"), nil
 	default:
 		return nil, fmt.Errorf("invalid status (marshal, %+v)", status)
 	}
 }
 
-// UnmarshalJSON populates a work unit status from a JSON string.
-func (status *WorkUnitStatus) UnmarshalJSON(json []byte) error {
-	switch string(json) {
-	case "\"any\"":
+// UnmarshalText populates a work unit status from a string.
+func (status *WorkUnitStatus) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "any":
 		*status = AnyStatus
-	case "\"available\"":
+	case "available":
 		*status = AvailableUnit
-	case "\"pending\"":
+	case "pending":
 		*status = PendingUnit
-	case "\"finished\"":
+	case "finished":
 		*status = FinishedUnit
-	case "\"failed\"":
+	case "failed":
 		*status = FailedUnit
-	case "\"delayed\"":
+	case "delayed":
 		*status = DelayedUnit
 	default:
-		return fmt.Errorf("invalid status (unmarshal, %+v)", string(json))
+		return fmt.Errorf("invalid status (unmarshal, %+v)", string(text))
 	}
 	return nil
 }
 
-// MarshalText returns a string representing a work unit status.
-func (status WorkUnitStatus) MarshalText() (string, error) {
-	b, err := status.MarshalJSON()
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
-// MarshalJSON represents an attempt status as a JSON string.
-func (status AttemptStatus) MarshalJSON() ([]byte, error) {
+// MarshalText returns a string representing an attempt status.
+func (status AttemptStatus) MarshalText() ([]byte, error) {
 	switch status {
 	case Pending:
-		return []byte("\"pending\""), nil
+		return []byte("pending"), nil
 	case Expired:
-		return []byte("\"expired\""), nil
+		return []byte("expired"), nil
 	case Finished:
-		return []byte("\"finished\""), nil
+		return []byte("finished"), nil
 	case Failed:
-		return []byte("\"failed\""), nil
+		return []byte("failed"), nil
 	case Retryable:
-		return []byte("\"retryable\""), nil
+		return []byte("retryable"), nil
 	default:
 		return nil, fmt.Errorf("invalid status (marshal, %+v)", status)
 	}
 }
 
-// UnmarshalJSON populates an attempt status from a JSON string.
-func (status *AttemptStatus) UnmarshalJSON(json []byte) error {
-	switch string(json) {
-	case "\"pending\"":
+// UnmarshalText populates an attempt status from a string.
+func (status *AttemptStatus) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "pending":
 		*status = Pending
-	case "\"expired\"":
+	case "expired":
 		*status = Expired
-	case "\"finished\"":
+	case "finished":
 		*status = Finished
-	case "\"failed\"":
+	case "failed":
 		*status = Failed
-	case "\"retryable\"":
+	case "retryable":
 		*status = Retryable
 	default:
-		return fmt.Errorf("invalid status (unmarshal, %+v)", string(json))
+		return fmt.Errorf("invalid status (unmarshal, %+v)", string(text))
 	}
 	return nil
 }

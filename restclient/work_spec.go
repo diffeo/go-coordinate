@@ -93,11 +93,9 @@ func queryToParams(q coordinate.WorkUnitQuery) map[string]interface{} {
 	if q.Statuses != nil {
 		statuses := make([]interface{}, len(q.Statuses))
 		for i, status := range q.Statuses {
-			s, err := status.MarshalJSON()
+			s, err := status.MarshalText()
 			if err == nil {
-				// s should be a byte string whose first
-				// and last bytes are ASCII double quote
-				statuses[i] = string(s)[1 : len(s)-1]
+				statuses[i] = string(s)
 			} else {
 				statuses[i] = status
 			}

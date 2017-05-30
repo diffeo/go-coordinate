@@ -70,7 +70,7 @@ func Observe(
 				summarySeconds.With(prometheus.Labels{
 					"namespace": record.Namespace,
 					"work_spec": record.WorkSpec,
-					"status":    status,
+					"status":    string(status),
 				}).Set(float64(record.Count))
 			}
 		}
