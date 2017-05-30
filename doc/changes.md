@@ -1,8 +1,15 @@
 Major Changes
 =============
 
+0.4.4 (30 May 2017)
+-------------------
+
+* In the published Prometheus metrics, don't double-double-quote the
+  "status" value.
+  ([#11](https://github.com/diffeo/go-coordinate/pulls/11))
+
 0.4.3 (30 May 2017)
------------
+-------------------
 
 * Add a `max_retries` work spec parameter to limit work unit retries
   ([#8](https://github.com/diffeo/go-coordinate/pulls/8))
@@ -15,7 +22,7 @@ Major Changes
   ([#10](https://github.com/diffeo/go-coordinate/pulls/10))
 
 0.4.2 (4 May 2017)
------------
+------------------
 
 * Requires Go 1.7 or later, and its standard `context` package
   ([#4](https://github.com/diffeo/go-coordinate/pulls/4))
@@ -30,7 +37,7 @@ Major Changes
   ([#5](https://github.com/diffeo/go-coordinate/pulls/5))
 
 0.4.1 (15 Aug 2016)
------------
+-------------------
 
 * Bug fix in Go decoding of CBOR-RPC responses.
 * Bug fix adding work units in the PostgreSQL backend,
