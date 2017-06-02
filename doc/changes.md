@@ -1,10 +1,11 @@
 Major Changes
 =============
 
-0.4.5 (TBD)
------------
+0.4.5 (2 Jun 2017)
+------------------
 
 * Performance fix for the PostgreSQL backend when `max_retries` is used.
+  ([#12](https://github.com/diffeo/go-coordinate/pulls/12))
 * If `max_retries` causes some work units to get preemptively failed,
   `RequestAttempts` will return fewer than the `max_getwork` number of
   attempts, rather than attempting to get more work, on all backends.
