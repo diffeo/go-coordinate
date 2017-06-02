@@ -1,6 +1,14 @@
 Major Changes
 =============
 
+0.4.5 (TBD)
+-----------
+
+* Performance fix for the PostgreSQL backend when `max_retries` is used.
+* If `max_retries` causes some work units to get preemptively failed,
+  `RequestAttempts` will return fewer than the `max_getwork` number of
+  attempts, rather than attempting to get more work, on all backends.
+
 0.4.4 (30 May 2017)
 -------------------
 

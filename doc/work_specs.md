@@ -222,7 +222,7 @@ priority values, those with alphabetically earlier work unit names.
 for each work unit, find the number of attempts that exist.  If any
 have more than the maximum, create a new attempt, mark it as "failed",
 and remove it from further consideration.  If this process removes all
-selected work units then return to "picking work units".
+selected work units then start over.
 
 **Continuous work units:** If the work unit selection chose a work
 spec with no available work units but with the "continuous" flag set

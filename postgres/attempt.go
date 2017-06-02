@@ -525,14 +525,8 @@ func (w *worker) requestAttemptsForSpec(
 		// Try to create attempts from pre-existing work units
 		// (assuming we expect there to be some)
 		if meta.AvailableCount > 0 {
-			if meta.MaxRetries > 0 {
-				attempts, err = w.chooseMakeFailAttempts(
-					tx, spec, count, meta.MaxRetries,
-					now, length)
-			} else {
-				attempts, err = w.chooseAndMakeAttempts(
-					tx, spec, count, now, length)
-			}
+			attempts, err = w.chooseAndMakeAttempts(
+				tx, spec, count, now, length)
 		}
 		if err != nil || len(attempts) > 0 {
 			return err
@@ -566,6 +560,32 @@ func (w *worker) requestAttemptsForSpec(
 		attempts = nil
 		err = nil
 	}
+	// If we got attempts, but for a work spec with a max-retries
+	// limit, recheck whether we need to fail some of those attempts.
+	// (If this fails _some_ of the attempts, return less than the
+	// maximum, that's okay; if this fails _all_ of the attempts,
+	// that will cause RequestAttempts to try picking a work spec
+	// again.)
+	//
+	// (Do this after the transaction above to cause the advisory
+	// lock to get released and let other workers try to get work.
+	// At this point we definitively do have attempts for these
+	// work units, we just need to decide if we want to kill some
+	// of them off preemptively.)
+	if err == nil && meta.MaxRetries > 0 && len(attempts) > 0 {
+		// At this point we _have_ the attempts.  (They are
+		// committed in the database and everything.)  If
+		// there is a database error at this point, it's
+		// better to err on the side of returning them to the
+		// caller and having them retried an extra time.
+		_ = withTx(w, false, func(tx *sql.Tx) error {
+			var err error
+			attempts, err = w.maybeFailAttempts(
+				tx, attempts, meta.MaxRetries)
+			return err
+		})
+	}
+
 	return attempts, err
 }
 
@@ -573,48 +593,33 @@ func (w *worker) requestAttemptsForSpec(
 // spec, honoring the work spec's MaxRetries field.  It doesn't make
 // sense to call this with maxRetries as zero; call
 // chooseAndMakeAttempts instead.
-func (w *worker) chooseMakeFailAttempts(
+func (w *worker) maybeFailAttempts(
 	tx *sql.Tx,
-	spec *workSpec,
-	numUnits int,
+	moreAttempts []*attempt,
 	maxRetries int,
-	now time.Time,
-	length time.Duration,
 ) ([]*attempt, error) {
 	var attempts []*attempt
-	for len(attempts) < numUnits {
-		moreAttempts, err := w.chooseAndMakeAttempts(
-			tx, spec, numUnits-len(attempts), now, length)
+	// For each of the (new) attempts, count the number of
+	// existing attempts for the work unit and maybe fail it.
+	// (It might be nice to do this in a batch?)
+	for _, a := range moreAttempts {
+		count, err := a.unit.countAttempts(tx)
 		if err != nil {
 			return nil, err
 		}
-		if len(moreAttempts) == 0 {
-			return attempts, nil
-		}
-
-		// For each of the (new) attempts, count the number of
-		// existing attempts for the work unit and maybe fail it.
-		// (It might be nice to do this in a batch, maybe moving
-		// this logic inside chooseAndMakeAttempts?)
-		for _, a := range moreAttempts {
-			count, err := a.unit.countAttempts(tx)
+		if count > maxRetries {
+			err = a.complete(tx,
+				map[string]interface{}{
+					"traceback": "too many retries",
+				},
+				"failed")
 			if err != nil {
 				return nil, err
 			}
-			if count > maxRetries {
-				err = a.complete(tx,
-					map[string]interface{}{
-						"traceback": "too many retries",
-					},
-					"failed")
-				if err != nil {
-					return nil, err
-				}
-				continue
-				// and drop this attempt
-			}
-			attempts = append(attempts, a)
+			continue
+			// and drop this attempt
 		}
+		attempts = append(attempts, a)
 	}
 	return attempts, nil
 }
