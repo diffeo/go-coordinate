@@ -137,7 +137,6 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	globalLock(w)
 	defer globalUnlock(w)
 
-	var attempts []coordinate.Attempt
 	if req.NumberOfWorkUnits < 1 {
 		req.NumberOfWorkUnits = 1
 	}
@@ -149,7 +148,7 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	now := w.Coordinate().clock.Now()
 	name, err := coordinate.SimplifiedScheduler(metas, now, req.AvailableGb)
 	if err == coordinate.ErrNoWork {
-		return attempts, nil
+		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
@@ -165,21 +164,40 @@ func (w *worker) RequestAttempts(req coordinate.AttemptRequest) ([]coordinate.At
 	if meta.MaxRunning > 0 && count > meta.MaxRunning-meta.PendingCount {
 		count = meta.MaxRunning - meta.PendingCount
 	}
-	for len(attempts) < count {
-		attempt := w.getWorkFromSpec(spec, meta)
-		if attempt == nil {
+	var attempts []*attempt
+	for len(attempts) == 0 {
+		for len(attempts) < count {
+			attempt := w.getWorkFromSpec(spec, meta)
+			if attempt == nil {
+				break
+			}
+			attempts = append(attempts, attempt)
+			meta.PendingCount++
+		}
+		if len(attempts) == 0 {
+			// No work at all
 			break
 		}
-		if meta.MaxRetries > 0 && len(attempt.workUnit.attempts) > meta.MaxRetries {
-			attempt.finish(coordinate.Failed, map[string]interface{}{
-				"traceback": "too many retries",
-			})
-			continue
+		if meta.MaxRetries > 0 {
+			gotAttempts := attempts
+			attempts = nil
+			for _, a := range gotAttempts {
+				if len(a.workUnit.attempts) > meta.MaxRetries {
+					a.finish(coordinate.Failed, map[string]interface{}{
+						"traceback": "too many retries",
+					})
+				} else {
+					attempts = append(attempts, a)
+				}
+			}
 		}
-		attempts = append(attempts, attempt)
-		meta.PendingCount++
+
 	}
-	return attempts, nil
+	var result []coordinate.Attempt
+	for _, a := range attempts {
+		result = append(result, a)
+	}
+	return result, nil
 }
 
 // getWorkFromSpec forcibly retrieves a work unit from a work spec.

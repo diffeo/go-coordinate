@@ -789,8 +789,55 @@ func (s *Suite) TestMaxRetriesMulti() {
 	s.Clock.Add(1 * time.Hour)
 
 	// Now get two more work units.  We expect the system to find
-	// b and c, notice that b is expired, and keep looking to return
-	// c and d.
+	// b and c, notice that b is expired, and just return c.
+	attempts, err = sts.Worker.RequestAttempts(req)
+	if s.NoError(err) {
+		if s.Len(attempts, 1) {
+			s.Equal("c", attempts[0].WorkUnit().Name())
+		}
+	}
+}
+
+// TestMaxRetriesMultiBatch is like TestMaxRetriesMulti, but has an
+// entire batch go over the retry limit.
+func (s *Suite) TestMaxRetriesMultiBatch() {
+	sts := SimpleTestSetup{
+		NamespaceName: "TestMaxRetries",
+		WorkerName:    "worker",
+		WorkSpecName:  "spec",
+		WorkSpecData: map[string]interface{}{
+			"max_getwork": 2,
+			"max_retries": 1,
+		},
+	}
+	sts.SetUp(s)
+	defer sts.TearDown(s)
+
+	for _, name := range []string{"a", "b", "c", "d"} {
+		_, err := sts.AddWorkUnit(name)
+		if !s.NoError(err) {
+			return
+		}
+	}
+
+	// Now we should be able to request work and get both a and b
+	req := coordinate.AttemptRequest{
+		NumberOfWorkUnits: 10,
+	}
+	attempts, err := sts.Worker.RequestAttempts(req)
+	if s.NoError(err) {
+		if s.Len(attempts, 2) {
+			s.Equal("a", attempts[0].WorkUnit().Name())
+			s.Equal("b", attempts[1].WorkUnit().Name())
+		}
+	}
+
+	// Let both work units time out
+	s.Clock.Add(1 * time.Hour)
+
+	// Now get two more work units.  We expect the system to find
+	// a and b, see both are expired, find a new batch, and get
+	// both c and d
 	attempts, err = sts.Worker.RequestAttempts(req)
 	if s.NoError(err) {
 		if s.Len(attempts, 2) {
