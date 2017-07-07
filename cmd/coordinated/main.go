@@ -13,6 +13,7 @@ import (
 	"context"
 	"flag"
 	"io/ioutil"
+	"os"
 	"time"
 
 	"github.com/diffeo/go-coordinate/backend"
@@ -56,14 +57,17 @@ func main() {
 	}
 	coordinate = cache.New(coordinate)
 
+	logrus.SetLevel(logrus.DebugLevel)
+	logrus.SetOutput(ioutil.Discard) // default unless log flags are passed
+
 	reqLogger := logrus.StandardLogger()
-	if !*logRequests {
-		reqLogger.Out = ioutil.Discard
+	if *logRequests {
+		reqLogger.Out = os.Stderr
 	}
 
 	metricsLogger := logrus.StandardLogger()
-	if !*logMetrics {
-		metricsLogger.Out = ioutil.Discard
+	if *logMetrics {
+		metricsLogger.Out = os.Stderr
 	}
 
 	period, err := time.ParseDuration(*metricPeriod)
