@@ -1,6 +1,12 @@
 Major Changes
 =============
 
+0.4.6 (7 July 2017)
+-------------------
+
+* Bug fix for panic on nil logger.
+  ([#14](https://github.com/diffeo/go-coordinate/pull/14))
+
 0.4.5 (2 Jun 2017)
 ------------------
 
