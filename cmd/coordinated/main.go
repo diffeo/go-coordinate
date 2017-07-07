@@ -56,27 +56,16 @@ func main() {
 	}
 	coordinate = cache.New(coordinate)
 
-	var reqLogger *logrus.Logger
-	if *logRequests {
-		stdlog := logrus.StandardLogger()
-		reqLogger = &logrus.Logger{
-			Out:       stdlog.Out,
-			Formatter: stdlog.Formatter,
-			Hooks:     stdlog.Hooks,
-			Level:     logrus.DebugLevel,
-		}
+	reqLogger := logrus.StandardLogger()
+	if !*logRequests {
+		reqLogger.Out = ioutil.Discard
 	}
 
-	var metricsLogger *logrus.Logger
-	if *logMetrics {
-		stdlog := logrus.StandardLogger()
-		metricsLogger = &logrus.Logger{
-			Out:       stdlog.Out,
-			Formatter: stdlog.Formatter,
-			Hooks:     stdlog.Hooks,
-			Level:     logrus.DebugLevel,
-		}
+	metricsLogger := logrus.StandardLogger()
+	if !*logMetrics {
+		metricsLogger.Out = ioutil.Discard
 	}
+
 	period, err := time.ParseDuration(*metricPeriod)
 	if err != nil {
 		return
