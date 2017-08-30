@@ -2,7 +2,7 @@ Go Coordinate Daemon
 ====================
 
 [![CircleCI](https://circleci.com/gh/diffeo/go-coordinate.svg?style=svg)](https://circleci.com/gh/diffeo/go-coordinate)
-[![Docker Repository on Quay](https://quay.io/repository/diffeo/coordinated/status "Docker Repository on Quay")](https://quay.io/repository/diffeo/coordinated)
+[![Docker Hub Repository](https://img.shields.io/docker/pulls/diffeo/coordinated.svg "Docker Hub Repository")](https://hub.docker.com/r/diffeo/coordinated/)
 
 This package provides a reimplementation of the Diffeo Coordinate
 (https://github.com/diffeo/coordinate) daemon.  It is fully compatible
@@ -77,11 +77,11 @@ coordinate -c config.yaml summary
 Docker
 ------
 
-A [Coordinate daemon server image](https://quay.io/diffeo/coordinated)
-is on quay.io:
+A [Coordinate daemon server image](https://hub.docker.com/r/diffeo/coordinated/)
+is on Docker Hub:
 
 ```sh
-docker run -p 5932:5932 -p 5980:5980 quay.io/diffeo/coordinated
+docker run -p 5932:5932 -p 5980:5980 diffeo/coordinated
 ```
 
 This is a single-binary image that only runs the daemon.  If you need
@@ -90,14 +90,14 @@ specify them directly after the image name.
 
 ```sh
 docker run -d -p 5432:5432 postgres:9.5
-docker run -d -p 5932:5932 -p 5980:5980 quay.io/diffeo/coordinated \
+docker run -d -p 5932:5932 -p 5980:5980 diffeo/coordinated \
     -backend postgres://172.17.0.1 -log-requests
 ```
 
 The current CI setup has the Docker `latest` tag pointing at a
 `master` commit from this repository.  You may want to specify a
-specific version tag.  The earliest version tag in quay.io is
-`quay.io/diffeo/coordinated:0.4.2`.
+specific version tag.  The earliest version tag in Docker Hub is
+`diffeo/coordinated:0.4.2`.
 
 Packages
 --------
