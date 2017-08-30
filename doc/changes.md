@@ -1,6 +1,12 @@
 Major Changes
 =============
 
+0.4.7 (29 Aug 2017)
+-------------------
+
+* Switch docker image repository to Docker Hub.
+  ([#15](https://github.com/diffeo/go-coordinate/pull/15))
+
 0.4.6 (7 July 2017)
 -------------------
 
