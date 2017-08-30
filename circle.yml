@@ -95,5 +95,5 @@ deployment:
     # push image to our repository
     - docker push diffeo/coordinated:$(cat build/container-version)
     # push a "latest" tag to our repository
-    - docker tag diffeo/coordinated:$(cat build/container-version) quay.io/diffeo/coordinated:latest
+    - docker tag diffeo/coordinated:$(cat build/container-version) diffeo/coordinated:latest
     - docker push diffeo/coordinated:latest
