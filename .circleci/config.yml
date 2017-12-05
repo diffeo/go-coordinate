@@ -1,0 +1,94 @@
+version: 2
+jobs:
+  build:
+    working_directory: /go/src/github.com/diffeo/go-coordinate
+    docker:
+      - image: diffeo/ci-builder:0.1.2-2017122911
+      - image: postgres:9.6
+    steps:
+      - checkout
+
+      - run: git describe HEAD
+
+      - type: setup_remote_docker
+        reusable: true
+
+      - restore_cache:
+          keys:
+            - dep-v1-{{ checksum "Gopkg.lock" }}
+            - dep-v1-
+
+      - run:
+          name: Install dependencies
+          command: |
+            # Ensure that no updates are needed. See:
+            # https://github.com/golang/dep/issues/950
+            dep ensure -v -no-vendor -dry-run
+            # Install dependencies
+            dep ensure -v -vendor-only
+
+      - save_cache:
+          key: dep-v1-{{ checksum "Gopkg.lock" }}
+          paths:
+            # Environment variables are not supported here, so we hard code
+            # the GOPATH of the build container.
+            - /go/pkg/dep
+
+      - run:
+          name: Install Go packages
+          command: go install -v ./...
+
+      - run:
+          name: Setup docker build
+          command: |
+            mkdir -p build
+            cd build
+            ../setup.sh
+
+      - run:
+          name: Build docker image
+          command: |
+            docker build -t diffeo/coordinated:$(cat build/container-version) build/
+            docker images
+
+      - run:
+          name: Run linters
+          # TODO: Switch golint to ./... - https://github.com/golang/lint/issues/320
+          command: |
+            go list ./... | grep -v /vendor/ | xargs -L1 golint
+            go vet -x ./...
+
+      - run:
+          name: Run basic tests
+          command: |
+            go test -race -v ./...
+          environment:
+            PGHOST: 127.0.0.1
+            PGUSER: postgres
+            PGSSLMODE: disable
+
+      - deploy:
+          name: Push master and tagged images to Docker repository
+          command: |
+            # If we aren't on master or a tag, this deployment does not run.
+            if [ "$CIRCLE_BRANCH" != "master" ] || [ -z "$CIRCLE_TAG" ]; then
+              exit 0
+            fi
+
+            # Login to docker registry
+            docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASS"
+
+            # Push image to our repository
+            docker push diffeo/coordinated:$(cat build/container-version)
+            # Push a "latest" tag to our repository
+            docker tag diffeo/coordinated:$(cat build/container-version) diffeo/coordinated:latest
+            docker push diffeo/coordinated:latest
+
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build:
+          filters:
+            tags:
+              only: /^[0-9]+[.][0-9]+[.][0-9]+.*/
