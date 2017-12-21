@@ -11,6 +11,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/benbjohnson/clock"
@@ -96,7 +97,7 @@ type Worker struct {
 	// cancellations maps child worker ID to a cancellation function
 	// for that worker's context.  These functions are specified to
 	// be idempotent.
-	cancellations map[string]func()
+	cancellations *sync.Map // map[string]context.CancelFunc
 
 	// idleWorkers is an unordered list of child worker IDs that
 	// do not have work.
@@ -153,7 +154,7 @@ func (w *Worker) setDefaults() {
 // object.
 func (w *Worker) bootstrap() error {
 	w.childWorkers = make(map[string]coordinate.Worker)
-	w.cancellations = make(map[string]func())
+	w.cancellations = new(sync.Map)
 
 	// Get the parent worker
 	var err error
@@ -302,7 +303,7 @@ func (w *Worker) returnIdleChild(id string) {
 	child := w.childWorkers[id]
 	if w.systemIdle {
 		delete(w.childWorkers, id)
-		delete(w.cancellations, id)
+		w.cancellations.Delete(id)
 		err := child.Deactivate()
 		if err != nil && w.ErrorHandler != nil {
 			w.ErrorHandler(err)
@@ -381,7 +382,7 @@ func (w *Worker) doWork(ctx context.Context, id string, worker coordinate.Worker
 
 	if err == nil {
 		taskCtx, cancellation := context.WithCancel(ctx)
-		w.cancellations[id] = cancellation
+		w.cancellations.Store(id, cancellation)
 		taskFn(taskCtx, attempts)
 		// It appears to be recommended to call this; calling
 		// it multiple times is documented to have no effect
@@ -487,10 +488,10 @@ func (w *Worker) findStaleUnits() {
 	// If anything is expiring (we have a list of child worker IDs,
 	// not specific attempts) call their cancellation functions
 	for child := range childrenToCancel {
-		cancellation, ok := w.cancellations[child]
+		cancellation, ok := w.cancellations.Load(child)
 		// *should* always be there but doesn't hurt to check
 		if ok {
-			cancellation()
+			cancellation.(context.CancelFunc)()
 		}
 	}
 }
