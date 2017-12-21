@@ -1,6 +1,12 @@
 Major Changes
 =============
 
+0.4.8 (21 Dec 2017)
+-------------------
+
+* Fix a data race.
+  ([#16](https://github.com/diffeo/go-coordinate/pull/16))
+
 0.4.7 (29 Aug 2017)
 -------------------
 
