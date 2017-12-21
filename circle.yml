@@ -81,9 +81,7 @@ test:
     - go vet -x $(glide novendor)
 
   override:
-    # run the tests
-    # TODO: add -race flag once race conditions have been eliminated.
-    - go test -v $(glide novendor)
+    - go test -race -v $(glide novendor)
 
 deployment:
   dev:
