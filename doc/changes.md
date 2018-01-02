@@ -1,6 +1,14 @@
 Major Changes
 =============
 
+0.4.9 (2 Jan 2018)
+------------------
+
+* Switch to CircleCI 2.0.
+  ([#17](https://github.com/diffeo/go-coordinate/pull/17))
+* Switch to dep dependency management tool.
+  ([#17](https://github.com/diffeo/go-coordinate/pull/17))
+
 0.4.8 (21 Dec 2017)
 -------------------
 
