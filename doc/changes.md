@@ -1,6 +1,12 @@
 Major Changes
 =============
 
+0.4.10 (2 Jan 2018)
+-------------------
+
+* Fix CircleCI build.
+  ([#18](https://github.com/diffeo/go-coordinate/pull/18))
+
 0.4.9 (2 Jan 2018)
 ------------------
 

@@ -70,8 +70,9 @@ jobs:
       - deploy:
           name: Push master and tagged images to Docker repository
           command: |
-            # If we aren't on master or a tag, this deployment does not run.
-            if [ "$CIRCLE_BRANCH" != "master" ] || [ -z "$CIRCLE_TAG" ]; then
+            # If we aren't on master and also not on a tag, this deployment does not run.
+            if [ "$CIRCLE_BRANCH" != "master" ] && [ -z "$CIRCLE_TAG" ]; then
+              echo "Skipping push on non-master,tag build."
               exit 0
             fi
 
