@@ -257,6 +257,28 @@ const (
 	DelayedUnit
 )
 
+// String provides the name of the enum
+func (wus *WorkUnitStatus) String() string {
+	var s string
+	switch *wus {
+	case AnyStatus:
+		s = "AnyStatus"
+	case AvailableUnit:
+		s = "AvailableUnit"
+	case PendingUnit:
+		s = "PendingUnit"
+	case FinishedUnit:
+		s = "FinishedUnit"
+	case FailedUnit:
+		s = "FailedUnit"
+	case DelayedUnit:
+		s = "DelayedUnit"
+	default:
+		panic("unreachable WorkUnitStatus")
+	}
+	return s
+}
+
 // WorkUnitQuery defines terms to select some subset of the work units
 // in a single work spec.  Its zero value selects all work units.
 type WorkUnitQuery struct {
