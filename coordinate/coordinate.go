@@ -468,6 +468,10 @@ type WorkUnit interface {
 	// work unit, if any.  This includes the attempt reported by
 	// ActiveAttempt().
 	Attempts() ([]Attempt, error)
+
+	// NumAttempts returns the number of times this work unit has
+	// been attempted.
+	NumAttempts() (int, error)
 }
 
 // AttemptRequest describes parameters to Worker.RequestAttempts().

@@ -370,6 +370,16 @@ func (unit *workUnit) ClearActiveAttempt() error {
 	return execInTx(unit, query, params, true)
 }
 
+func (unit *workUnit) NumAttempts() (int, error) {
+	num := 0
+	var err error
+	withTx(unit, true, func(tx *sql.Tx) error {
+		num, err = unit.countAttempts(tx)
+		return err
+	})
+	return num, err
+}
+
 func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	params := queryParams{}
 	query := buildSelect([]string{

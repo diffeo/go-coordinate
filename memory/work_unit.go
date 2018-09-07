@@ -147,6 +147,15 @@ func (unit *workUnit) ClearActiveAttempt() error {
 	})
 }
 
+func (unit *workUnit) NumAttempts() (int, error) {
+	num := 0
+	unit.do(func() error {
+		num = len(unit.attempts)
+		return nil
+	})
+	return num, nil
+}
+
 func (unit *workUnit) Attempts() (attempts []coordinate.Attempt, err error) {
 	err = unit.do(func() error {
 		attempts = make([]coordinate.Attempt, len(unit.attempts))
