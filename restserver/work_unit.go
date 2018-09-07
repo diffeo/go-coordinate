@@ -164,6 +164,14 @@ func (api *restAPI) WorkUnitAttempts(ctx *context) (interface{}, error) {
 	return api.returnAttempts(ctx, attempts)
 }
 
+func (api *restAPI) WorkUnitNumAttempts(ctx *context) (interface{}, error) {
+	attempts, err := ctx.WorkUnit.NumAttempts()
+	if err != nil {
+		return 0, err
+	}
+	return attempts, nil
+}
+
 // PopulateWorkUnit adds routes to a namespace router to manipulate
 // work unit.  r should generally be rooted in a subpath like
 // /namespace/{}/work_spec/{}.
@@ -185,6 +193,11 @@ func (api *restAPI) PopulateWorkUnit(r *mux.Router) {
 		Representation: restdata.AttemptList{},
 		Context:        api.Context,
 		Get:            api.WorkUnitAttempts,
+	})
+	r.Path("/work_unit/{unit}/num-attempts").Name("workUnitNumAttempts").Handler(&resourceHandler{
+		Representation: 0,
+		Context:        api.Context,
+		Get:            api.WorkUnitNumAttempts,
 	})
 	sr := r.PathPrefix("/work_unit/{unit}").Subrouter()
 	api.PopulateAttempt(sr)

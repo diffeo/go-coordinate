@@ -134,3 +134,13 @@ func (unit *workUnit) Attempts() (attempts []coordinate.Attempt, err error) {
 	})
 	return
 }
+
+func (unit *workUnit) NumAttempts() (int, error) {
+	n := 0
+	var err error
+	unit.withWorkUnit(func(workUnit coordinate.WorkUnit) (err error) {
+		n, err = workUnit.NumAttempts()
+		return err
+	})
+	return n, err
+}

@@ -129,3 +129,12 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	}
 	return attempts, nil
 }
+
+func (unit *workUnit) NumAttempts() (int, error) {
+	var repr restdata.AttemptList
+	err := unit.GetFrom(unit.Representation.AttemptsURL, map[string]interface{}{}, &repr)
+	if err != nil {
+		return 0, err
+	}
+	return len(repr.Attempts), nil
+}

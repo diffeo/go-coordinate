@@ -370,6 +370,16 @@ func (unit *workUnit) ClearActiveAttempt() error {
 	return execInTx(unit, query, params, true)
 }
 
+func (unit *workUnit) NumAttempts() (int, error) {
+	num := 0
+	var err error
+	withTx(unit, true, func(tx *sql.Tx) error {
+		num, err = unit.countAttempts(tx)
+		return err
+	})
+	return num, err
+}
+
 func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	params := queryParams{}
 	query := buildSelect([]string{
@@ -399,9 +409,6 @@ func (unit *workUnit) Attempts() ([]coordinate.Attempt, error) {
 	return result, nil
 }
 
-// countAttempts is a simpler purely-internal function (it is not part
-// of the standard Coordinate API) that just finds how many attempts
-// there are for a work unit.
 func (unit *workUnit) countAttempts(tx *sql.Tx) (int, error) {
 	params := queryParams{}
 	query := buildSelect(
