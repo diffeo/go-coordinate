@@ -1,7 +1,7 @@
 Major Changes
 =============
 
-0.4.11 (7 Sep 2018)
+0.4.12 (7 Sep 2018)
 -------------------
 
 * Added `.NumAttempts()` method as a faster way to do `len(w.Attempts())`
