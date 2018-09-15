@@ -34,6 +34,7 @@ func main() {
 	config := flag.String("config", "", "global configuration YAML file")
 	logRequests := flag.Bool("log-requests", false, "log all requests")
 	logMetrics := flag.Bool("log-metrics", false, "log metrics")
+	logFormat := flag.String("log-format", "ncsa", "request log format [ncsa stackdriver]")
 	metricPeriod := flag.String("metric-period", "2m", "time period between each metric update")
 	flag.Parse()
 
@@ -80,7 +81,7 @@ func main() {
 		coord: coordinate,
 		laddr: *httpBind,
 	}
-	go http.Serve()
+	go http.Serve(*logRequests, *logFormat, reqLogger)
 	go Observe(context.Background(), coordinate, period, metricsLogger)
 
 	select {}
