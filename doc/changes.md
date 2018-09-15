@@ -1,10 +1,24 @@
 Major Changes
 =============
 
+0.4.13 (15 Sep 2018)
+-------------------
+
+* Added HTTP Request logging middleware.
+  [#22](https://github.com/diffeo/go-coordinate/pull/22)
+  [#23](https://github.com/diffeo/go-coordinate/pull/23)
+
 0.4.12 (7 Sep 2018)
 -------------------
 
 * Added `.NumAttempts()` method as a faster way to do `len(w.Attempts())`
+  [#21](https://github.com/diffeo/go-coordinate/pull/21)
+
+0.4.11 (24 Jan 2018)
+-------------------
+
+* Added String method to WorkUnitStatus.
+  ([#19](https://github.com/diffeo/go-coordinate/pull/19))
 
 0.4.10 (2 Jan 2018)
 -------------------
