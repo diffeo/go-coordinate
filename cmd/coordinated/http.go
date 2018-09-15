@@ -54,13 +54,13 @@ func logWrapper(logFormat string, logger *logrus.Logger, inner http.Handler) htt
 	switch logFormat {
 	case "ncsa":
 		// Combined Log Format, as used by Apache.
-		reqLog = requestlog.NewNCSALogger(os.Stderr, func(err error) {
+		reqLog = requestlog.NewNCSALogger(os.Stdout, func(err error) {
 			logger.WithError(err).Error("error writing NCSA log")
 		})
 
 	case "stackdriver":
 		// As expected by Stackdriver Logging.
-		reqLog = requestlog.NewStackdriverLogger(os.Stderr, func(err error) {
+		reqLog = requestlog.NewStackdriverLogger(os.Stdout, func(err error) {
 			logger.WithError(err).Error("error writing Stackdriver log")
 		})
 
