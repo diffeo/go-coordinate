@@ -24,6 +24,12 @@
   revision = "2bba0603135d7d7f5cb73b2125beeda19c09f4ef"
 
 [[projects]]
+  name = "github.com/google/go-cloud"
+  packages = ["requestlog"]
+  revision = "7a6776b9aa5d9e7400c46516ad5aa4f75091316a"
+  version = "v0.2.0"
+
+[[projects]]
   name = "github.com/gorilla/context"
   packages = ["."]
   revision = "1ea25387ff6f684839d82767c1733ff4d4d15d0a"
@@ -43,7 +49,10 @@
 
 [[projects]]
   name = "github.com/lib/pq"
-  packages = [".","oid"]
+  packages = [
+    ".",
+    "oid"
+  ]
   revision = "472a0745531a17dbac346e828b4c60e73ddff30c"
 
 [[projects]]
@@ -64,7 +73,10 @@
 
 [[projects]]
   name = "github.com/prometheus/client_golang"
-  packages = ["prometheus","prometheus/promhttp"]
+  packages = [
+    "prometheus",
+    "prometheus/promhttp"
+  ]
   revision = "c5b7fccd204277076155f10851dad72b76a49317"
   version = "v0.8.0"
 
@@ -75,17 +87,27 @@
 
 [[projects]]
   name = "github.com/prometheus/common"
-  packages = ["expfmt","internal/bitbucket.org/ww/goautoneg","model"]
+  packages = [
+    "expfmt",
+    "internal/bitbucket.org/ww/goautoneg",
+    "model"
+  ]
   revision = "49fee292b27bfff7f354ee0f64e1bc4850462edf"
 
 [[projects]]
   name = "github.com/prometheus/procfs"
-  packages = [".","xfs"]
+  packages = [
+    ".",
+    "xfs"
+  ]
   revision = "a1dba9ce8baed984a2495b658c82687f8157b98f"
 
 [[projects]]
   name = "github.com/rubenv/sql-migrate"
-  packages = [".","sqlparse"]
+  packages = [
+    ".",
+    "sqlparse"
+  ]
   revision = "a3e2963537993d229b6e257d10bd8bc640b06ce3"
 
 [[projects]]
@@ -102,7 +124,11 @@
 
 [[projects]]
   name = "github.com/stretchr/testify"
-  packages = ["assert","require","suite"]
+  packages = [
+    "assert",
+    "require",
+    "suite"
+  ]
   revision = "69483b4bd14f5845b5a1e55bca19e954e827f1d0"
   version = "v1.1.4"
 
@@ -115,6 +141,12 @@
   name = "github.com/urfave/cli"
   packages = ["."]
   revision = "ab403a54a148f2d857920810291539e1f817ee7b"
+
+[[projects]]
+  name = "github.com/urfave/negroni"
+  packages = ["."]
+  revision = "c6a59be0ce122566695fbd5e48a77f8f10c8a63a"
+  version = "v1.0.0"
 
 [[projects]]
   name = "golang.org/x/sys"
@@ -135,6 +167,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "09d48db6dbbfd4e37fa0b9adfb850de9292b6ab8979c542a79961c75e02dc64b"
+  inputs-digest = "bd576084bd075616a517feef1ae9c273eee5586bef332ae337777f6044be68fe"
   solver-name = "gps-cdcl"
   solver-version = 1
