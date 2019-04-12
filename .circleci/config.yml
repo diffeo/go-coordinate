@@ -49,16 +49,9 @@ jobs:
           command: go install -v ./...
 
       - run:
-          name: Setup docker build
-          command: |
-            mkdir -p build
-            cd build
-            ../setup.sh
-
-      - run:
           name: Build docker image
           command: |
-            docker build -t diffeo/coordinated:$(cat build/container-version) build/
+            make docker BUILD="$CIRCLE_BUILD_NUM"
             docker images
 
       - run:
