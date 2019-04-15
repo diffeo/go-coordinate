@@ -73,6 +73,18 @@ jobs:
             PGSSLMODE: disable
 
       - deploy:
+          name: Push branch images to Docker repository
+          command: |
+            if [ "$CIRCLE_BRANCH" = "master" ] || [ "$CIRCLE_BRANCH" = "latest" ]; then
+              echo "Skipping push on master build."
+              exit 0
+            fi
+            # Login to docker registry
+            docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASS"
+            # Push image
+            make docker-push-branch
+
+      - deploy:
           name: Push master and tagged images to Docker repository
           command: |
             # If we aren't on master and also not on a tag, this deployment does not run.
@@ -80,15 +92,11 @@ jobs:
               echo "Skipping push on non-master,tag build."
               exit 0
             fi
-
             # Login to docker registry
             docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASS"
+            # Push image, and with "latest" tag
+            make docker-push-latest
 
-            # Push image to our repository
-            docker push diffeo/coordinated:$(cat build/container-version)
-            # Push a "latest" tag to our repository
-            docker tag diffeo/coordinated:$(cat build/container-version) diffeo/coordinated:latest
-            docker push diffeo/coordinated:latest
 
 workflows:
   version: 2
