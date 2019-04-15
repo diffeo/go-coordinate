@@ -3,8 +3,11 @@ jobs:
   build:
     working_directory: /go/src/github.com/diffeo/go-coordinate
     docker:
-      - image: diffeo/ci-builder:0.1.2-2017122911
+      - image: circleci/golang:1.12
       - image: postgres:9.6
+    environment:
+      TEST_RESULTS: /tmp/test-results
+      GO111MODULE: 'on'
     steps:
       - checkout
 
@@ -13,42 +16,42 @@ jobs:
       - type: setup_remote_docker
         reusable: true
 
-      - restore_cache:
+      - restore_cache: # restores saved cache if no changes are detected since last run
           keys:
-            - dep-v1-{{ checksum "Gopkg.lock" }}
-            - dep-v1-
+            - v1-pkg-cache
+
+      - run:
+          name: Install tools
+          environment:
+            GO111MODULE: 'off'
+          command: |
+            go get golang.org/x/lint/golint
+            go get github.com/jstemmer/go-junit-report
 
       - run:
           name: Install dependencies
           command: |
-            # Ensure that no updates are needed. See:
-            # https://github.com/golang/dep/issues/950
-            dep ensure -v -no-vendor -dry-run
-            # Install dependencies
-            dep ensure -v -vendor-only
+            # Install source dependencies.
+            go mod tidy -v
 
-      - save_cache:
-          key: dep-v1-{{ checksum "Gopkg.lock" }}
+      - run:
+          name: Ensure dependency specification is up to date.
+          # "go mod tidy" should not cause updates to the config.
+          command: git diff --name-only --exit-code
+
+      - save_cache: # Store cache in the /go/pkg directory
+          key: v1-pkg-cache
           paths:
-            # Environment variables are not supported here, so we hard code
-            # the GOPATH of the build container.
-            - /go/pkg/dep
+            - /go/pkg
 
       - run:
           name: Install Go packages
           command: go install -v ./...
 
       - run:
-          name: Setup docker build
-          command: |
-            mkdir -p build
-            cd build
-            ../setup.sh
-
-      - run:
           name: Build docker image
           command: |
-            docker build -t diffeo/coordinated:$(cat build/container-version) build/
+            make docker BUILD="$CIRCLE_BUILD_NUM"
             docker images
 
       - run:
@@ -61,7 +64,9 @@ jobs:
       - run:
           name: Run basic tests
           command: |
-            go test -race -v ./...
+            mkdir -p "${TEST_RESULTS}"
+            trap "go-junit-report <${TEST_RESULTS}/go-test.out > ${TEST_RESULTS}/go-test-report.xml" EXIT
+            make test | tee ${TEST_RESULTS}/go-test.out
           environment:
             PGHOST: 127.0.0.1
             PGUSER: postgres
