@@ -26,7 +26,7 @@ docker-push-branch:
 	docker tag $(DOCKER_IMG) $(DOCKER_REPO):$(BRANCH)
 	docker push $(DOCKER_REPO):$(BRANCH)
 
-docker-push-latest: docker-push
+docker-push-latest:
 	# Only intended for CI
 	[ ! -z "$$CI" ]
 	# Push image to our repository
