@@ -308,12 +308,12 @@ type fieldList struct {
 	Fields []fieldPair
 }
 
-// Adds a name and dynamic value to the field list.
+// Add adds a name and dynamic value to the field list.
 func (f *fieldList) Add(qp *queryParams, field string, value interface{}) {
 	f.AddDirect(field, qp.Param(value))
 }
 
-// Adds a name and fixed value to the field list.  value is an unquoted
+// AddDirect adds a name and fixed value to the field list.  value is an unquoted
 // SQL string.
 func (f *fieldList) AddDirect(field, value string) {
 	f.Fields = append(f.Fields, fieldPair{Field: field, Value: value})

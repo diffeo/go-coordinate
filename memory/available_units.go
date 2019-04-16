@@ -15,7 +15,7 @@ func (q *availableUnits) Add(unit *workUnit) {
 	heap.Push(q, unit)
 }
 
-// Get the next available unit, with the highest priority and lowest name.
+// Next gets the next available unit, with the highest priority and lowest name.
 func (q *availableUnits) Next() *workUnit {
 	return heap.Pop(q).(*workUnit)
 }
