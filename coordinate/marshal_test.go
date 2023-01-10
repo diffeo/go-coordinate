@@ -43,7 +43,7 @@ func TestWorkUnitToJSON(t *testing.T) {
 				}
 			} else {
 				assert.EqualError(tt, err,
-					"json: error calling MarshalJSON for type coordinate.WorkUnitStatus: "+w.EncodeError)
+					"json: error calling MarshalText for type coordinate.WorkUnitStatus: "+w.EncodeError)
 			}
 		})
 	}
@@ -128,7 +128,7 @@ func TestAttemptToJSON(t *testing.T) {
 				}
 			} else {
 				assert.EqualError(tt, err,
-					"json: error calling MarshalJSON for type coordinate.AttemptStatus: "+w.EncodeError)
+					"json: error calling MarshalText for type coordinate.AttemptStatus: "+w.EncodeError)
 			}
 		})
 	}

@@ -1,10 +1,11 @@
 version: 2
 jobs:
   build:
-    working_directory: /go/src/github.com/diffeo/go-coordinate
     docker:
-      - image: circleci/golang:1.12
-      - image: postgres:9.6
+      - image: cimg/go:1.19
+      - image: postgres:12
+        environment:
+          POSTGRES_PASSWORD: citest
     environment:
       TEST_RESULTS: /tmp/test-results
       GO111MODULE: 'on'
@@ -71,32 +72,7 @@ jobs:
             PGHOST: 127.0.0.1
             PGUSER: postgres
             PGSSLMODE: disable
-
-      - deploy:
-          name: Push branch images to Docker repository
-          command: |
-            if [ "$CIRCLE_BRANCH" = "master" ] || [ "$CIRCLE_BRANCH" = "latest" ]; then
-              echo "Skipping push on master build."
-              exit 0
-            fi
-            # Login to docker registry
-            docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASS"
-            # Push image
-            make docker-push-branch
-
-      - deploy:
-          name: Push master and tagged images to Docker repository
-          command: |
-            # If we aren't on master and also not on a tag, this deployment does not run.
-            if [ "$CIRCLE_BRANCH" != "master" ] && [ -z "$CIRCLE_TAG" ]; then
-              echo "Skipping push on non-master,tag build."
-              exit 0
-            fi
-            # Login to docker registry
-            docker login -u "$DOCKER_HUB_USER" -p "$DOCKER_HUB_PASS"
-            # Push image, and with "latest" tag
-            make docker-push-latest
-
+            PGPASSWORD: citest
 
 workflows:
   version: 2
