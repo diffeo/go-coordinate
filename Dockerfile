@@ -2,7 +2,7 @@
 # setup.sh will prepare prerequisites in the current directory.
 
 # Build image
-FROM golang:1.12 AS builder
+FROM golang:1.19 AS builder
 
 # Outside GOPATH to use go modules
 WORKDIR /src
